@@ -1,0 +1,19 @@
+VALIDACIÓN TÉCNICA — MIAULA MOBILE 0.1
+
+Prueba de flujo realizada:
+- Crear grupo: OK
+- Importar Plantilla_Lista_Alumnos.xlsx: OK (5 alumnos)
+- Asistencia P/F/R/J: OK
+- Crear actividad y capturar calificaciones: OK
+- Crear rúbrica: OK
+- Evaluación de alumnos/equipo: OK
+- Cálculo trimestral: OK
+- Caso de prueba (8 Trabajo, 10 Proyecto/Rúbrica, 10 Valores, 10 Actitudes con 40/40/10/10): 9.20 OK
+- Exportación XLSX: OK
+- Archivo XLSX abierto y validado: OK
+- Hojas exportadas: Resumen, Esquemas, Calificación trimestral, Concentrado, Asistencia, Actividades, Detalle calificaciones, Evaluaciones, Observaciones.
+- Respaldo JSON: OK
+- Importador XLSX probado contra la plantilla de MiAula 2.4.1: OK
+- Migrador SQLite 2.4.1 -> MiAula Mobile JSON: OK
+
+Nota: el entorno de prueba automatizada utilizó un almacén IndexedDB simulado porque el navegador de pruebas del contenedor bloquea navegación local por política. La lógica IndexedDB de la aplicación utiliza APIs estándar de navegador y la aplicación está preparada como PWA offline.

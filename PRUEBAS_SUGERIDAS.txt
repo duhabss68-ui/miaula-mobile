@@ -1,0 +1,15 @@
+PRUEBA RÁPIDA MIAULA MOBILE 0.1
+
+1. Crear un grupo de prueba.
+2. Importar 5-10 alumnos desde un .xlsx.
+3. Registrar asistencia de hoy y cambiar 1 Falta + 1 Retardo.
+4. Crear un Trabajo y capturar calificaciones.
+5. Crear un Proyecto y capturar calificaciones.
+6. Crear una rúbrica, evaluar 2 alumnos/equipo.
+7. Configurar Trimestre 1 y capturar Valores y Actitudes.
+8. Verificar el cálculo final.
+9. Exportar Excel y abrirlo con Excel/Sheets.
+10. Generar un respaldo JSON.
+11. Solo después de tener respaldo, probar restaurarlo.
+
+Anota cualquier flujo que requiera demasiados toques: esa información servirá para MiAula Mobile 0.2.
