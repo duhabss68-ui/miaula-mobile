@@ -74,9 +74,28 @@ const XLSXLite = (() => {
   function detectTable(sheet){
     const rows=sheet.rows||[]; let headerRow=0,headers=[];
     for(let i=0;i<Math.min(rows.length,25);i++){const row=rows[i]||[];const non=row.filter(v=>v!==''&&v!=null);if(non.length>=2){headerRow=i;headers=row.map(v=>String(v??'').trim());break}}
-    const aliases={name:['nombre del alumno','nombre alumno','alumno','nombre completo','nombre'],list_number:['no','n','numero','num','numero de lista','no lista','num lista'],grade:['grado','grado escolar'],group:['grupo']};
+    const aliases={
+      paternal_last_name:['apellido paterno','ap paterno','a paterno','primer apellido','paterno'],
+      maternal_last_name:['apellido materno','ap materno','a materno','segundo apellido','materno'],
+      given_names:['nombres','nombre s','nombre(s)'],
+      full_name:['nombre del alumno','nombre alumno','alumno','nombre completo'],
+      list_number:['no','n','numero','num','numero de lista','no lista','num lista'],
+      grade:['grado','grado escolar'],
+      group:['grupo']
+    };
     const nh=headers.map(norm),mapping={};
-    for(const [key,cands] of Object.entries(aliases)){const nc=cands.map(norm);for(let i=0;i<nh.length;i++){if(nc.includes(nh[i])||nc.some(x=>x.length>3&&nh[i].includes(x))){mapping[key]=i;break}}}
+    for(const [key,cands] of Object.entries(aliases)){
+      const nc=cands.map(norm);
+      for(let i=0;i<nh.length;i++){
+        if(nc.includes(nh[i])||nc.some(x=>x.length>3&&nh[i].includes(x))){mapping[key]=i;break}
+      }
+    }
+    // Si existen apellidos separados, una columna simple "Nombre" se interpreta como nombre(s).
+    const simpleName=nh.findIndex(h=>h==='nombre');
+    if(simpleName>=0){
+      if(mapping.paternal_last_name!==undefined || mapping.maternal_last_name!==undefined) mapping.given_names ??= simpleName;
+      else mapping.full_name ??= simpleName;
+    }
     return {headerRow,headers,mapping,preview:rows.slice(headerRow+1,headerRow+6)};
   }
 

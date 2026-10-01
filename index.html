@@ -3,62 +3,71 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#082A67">
+  <meta name="theme-color" content="#071f4f">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Mobile</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="assets/icon-192.png">
-  <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="styles.css">
+  <title>MiAula 2.0 · Tablet</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.0.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.0">
+  <link rel="stylesheet" href="styles.css?v=2.0.0">
 </head>
 <body>
+<div id="tabletOnly" class="tablet-only hidden">
+  <div class="tablet-only-card">
+    <img src="assets/icon-books-192.png?v=2.0.0" alt="MiAula">
+    <h1>MiAula 2.0</h1>
+    <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
+  </div>
+</div>
 <div id="fatalBanner" class="fatal-banner hidden"></div>
-<div class="app-shell">
+
+<div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/miaula_logo.png" alt="MiAula" class="brand-logo">
-      <div><strong>MiAula</strong><span>Mobile · datos en este dispositivo</span></div>
+      <img src="assets/icon-books-192.png?v=2.0.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula</strong><span>2.0 · Tablet</span></div>
     </div>
     <nav>
-      <button class="nav-item active" data-view="dashboard">⌂ <span>Inicio</span></button>
-      <button class="nav-item" data-view="groups">▦ <span>Grupos</span></button>
-      <button class="nav-item" data-view="attendance">✓ <span>Asistencia</span></button>
-      <button class="nav-item" data-view="activities">★ <span>Calificaciones</span></button>
-      <button class="nav-item" data-view="grading">⚖ <span>Trimestre</span></button>
-      <button class="nav-item" data-view="evaluation">◎ <span>Evaluar</span></button>
-      <button class="nav-item" data-view="more">••• <span>Más</span></button>
+      <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
+      <button class="nav-item" data-view="groups"><span class="nav-icon">▦</span><span>Grupos</span></button>
+      <button class="nav-item" data-view="attendance"><span class="nav-icon">✓</span><span>Asistencia</span></button>
+      <button class="nav-item" data-view="dynamics"><span class="nav-icon">◉</span><span>Ruleta y equipos</span></button>
+      <button class="nav-item" data-view="activities"><span class="nav-icon">★</span><span>Calificaciones</span></button>
+      <button class="nav-item" data-view="grading"><span class="nav-icon">%</span><span>Trimestre</span></button>
+      <button class="nav-item" data-view="evaluation"><span class="nav-icon">◎</span><span>Evaluar</span></button>
+      <button class="nav-item" data-view="more"><span class="nav-icon">•••</span><span>Más</span></button>
     </nav>
-    <div class="sidebar-foot"><small id="systemStatus">Preparando almacenamiento local…</small></div>
+    <div class="sidebar-foot"><span class="status-dot"></span><small id="systemStatus">Preparando almacenamiento…</small></div>
   </aside>
 
   <main class="main">
     <header class="topbar">
       <div><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
-      <button class="btn primary" id="quickAttendance">+ Asistencia</button>
+      <div class="top-actions"><span class="version-badge">MiAula 2.0</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
     </header>
 
     <section id="view-dashboard" class="view active">
       <div class="hero">
-        <div>
-          <span class="pill">MiAula Mobile · Offline</span>
-          <h2>La tablet ahora es tu MiAula.</h2>
-          <p>Trabaja sin laptop: grupos, asistencia, calificaciones, rúbricas, trimestre, respaldos y Excel quedan en este dispositivo.</p>
-          <button id="installBtn" class="btn hero-btn hidden">Instalar MiAula</button>
+        <div class="hero-copy">
+          <span class="pill">Diseñada para Huawei MatePad 12X</span>
+          <h2>Control de clase sin abrir la laptop.</h2>
+          <p>Asistencia por horas, calificaciones, ruleta de participación, equipos, rúbricas, trimestre y Excel; todo guardado en la tablet.</p>
+          <div class="hero-actions"><button class="btn light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="goView('dynamics')">Abrir ruleta</button></div>
         </div>
-        <div class="hero-icon"><img src="assets/icon-192.png" alt="MiAula"></div>
+        <div class="hero-brand"><img src="assets/miaula_logo.png" alt="MiAula"></div>
       </div>
       <div class="kpis" id="kpis"></div>
       <div class="quick-actions">
-        <button class="quick-card" onclick="goView('attendance')"><span>✓</span><div><strong>Asistencia</strong><small>Marca solo excepciones</small></div></button>
+        <button class="quick-card" onclick="goView('attendance')"><span>✓</span><div><strong>Asistencia</strong><small>Una captura, varias horas</small></div></button>
+        <button class="quick-card" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Participación</strong><small>Ruleta por número</small></div></button>
+        <button class="quick-card" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
         <button class="quick-card" onclick="goView('activities')"><span>★</span><div><strong>Calificaciones</strong><small>Trabajos y proyectos</small></div></button>
-        <button class="quick-card" onclick="goView('evaluation')"><span>◎</span><div><strong>Evaluar</strong><small>Rúbrica o cotejo</small></div></button>
-        <button class="quick-card" onclick="goView('grading')"><span>⚖</span><div><strong>Trimestre</strong><small>Cálculo automático</small></div></button>
       </div>
       <div class="panel">
-        <div class="panel-head"><div><h3>Mis grupos</h3><p>Todo se guarda dentro de MiAula Mobile.</p></div><button class="btn" onclick="goView('groups')">Administrar</button></div>
+        <div class="panel-head"><div><h3>Mis grupos activos</h3><p>Selecciona una herramienta desde la barra lateral o usa los accesos rápidos.</p></div><button class="btn subtle" onclick="goView('groups')">Administrar</button></div>
         <div id="dashboardGroups" class="group-grid"></div>
       </div>
     </section>
@@ -66,28 +75,73 @@
     <section id="view-groups" class="view">
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-head"><div><h3>Crear grupo</h3><p>También puedes importar la lista desde Excel.</p></div></div>
+          <div class="panel-head"><div><h3>Crear grupo</h3><p>Para secundaria o CETIS.</p></div></div>
           <form id="groupForm" class="form-grid">
-            <label>Grado<input name="grade" placeholder="Ej. 2°" required></label>
-            <label>Grupo<input name="name" placeholder="Ej. 2°A" required></label>
-            <label class="span-2">Disciplina / asignatura<input name="discipline" placeholder="Ej. Tecnología - Informática" required></label>
+            <label>Grado / semestre<input name="grade" placeholder="Ej. 1° / 2° semestre" required></label>
+            <label>Grupo<input name="name" placeholder="Ej. 1J" required></label>
+            <label class="span-2">Disciplina / asignatura<input name="discipline" placeholder="Ej. Cultura Digital" required></label>
             <label class="span-2">Ciclo escolar<input name="school_year" value="2026-2027"></label>
             <button class="btn primary span-2" type="submit">Crear grupo</button>
           </form>
         </div>
         <div class="panel">
-          <div class="panel-head"><div><h3>Importar Excel</h3><p>Lee directamente un archivo .xlsx desde la tablet.</p></div></div>
+          <div class="panel-head"><div><h3>Importar lista desde Excel</h3><p>Preferencia: Apellido paterno · Apellido materno · Nombre(s).</p></div></div>
           <label>Grupo destino<select id="importGroup"></select></label>
-          <label class="upload-box">📄 <strong>Seleccionar Excel</strong><span>Archivo .xlsx</span><input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
+          <label class="upload-box">⇧ <strong>Seleccionar archivo Excel</strong><span>.xlsx desde la tablet</span><input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
           <div id="excelWizard" class="wizard hidden"></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>Grupos registrados</h3><p>Edita alumnos sin volver a importar.</p></div></div><div id="groupsTable"></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>Grupos registrados</h3><p>Altas, bajas, edición y orden A–Z por apellido paterno.</p></div></div><div id="groupsTable"></div></div>
     </section>
 
     <section id="view-attendance" class="view">
-      <div class="toolbar"><label>Grupo<select id="attendanceGroup"></select></label><label>Fecha<input id="attendanceDate" type="date"></label><button class="btn primary" id="loadAttendance">Cargar lista</button></div>
-      <div class="panel"><div class="panel-head"><div><h3>Asistencia</h3><p>Todos comienzan como presentes. Cambia faltas, retardos o justificadas.</p></div><div class="legend"><span>🟢 P</span><span>🔴 F</span><span>🟡 R</span><span>🔵 J</span></div></div><div id="attendanceList" class="student-list empty-state">Selecciona grupo y fecha.</div><button id="saveAttendance" class="btn primary wide hidden">Guardar asistencia</button></div>
+      <div class="toolbar attendance-toolbar">
+        <label>Grupo<select id="attendanceGroup"></select></label>
+        <label>Fecha<input id="attendanceDate" type="date"></label>
+        <label>Horas con el grupo<select id="attendanceHours"><option value="1">1 hora</option><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="7">7 horas</option><option value="8">8 horas</option></select></label>
+        <button class="btn primary" id="loadAttendance">Cargar lista</button>
+      </div>
+      <div id="attendanceStats" class="attendance-stats hidden"></div>
+      <div class="panel">
+        <div class="panel-head"><div><h3>Asistencia</h3><p>Pasas lista una vez; MiAula contabiliza cada hora para la estadística.</p></div><div class="legend"><span>🟢 P</span><span>🔴 F</span><span>🟡 R</span><span>🔵 J</span></div></div>
+        <div id="attendanceList" class="student-list empty-state">Selecciona grupo, fecha y horas.</div>
+        <button id="saveAttendance" class="btn primary wide hidden">Guardar asistencia</button>
+      </div>
+    </section>
+
+    <section id="view-dynamics" class="view">
+      <div class="panel dynamics-head">
+        <div class="dynamics-controls">
+          <label>Grupo<select id="dynamicsGroup"></select></label>
+          <div class="segmented" id="dynamicsTabs"><button class="active" data-mode="roulette">◉ Participación</button><button data-mode="teams">♟ Formar equipos</button></div>
+          <label class="toggle-line"><input type="checkbox" id="dynamicsPresentOnly" checked><span>Solo alumnos presentes hoy</span></label>
+        </div>
+        <div id="dynamicsSourceInfo" class="source-info">Selecciona un grupo.</div>
+      </div>
+
+      <div id="rouletteMode" class="dynamics-mode">
+        <div class="roulette-layout">
+          <div class="panel wheel-panel">
+            <div class="wheel-wrap"><div class="wheel-pointer"></div><canvas id="rouletteCanvas" width="720" height="720"></canvas><button id="spinWheel" class="spin-center">GIRAR</button></div>
+            <div class="wheel-actions"><button class="btn subtle" id="resetWheel">Reiniciar ruleta</button><span id="rouletteCounter">0 disponibles</span></div>
+          </div>
+          <div class="panel result-panel">
+            <span class="result-label">Alumno seleccionado</span>
+            <div id="rouletteNumber" class="result-number">—</div>
+            <div id="rouletteName" class="result-name">Gira la ruleta</div>
+            <p>La ruleta muestra únicamente números. Al detenerse, MiAula revela el nombre enlazado a la lista activa.</p>
+            <div><h4>Ya participaron</h4><div id="usedStudents" class="used-grid"><span class="muted-text">Nadie todavía.</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="teamsMode" class="dynamics-mode hidden">
+        <div class="panel teams-control-panel">
+          <div class="teams-toolbar"><label>Integrantes preferidos<select id="teamSize"><option value="3">3 por equipo</option><option value="2">2 por equipo</option></select></label><button class="btn primary large" id="generateTeams">Crear equipos automáticamente</button><button class="btn subtle" id="copyTeams">Copiar equipos</button></div>
+          <p class="muted-text">MiAula evita dejar a un alumno solo. Si es necesario, combina equipos de 2 y 3 integrantes.</p>
+        </div>
+        <div id="teamsResult" class="teams-grid"><div class="empty-state">Selecciona un grupo y crea los equipos.</div></div>
+      </div>
     </section>
 
     <section id="view-activities" class="view">
@@ -95,7 +149,7 @@
         <div class="panel"><div class="panel-head"><div><h3>Nueva actividad</h3><p>Trabajos, prácticas, proyectos, exposiciones o exámenes.</p></div></div>
           <form id="activityForm" class="form-grid">
             <label class="span-2">Grupo<select name="group_id" id="activityGroup"></select></label>
-            <label class="span-2">Nombre<input name="title" placeholder="Ej. Infografía de seguridad digital" required></label>
+            <label class="span-2">Nombre<input name="title" placeholder="Ej. Actividad de funciones" required></label>
             <label>Tipo<select name="activity_type"><option>Trabajo</option><option>Práctica</option><option>Proyecto</option><option>Exposición</option><option>Examen</option></select></label>
             <label>Trimestre<select name="period"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
             <label>Puntaje máximo<input type="number" name="max_score" value="10" min="1" step="0.1"></label>
@@ -106,13 +160,13 @@
         </div>
         <div class="panel"><div class="panel-head"><div><h3>Actividades</h3><p>Abre una actividad para capturar calificaciones.</p></div></div><label>Ver grupo<select id="activityFilter"></select></label><div id="activityCards" class="stack"></div></div>
       </div>
-      <div id="gradePanel" class="panel hidden"><div class="panel-head"><div><h3 id="gradeTitle">Captura</h3><p>Usa botones rápidos o escribe la calificación.</p></div><button class="btn" id="fillMax">Máximo a todos</button></div><div id="gradeList"></div><button id="saveGrades" class="btn primary wide">Guardar calificaciones</button></div>
+      <div id="gradePanel" class="panel hidden"><div class="panel-head"><div><h3 id="gradeTitle">Captura</h3><p>Usa botones rápidos o escribe la calificación.</p></div><button class="btn subtle" id="fillMax">Máximo a todos</button></div><div id="gradeList"></div><button id="saveGrades" class="btn primary wide">Guardar calificaciones</button></div>
     </section>
 
     <section id="view-grading" class="view">
       <div class="toolbar grading-toolbar"><label>Grupo<select id="gradingGroup"></select></label><label>Trimestre<select id="gradingPeriod"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label><button class="btn primary" id="loadGrading">Cargar</button></div>
       <div class="grid-2 grading-top">
-        <div class="panel"><div class="panel-head"><div><h3>Esquema de evaluación</h3><p>Trabajos y Proyectos pueden cambiar; Valores y Actitudes quedan bajo tu criterio.</p></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Esquema de evaluación</h3><p>Trabajos y Proyectos los acuerda el grupo; Valores y Actitudes permanecen bajo tu criterio.</p></div></div>
           <form id="schemeForm" class="scheme-grid">
             <label class="scheme-item variable"><span>Trabajos <small>grupo</small></span><div class="percent-input"><input id="workPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
             <label class="scheme-item variable"><span>Proyectos <small>grupo</small></span><div class="percent-input"><input id="projectPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
@@ -122,26 +176,26 @@
             <button class="btn primary span-2" type="submit">Guardar esquema</button>
           </form>
         </div>
-        <div class="panel"><div class="panel-head"><div><h3>Promedio del grupo</h3><p>La calificación final aparece cuando existen todos los componentes con porcentaje mayor que cero.</p></div></div><div class="term-average"><span>Trimestre actual</span><strong id="gradingGroupAverage">—</strong></div><p class="muted-text">Proyecto combina actividades tipo Proyecto y evaluaciones con rúbrica/lista de cotejo que generan calificación.</p></div>
+        <div class="panel"><div class="panel-head"><div><h3>Promedio del grupo</h3><p>El final aparece cuando todos los rubros con porcentaje tienen información.</p></div></div><div class="term-average"><span>Trimestre actual</span><strong id="gradingGroupAverage">—</strong></div><p class="muted-text">Proyectos combina actividades tipo Proyecto y evaluaciones que generan calificación.</p></div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>Valores, actitudes y final</h3><p>Trabajos y Proyectos se calculan automáticamente.</p></div><div class="action-row"><button class="btn small" id="fillValues10">Valores 10</button><button class="btn small" id="fillAttitudes10">Actitudes 10</button></div></div><div id="gradingTable" class="empty-state">Selecciona grupo y trimestre.</div><button id="saveComponents" class="btn primary wide hidden">Guardar Valores y Actitudes</button></div>
+      <div class="panel"><div class="panel-head"><div><h3>Valores, actitudes y final</h3><p>Trabajos y Proyectos se calculan automáticamente.</p></div><div class="action-row"><button class="btn small subtle" id="fillValues10">Valores 10</button><button class="btn small subtle" id="fillAttitudes10">Actitudes 10</button></div></div><div id="gradingTable" class="empty-state">Selecciona grupo y trimestre.</div><button id="saveComponents" class="btn primary wide hidden">Guardar Valores y Actitudes</button></div>
     </section>
 
     <section id="view-evaluation" class="view">
       <div class="grid-2">
-        <div class="panel"><div class="panel-head"><div><h3>Banco de instrumentos</h3><p>Crea rúbricas y listas de cotejo reutilizables.</p></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Banco de instrumentos</h3><p>Rúbricas y listas de cotejo reutilizables.</p></div></div>
           <form id="instrumentForm">
-            <label>Nombre<input id="instrumentName" placeholder="Ej. Rúbrica de proyecto tecnológico" required></label>
+            <label>Nombre<input id="instrumentName" placeholder="Ej. Rúbrica de proyecto" required></label>
             <label>Tipo<select id="instrumentType"><option value="rubric">Rúbrica</option><option value="checklist">Lista de cotejo</option></select></label>
             <label class="check-line"><input type="checkbox" id="convertGrade" checked> Convertir resultado a calificación 0–10</label>
-            <div class="criteria-editor"><div class="criteria-head"><strong>Criterios</strong><button type="button" class="btn small" id="addCriterion">+ Agregar</button></div><div id="criteriaRows"></div></div>
+            <div class="criteria-editor"><div class="criteria-head"><strong>Criterios</strong><button type="button" class="btn small subtle" id="addCriterion">+ Agregar</button></div><div id="criteriaRows"></div></div>
             <button class="btn primary wide" type="submit">Guardar instrumento</button>
           </form>
           <div id="instrumentCards" class="stack instruments-stack"></div>
         </div>
-        <div class="panel"><div class="panel-head"><div><h3>Evaluación rápida</h3><p>Selecciona uno o varios alumnos para evaluar un equipo.</p></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Evaluación rápida</h3><p>Selecciona uno o varios alumnos.</p></div></div>
           <div class="form-grid eval-top"><label>Grupo<select id="evalGroup"></select></label><label>Trimestre<select id="evalPeriod"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label><label class="span-2">Instrumento<select id="evalInstrument"></select></label><label class="span-2">Proyecto / evaluación<input id="evalTitle" placeholder="Ej. Proyecto Arduino"></label><label>Equipo<input id="evalTeam" placeholder="Opcional"></label><label>Fecha<input id="evalDate" type="date"></label></div>
-          <h4>Alumnos</h4><div id="evalStudents" class="student-picker empty-state">Selecciona un grupo.</div>
+          <h4>Alumnos activos</h4><div id="evalStudents" class="student-picker empty-state">Selecciona un grupo.</div>
           <h4>Instrumento</h4><div id="evalCriteria" class="empty-state">Selecciona un instrumento.</div>
           <label>Observaciones<textarea id="evalNotes" rows="3"></textarea></label>
           <button id="saveEvaluation" class="btn primary wide">Guardar evaluación</button>
@@ -152,22 +206,22 @@
 
     <section id="view-more" class="view">
       <div class="grid-2">
-        <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Genera un .xlsx con Resumen, Esquemas, Trimestres, Concentrado, Asistencia, Actividades, Evaluaciones y Observaciones.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
-        <div class="panel"><div class="panel-head"><div><h3>Respaldo y migración</h3><p>El respaldo es indispensable antes de limpiar datos o cambiar de dispositivo.</p></div></div>
+        <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, trimestres, actividades, evaluaciones y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
+        <div class="panel"><div class="panel-head"><div><h3>Respaldo</h3><p>Haz una copia antes de limpiar datos o actualizar MiAula.</p></div></div>
           <button class="btn primary wide" id="backupBtn">Descargar respaldo MiAula</button>
-          <label class="upload-box compact">↥ <strong>Restaurar / migrar respaldo</strong><span>Archivo .json generado por MiAula</span><input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
-          <div class="danger-zone"><strong>Zona de cuidado</strong><p>Restaurar un respaldo reemplaza los datos actuales del dispositivo.</p></div>
+          <label class="upload-box compact">↥ <strong>Restaurar respaldo</strong><span>Archivo .json de MiAula</span><input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
+          <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>Acerca de MiAula Mobile</h3><p>Versión inicial para pruebas Android.</p></div></div><p><strong>Datos:</strong> guardados localmente en IndexedDB dentro de esta app. <strong>Internet:</strong> no es necesario después de instalarla. <strong>Sincronización en la nube:</strong> todavía no incluida.</p></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0 · Tablet</h3><p>Versión enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js"></script>
-<script src="xlsx-lite.js"></script>
-<script src="app.js"></script>
+<script src="db.js?v=2.0.0"></script>
+<script src="xlsx-lite.js?v=2.0.0"></script>
+<script src="app.js?v=2.0.0"></script>
 </body>
 </html>
