@@ -51,6 +51,48 @@ function downloadBlob(blob,name){
 function studentLabel(s){return MiAulaDB.displayName(s)||s.name||'';}
 function activeOnly(rows){return rows.filter(s=>s.active!==0);}
 
+function principalLabel(type){return type==='exam'?'Examen':'Proyecto';}
+function totalPeriods(g){
+  if(!g) return 3;
+  const closed=Array.isArray(g.closed_periods)?g.closed_periods.map(x=>+x||0):[];
+  const highest=Math.max(1,+g.current_period||1,...closed);
+  return Math.max(highest,Number.isFinite(+g.total_periods)&&+g.total_periods>0?+g.total_periods:3);
+}
+function periodNumbers(g){return Array.from({length:totalPeriods(g)},(_,i)=>String(i+1));}
+async function getGroupState(gid){
+  const g=await MiAulaDB.get('groups',+gid);
+  if(!g) return null;
+  if(!Number.isFinite(+g.current_period)||+g.current_period<1) g.current_period=1;
+  if(!Array.isArray(g.closed_periods)) g.closed_periods=[];
+  const highest=Math.max(1,+g.current_period||1,...g.closed_periods.map(x=>+x||0));
+  if(!Number.isFinite(+g.total_periods)||+g.total_periods<1) g.total_periods=Math.max(3,highest);
+  if(+g.total_periods<highest) g.total_periods=highest;
+  if(g.course_closed===undefined) g.course_closed=false;
+  return g;
+}
+async function getActivePeriod(gid){
+  const g=await getGroupState(gid);
+  return g?String(g.current_period||1):'1';
+}
+function setEvaluationNavLabel(type){
+  const label=$('#evaluationNavLabel');
+  if(label) label.textContent=principalLabel(type);
+  const btn=$('.nav-item[data-view="evaluation"]');
+  if(btn) btn.title=principalLabel(type);
+}
+async function syncGroupPeriodIndicators(gid){
+  if(!gid) return;
+  const g=await getGroupState(gid); if(!g) return;
+  const p=String(g.current_period||1);
+  const s=await getScheme(+gid,p);
+  setEvaluationNavLabel(s.principal_type||'project');
+  const total=totalPeriods(g);
+  const status=g.course_closed?`Parcial ${p} de ${total} cerrado · ciclo concluido`:`Parcial ${p} de ${total} · en curso`;
+  ['#activityPeriodBadge','#gradingPeriodBadge','#evaluationPeriodBadge'].forEach(id=>{const el=$(id);if(el)el.textContent=status;});
+  const closeBtn=$('#closePeriodBtn');
+  if(closeBtn){closeBtn.disabled=!!g.course_closed;closeBtn.textContent=g.course_closed?`Parcial ${total} cerrado`:'Cerrar parcial e iniciar siguiente';}
+}
+
 function resetDynamicsSession(){
   dynamics.used.clear();
   dynamics.rotation=0;
@@ -66,19 +108,19 @@ function resetDynamicsSession(){
 }
 
 function goView(name){
-  if(currentView==='dynamics' && name!=='dynamics') resetDynamicsSession();
+  if(currentView==='dynamics' && name!=='dynamics'){ resetDynamicsSession(); exitRouletteFullscreen(); }
   currentView=name;
   $$('.view').forEach(v=>v.classList.remove('active'));
   $('#view-'+name)?.classList.add('active');
   $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   $('#viewTitle').textContent={
     dashboard:'Inicio',groups:'Mis grupos',attendance:'Asistencia',dynamics:'Ruleta y equipos',
-    activities:'Calificaciones',grading:'Calificación trimestral',evaluation:'Evaluación',more:'Más'
+    activities:'Calificaciones',grading:'Parcial',evaluation:'Proyecto',more:'Más'
   }[name]||name;
   if(name==='dashboard') loadSummary();
   if(name==='activities') loadActivities();
   if(name==='grading') loadGrading();
-  if(name==='evaluation'){loadInstruments();loadEvalStudents();loadEvalHistory();}
+  if(name==='evaluation'){loadInstruments().then(()=>loadPrincipalWorkspace());}
   if(name==='dynamics') loadDynamicsStudents(true);
 }
 window.goView=goView;
@@ -99,7 +141,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.0.0').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.0.3').catch(()=>{});
 }
 
 async function init(){
@@ -170,7 +212,8 @@ async function loadSummary(){
     const ga=att.filter(a=>ids.has(a.student_id));
     const th=ga.reduce((n,a)=>n+(+a.class_hours||1),0);
     const ah=ga.reduce((n,a)=>n+(a.status==='F'?0:(+a.class_hours||1)),0);
-    cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div></div>`);
+    const p=+g.current_period||1,total=totalPeriods(g),status=g.course_closed?'Ciclo cerrado':`Parcial ${p}/${total}`;
+    cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div><div class="group-period-chip">${status}</div></div>`);
   }
   $('#dashboardGroups').innerHTML=cards.length?cards.join(''):'<div class="empty-state">Crea tu primer grupo o importa tu información anterior.</div>';
 }
@@ -179,7 +222,8 @@ async function loadSummary(){
 $('#groupForm').onsubmit=async e=>{
   e.preventDefault();
   const d=Object.fromEntries(new FormData(e.target));
-  d.active=1;d.created_at=new Date().toISOString();
+  d.total_periods=Math.max(1,Math.min(6,+d.total_periods||3));
+  d.active=1;d.current_period=1;d.closed_periods=[];d.course_closed=false;d.created_at=new Date().toISOString();
   try{
     await MiAulaDB.add('groups',d);
     e.target.reset();e.target.school_year.value='2026-2027';
@@ -194,9 +238,9 @@ async function renderGroupsTable(){
     const all=await MiAulaDB.groupStudents(g.id,{includeInactive:true});
     const active=all.filter(s=>s.active!==0).length;
     const inactive=all.length-active;
-    rows.push(`<tr><td><strong>${escapeHtml(g.name)}</strong></td><td>${escapeHtml(g.grade||'')}</td><td>${escapeHtml(g.discipline||'')}</td><td>${active}</td><td>${inactive}</td><td><div class="action-row"><button class="btn small primary" onclick="viewStudents(${g.id})">Alumnos</button><button class="btn small subtle" onclick="editGroup(${g.id})">Editar</button><button class="btn small danger" onclick="archiveGroup(${g.id})">Archivar</button></div></td></tr>`);
+    rows.push(`<tr><td><strong>${escapeHtml(g.name)}</strong></td><td>${escapeHtml(g.grade||'')}</td><td>${escapeHtml(g.discipline||'')}</td><td><span class="period-badge">${g.course_closed?'Cerrado':`P${+g.current_period||1}/${totalPeriods(g)}`}</span></td><td>${active}</td><td>${inactive}</td><td><div class="action-row"><button class="btn small primary" onclick="viewStudents(${g.id})">Alumnos</button><button class="btn small subtle" onclick="editGroup(${g.id})">Editar</button><button class="btn small danger" onclick="archiveGroup(${g.id})">Archivar</button></div></td></tr>`);
   }
-  $('#groupsTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Grado</th><th>Disciplina</th><th>Activos</th><th>Bajas</th><th>Acciones</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  $('#groupsTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Grado</th><th>Disciplina</th><th>Parcial</th><th>Activos</th><th>Bajas</th><th>Acciones</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
 window.viewStudents=async gid=>{
@@ -253,8 +297,19 @@ $('#modal').onclick=e=>{if(e.target===$('#modal'))closeModal();};
 
 window.editGroup=async id=>{
   const g=await MiAulaDB.get('groups',id);
-  openModal('Editar grupo',`<form id="editGroupForm"><label>Grupo<input name="name" value="${escapeHtml(g.name)}" required></label><label>Grado / semestre<input name="grade" value="${escapeHtml(g.grade||'')}"></label><label>Disciplina<input name="discipline" value="${escapeHtml(g.discipline||'')}" required></label><label>Ciclo escolar<input name="school_year" value="${escapeHtml(g.school_year||'')}"></label><button class="btn primary wide">Guardar cambios</button></form>`);
-  $('#editGroupForm').onsubmit=async e=>{e.preventDefault();Object.assign(g,Object.fromEntries(new FormData(e.target)));await MiAulaDB.put('groups',g);closeModal();await refreshGroups();await loadSummary();toast('Grupo actualizado');};
+  const total=totalPeriods(g);
+  openModal('Editar grupo',`<form id="editGroupForm"><label>Grupo<input name="name" value="${escapeHtml(g.name)}" required></label><label>Grado / semestre<input name="grade" value="${escapeHtml(g.grade||'')}"></label><label>Disciplina<input name="discipline" value="${escapeHtml(g.discipline||'')}" required></label><label>Ciclo escolar<input name="school_year" value="${escapeHtml(g.school_year||'')}"></label><label>Número de parciales<select name="total_periods">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${n===total?'selected':''}>${n}</option>`).join('')}</select></label><p class="muted-text">Puedes aumentar los parciales cuando quieras. MiAula no permite reducirlos por debajo del parcial más alto que ya tenga información.</p><button class="btn primary wide">Guardar cambios</button></form>`);
+  $('#editGroupForm').onsubmit=async e=>{
+    e.preventDefault();
+    const d=Object.fromEntries(new FormData(e.target)),requested=Math.max(1,Math.min(6,+d.total_periods||3));
+    const highest=Math.max(1,+g.current_period||1,...(g.closed_periods||[]).map(x=>+x||0));
+    if(requested<highest){toast(`No puedes reducir a ${requested}: este grupo ya tiene información hasta el Parcial ${highest}.`,true);return;}
+    d.total_periods=requested;
+    Object.assign(g,d);
+    if(g.course_closed && (+g.current_period||1)<requested) g.course_closed=false;
+    await MiAulaDB.put('groups',g);
+    closeModal();await refreshGroups();await loadSummary();toast('Grupo actualizado');
+  };
 };
 
 window.archiveGroup=async id=>{
@@ -395,6 +450,7 @@ $('#dynamicsGroup').onchange=()=>loadDynamicsStudents(true);
 $('#dynamicsPresentOnly').onchange=()=>loadDynamicsStudents(true);
 $('#resetWheel').onclick=()=>{dynamics.used.clear();dynamics.rotation=0;$('#rouletteNumber').textContent='—';$('#rouletteName').textContent='Gira la ruleta';const c=$('#rouletteCanvas');c.style.transition='none';c.style.transform='rotate(0deg)';setTimeout(()=>c.style.transition='',0);drawWheel();renderUsedStudents();updateRouletteCounter();toast('Ruleta reiniciada');};
 $('#spinWheel').onclick=spinWheel;
+$('#fullscreenWheel').onclick=toggleRouletteFullscreen;
 $('#generateTeams').onclick=generateTeams;
 $('#copyTeams').onclick=copyTeams;
 
@@ -404,7 +460,7 @@ function setDynamicsMode(mode){
   $('#rouletteMode').classList.toggle('hidden',mode!=='roulette');
   $('#teamsMode').classList.toggle('hidden',mode!=='teams');
   if(mode!=='roulette'){
-    dynamics.used.clear();dynamics.rotation=0;renderUsedStudents();drawWheel();
+    dynamics.used.clear();dynamics.rotation=0;renderUsedStudents();drawWheel();exitRouletteFullscreen();
   }
   if(mode!=='teams'){dynamics.teams=[];$('#teamsResult').innerHTML='<div class="empty-state">Selecciona un grupo y crea los equipos.</div>';}
 }
@@ -430,11 +486,56 @@ async function loadDynamicsStudents(reset=true){
   drawWheel();updateRouletteCounter();
 }
 
-function wheelColors(i,used){
-  if(used)return i%2?'#b9c3d1':'#d0d7e1';
-  const colors=['#0a2f73','#1769ff','#0d4eb8','#3f86f7','#113d88','#2678f5'];
-  return colors[i%colors.length];
+const WHEEL_PALETTE=[
+  {fill:'#FF3B30',text:'#FFFFFF'},
+  {fill:'#FF9500',text:'#172A46'},
+  {fill:'#FFD60A',text:'#172A46'},
+  {fill:'#30D158',text:'#12361F'},
+  {fill:'#00C7BE',text:'#073B3A'},
+  {fill:'#00A7FF',text:'#FFFFFF'},
+  {fill:'#0A84FF',text:'#FFFFFF'},
+  {fill:'#5E5CE6',text:'#FFFFFF'},
+  {fill:'#BF5AF2',text:'#FFFFFF'},
+  {fill:'#FF2D55',text:'#FFFFFF'},
+  {fill:'#FF6B35',text:'#FFFFFF'},
+  {fill:'#15B8A6',text:'#073B3A'}
+];
+function wheelStyle(i,used){
+  if(used)return {fill:i%2?'#B7C0CD':'#D1D7E0',text:'#5D6878'};
+  return WHEEL_PALETTE[i%WHEEL_PALETTE.length];
 }
+
+function updateFullscreenButton(){
+  const btn=$('#fullscreenWheel');if(!btn)return;
+  const active=document.body.classList.contains('roulette-focus')||!!document.fullscreenElement;
+  btn.textContent=active?'✕ Salir de pantalla completa':'⛶ Pantalla completa';
+  btn.classList.toggle('active',active);
+}
+async function toggleRouletteFullscreen(){
+  const active=document.body.classList.contains('roulette-focus')||!!document.fullscreenElement;
+  if(active){await exitRouletteFullscreen();return;}
+  document.body.classList.add('roulette-focus');
+  updateFullscreenButton();
+  try{
+    if(document.documentElement.requestFullscreen){
+      await document.documentElement.requestFullscreen({navigationUI:'hide'});
+    }
+  }catch(e){
+    // Si Android/Huawei no ofrece Fullscreen API, el modo presentación CSS sigue funcionando.
+  }
+  setTimeout(()=>{drawWheel();updateFullscreenButton();},120);
+}
+async function exitRouletteFullscreen(){
+  document.body.classList.remove('roulette-focus');
+  try{if(document.fullscreenElement&&document.exitFullscreen)await document.exitFullscreen();}catch(e){}
+  updateFullscreenButton();
+  setTimeout(()=>drawWheel(),80);
+}
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement)document.body.classList.remove('roulette-focus');
+  updateFullscreenButton();
+  setTimeout(()=>drawWheel(),80);
+});
 function drawWheel(){
   const canvas=$('#rouletteCanvas');if(!canvas)return;
   const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height,cx=w/2,cy=h/2,r=Math.min(w,h)/2-10;
@@ -446,9 +547,10 @@ function drawWheel(){
   const step=Math.PI*2/students.length,start=-Math.PI/2-step/2;
   students.forEach((s,i)=>{
     const a1=start+i*step,a2=a1+step,used=dynamics.used.has(s.id);
-    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a1,a2);ctx.closePath();ctx.fillStyle=wheelColors(i,used);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=2;ctx.stroke();
+    const style=wheelStyle(i,used);
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a1,a2);ctx.closePath();ctx.fillStyle=style.fill;ctx.fill();ctx.strokeStyle='rgba(255,255,255,.82)';ctx.lineWidth=2.5;ctx.stroke();
     const mid=a1+step/2,tx=cx+Math.cos(mid)*r*.72,ty=cy+Math.sin(mid)*r*.72;
-    ctx.fillStyle=used?'#647184':'#ffffff';ctx.font=`900 ${students.length>42?16:students.length>30?19:students.length>20?23:28}px Segoe UI,Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(s.list_number??i+1),tx,ty);
+    ctx.fillStyle=style.text;ctx.font=`950 ${students.length>42?17:students.length>30?20:students.length>20?24:30}px Segoe UI,Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(s.list_number??i+1),tx,ty);
   });
   ctx.beginPath();ctx.arc(cx,cy,r*.19,0,Math.PI*2);ctx.fillStyle='#ffffff';ctx.fill();
 }
@@ -482,6 +584,8 @@ async function spinWheel(){
   dynamics.used.add(chosen.id);
   $('#rouletteNumber').textContent=chosen.list_number??index+1;
   $('#rouletteName').textContent=studentLabel(chosen);
+  const result=$('#rouletteResultPanel');
+  if(result){result.classList.remove('winner-pop');void result.offsetWidth;result.classList.add('winner-pop');setTimeout(()=>result.classList.remove('winner-pop'),900);}
   renderUsedStudents();
   // Regresa visualmente la rueda a su orientación base manteniendo marcado al alumno que ya salió.
   canvas.style.transition='none';canvas.style.transform='rotate(0deg)';dynamics.rotation=0;drawWheel();
@@ -521,17 +625,34 @@ async function copyTeams(){
 
 // -------------------- ACTIVIDADES Y CALIFICACIONES --------------------
 $('#activityForm').onsubmit=async e=>{
-  e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(!d.group_id){toast('Selecciona un grupo',true);return;}
-  d.group_id=+d.group_id;d.max_score=+d.max_score;d.weight=+d.weight;d.created_at=new Date().toISOString();
-  await MiAulaDB.add('activities',d);e.target.title.value='';await loadActivities();toast('Actividad creada');
+  e.preventDefault();
+  const d=Object.fromEntries(new FormData(e.target));
+  if(!d.group_id){toast('Selecciona un grupo',true);return;}
+  d.group_id=+d.group_id;
+  const g=await getGroupState(d.group_id);
+  if(g.course_closed){toast(`Este grupo ya cerró sus ${totalPeriods(g)} parciales.`,true);return;}
+  d.period=String(g.current_period||1);
+  d.max_score=+d.max_score;d.weight=+d.weight;d.created_at=new Date().toISOString();
+  await MiAulaDB.add('activities',d);
+  e.target.title.value='';
+  await loadActivities();
+  toast(`Actividad creada en Parcial ${d.period}`);
 };
 $('#activityFilter').onchange=loadActivities;
+$('#activityGroup').onchange=async()=>{const gid=+$('#activityGroup').value;if(gid){$('#activityFilter').value=String(gid);await loadActivities();}};
 async function loadActivities(){
   const gid=+$('#activityFilter').value||+$('#activityGroup').value||groups[0]?.id;
   if(!gid){$('#activityCards').innerHTML='<div class="empty-state">Crea un grupo primero.</div>';return;}
-  $('#activityFilter').value=gid;
-  const arr=(await MiAulaDB.byIndex('activities','group_id',gid)).sort((a,b)=>b.id-a.id);
-  $('#activityCards').innerHTML=arr.length?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong><br><small>${escapeHtml(a.activity_type)} · T${a.period} · Máx. ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join(''):'<div class="empty-state">No hay actividades para este grupo.</div>';
+  $('#activityFilter').value=String(gid);
+  if(!$('#activityGroup').value)$('#activityGroup').value=String(gid);
+  const g=await getGroupState(gid),p=String(g.current_period||1);
+  if($('#activityPeriodBadge'))$('#activityPeriodBadge').textContent=g.course_closed?`Parcial ${p} de ${totalPeriods(g)} cerrado · ciclo concluido`:`Parcial ${p} de ${totalPeriods(g)} · en curso`;
+  if(g.course_closed){$('#activityCards').innerHTML=`<div class="empty-state">Los ${totalPeriods(g)} parciales están cerrados. El historial permanece en la exportación de Excel.</div>`;return;}
+  const arr=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
+  $('#activityCards').innerHTML=arr.length
+    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong><br><small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Máx. ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
+    :`<div class="empty-state">Parcial ${p} limpio. Crea la primera actividad.</div>`;
+  await syncGroupPeriodIndicators(gid);
 }
 window.openGrades=async aid=>{
   const activity=await MiAulaDB.get('activities',aid);if(!activity)return;
@@ -558,62 +679,268 @@ $('#saveGrades').onclick=async()=>{
 };
 window.deleteActivity=async id=>{if(!confirm('¿Eliminar esta actividad y sus calificaciones?'))return;await MiAulaDB.deleteActivity(id);$('#gradePanel').classList.add('hidden');await loadActivities();await loadSummary();toast('Actividad eliminada');};
 
-// -------------------- TRIMESTRE --------------------
+// -------------------- PARCIAL / ESQUEMA DE EVALUACIÓN --------------------
 async function getScheme(gid,period){
-  const key=`${gid}:${period}`;let s=await MiAulaDB.get('gradingSchemes',key);
-  if(!s){s={key,group_id:gid,period:String(period),work_pct:40,project_pct:40,values_pct:10,attitudes_pct:10,updated_at:new Date().toISOString()};await MiAulaDB.put('gradingSchemes',s);}
+  const key=`${gid}:${period}`;
+  let s=await MiAulaDB.get('gradingSchemes',key);
+  if(!s){
+    s={
+      key,group_id:+gid,period:String(period),
+      work_pct:40,project_pct:40,values_pct:10,attitudes_pct:10,
+      principal_type:'project',mode_locked:false,
+      updated_at:new Date().toISOString()
+    };
+    await MiAulaDB.put('gradingSchemes',s);
+  }else{
+    let changed=false;
+    if(!s.principal_type){s.principal_type='project';changed=true;}
+    if(s.mode_locked===undefined){s.mode_locked=false;changed=true;}
+    if(changed) await MiAulaDB.put('gradingSchemes',s);
+  }
+  if(!s.mode_locked){
+    const [legacyEvals,legacyActs,legacyComps]=await Promise.all([
+      MiAulaDB.byIndex('evaluations','group_period',[+gid,String(period)]),
+      MiAulaDB.byIndex('activities','group_period',[+gid,String(period)]),
+      MiAulaDB.byIndex('studentComponents','group_period',[+gid,String(period)])
+    ]);
+    const hasExam=legacyComps.some(c=>c.exam_score!=null)||legacyActs.some(a=>String(a.activity_type||'').toLowerCase()==='examen');
+    const hasProject=legacyEvals.length>0||legacyActs.some(a=>String(a.activity_type||'').toLowerCase()==='proyecto');
+    if(hasExam&&!hasProject){s.principal_type='exam';s.mode_locked=true;await MiAulaDB.put('gradingSchemes',s);}
+    else if(hasProject){s.principal_type='project';s.mode_locked=true;await MiAulaDB.put('gradingSchemes',s);}
+  }
   return s;
 }
+
 async function computeGroupGrading(gid,period){
   const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  const activities=await MiAulaDB.byIndex('activities','group_period',[gid,String(period)]),allGrades=await MiAulaDB.all('grades'),actIds=new Set(activities.map(a=>a.id)),grades=allGrades.filter(g=>actIds.has(g.activity_id));
-  const evals=await MiAulaDB.byIndex('evaluations','group_period',[gid,String(period)]),comps=await MiAulaDB.byIndex('studentComponents','group_period',[gid,String(period)]),scheme=await getScheme(gid,period);
+  const activities=await MiAulaDB.byIndex('activities','group_period',[gid,String(period)]);
+  const allGrades=await MiAulaDB.all('grades');
+  const actIds=new Set(activities.map(a=>a.id));
+  const grades=allGrades.filter(g=>actIds.has(g.activity_id));
+  const evals=await MiAulaDB.byIndex('evaluations','group_period',[gid,String(period)]);
+  const comps=await MiAulaDB.byIndex('studentComponents','group_period',[gid,String(period)]);
+  const scheme=await getScheme(gid,period);
+  const principalType=scheme.principal_type||'project';
+
   const gByStudent=new Map(),eByStudent=new Map(),cByStudent=new Map(comps.map(c=>[c.student_id,c]));
-  for(const g of grades){if(!gByStudent.has(g.student_id))gByStudent.set(g.student_id,[]);gByStudent.get(g.student_id).push(g);}
-  for(const e of evals){if(!eByStudent.has(e.student_id))eByStudent.set(e.student_id,[]);eByStudent.get(e.student_id).push(e);}
+  for(const g of grades){
+    if(!gByStudent.has(g.student_id))gByStudent.set(g.student_id,[]);
+    gByStudent.get(g.student_id).push(g);
+  }
+  for(const e of evals){
+    if(!eByStudent.has(e.student_id))eByStudent.set(e.student_id,[]);
+    eByStudent.get(e.student_id).push(e);
+  }
+
   const actMap=new Map(activities.map(a=>[a.id,a])),rows=[];
   for(const s of students){
-    let workTotal=0,workW=0,projTotal=0,projW=0;
+    let workTotal=0,workW=0,projectTotal=0,projectW=0,examTotal=0,examW=0;
     for(const g of gByStudent.get(s.id)||[]){
-      if(g.score==null)continue;const a=actMap.get(g.activity_id);if(!a||+a.max_score<=0||+a.weight<=0)continue;
-      const normalized=+g.score*10/+a.max_score,w=+a.weight||1;
-      if(String(a.activity_type).trim().toLowerCase()==='proyecto'){projTotal+=normalized*w;projW+=w;}else{workTotal+=normalized*w;workW+=w;}
+      if(g.score==null)continue;
+      const a=actMap.get(g.activity_id);
+      if(!a||+a.max_score<=0||+a.weight<=0)continue;
+      const normalized=+g.score*10/+a.max_score,w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
+      if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}
+      else if(type==='examen'){examTotal+=normalized*w;examW+=w;}
+      else{workTotal+=normalized*w;workW+=w;}
     }
-    for(const e of eByStudent.get(s.id)||[]){if(e.grade!=null){projTotal+=+e.grade;projW+=1;}}
-    const work=workW?workTotal/workW:null,project=projW?projTotal/projW:null,comp=cByStudent.get(s.id),values=comp?.values_score??null,attitudes=comp?.attitudes_score??null;
+
+    if(principalType==='project'){
+      for(const e of eByStudent.get(s.id)||[]){
+        if(e.grade!=null){projectTotal+=+e.grade;projectW+=1;}
+      }
+    }
+
+    const comp=cByStudent.get(s.id);
+    const work=workW?workTotal/workW:null;
+    let principal=null;
+    if(principalType==='exam'){
+      principal=comp?.exam_score??(examW?examTotal/examW:null);
+    }else{
+      principal=projectW?projectTotal/projectW:null;
+    }
+    const values=comp?.values_score??null,attitudes=comp?.attitudes_score??null;
+
     let complete=true,final=0;
-    for(const [score,pct] of [[work,+scheme.work_pct],[project,+scheme.project_pct],[values,+scheme.values_pct],[attitudes,+scheme.attitudes_pct]]){
-      if(pct>0){if(score==null)complete=false;else final+=+score*pct/100;}
+    for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[values,+scheme.values_pct],[attitudes,+scheme.attitudes_pct]]){
+      if(pct>0){
+        if(score==null)complete=false;
+        else final+=+score*pct/100;
+      }
     }
-    rows.push({...s,name:studentLabel(s),work_avg:work==null?null:+work.toFixed(2),project_avg:project==null?null:+project.toFixed(2),values_score:values,attitudes_score:attitudes,final_grade:complete?+final.toFixed(2):null,complete,notes:comp?.notes||''});
+    rows.push({
+      ...s,name:studentLabel(s),
+      work_avg:work==null?null:+work.toFixed(2),
+      principal_avg:principal==null?null:+principal.toFixed(2),
+      project_avg:principalType==='project'&&principal!=null?+principal.toFixed(2):null,
+      exam_score:principalType==='exam'&&principal!=null?+principal.toFixed(2):(comp?.exam_score??null),
+      values_score:values,attitudes_score:attitudes,
+      final_grade:complete?+final.toFixed(2):null,complete,
+      notes:comp?.notes||''
+    });
   }
   const finals=rows.filter(r=>r.final_grade!=null).map(r=>r.final_grade);
   return {period:String(period),scheme,students:rows,group_average:finals.length?finals.reduce((a,b)=>a+b,0)/finals.length:null};
 }
-function schemeNumbers(){return {work:+$('#workPct').value||0,project:+$('#projectPct').value||0,values:+$('#valuesPct').value||0,attitudes:+$('#attitudesPct').value||0};}
-function updateSchemeUI(){const s=schemeNumbers(),total=s.work+s.project+s.values+s.attitudes;$('#schemeTotal').textContent=total+'%';$('#schemeTotal').parentElement.classList.toggle('bad',total!==100);}
-['#workPct','#projectPct','#valuesPct','#attitudesPct'].forEach(id=>$(id).oninput=updateSchemeUI);
-$('#loadGrading').onclick=loadGrading;$('#gradingGroup').onchange=loadGrading;$('#gradingPeriod').onchange=loadGrading;
-async function loadGrading(){
-  const gid=+$('#gradingGroup').value;if(!gid){$('#gradingTable').innerHTML='<div class="empty-state">Selecciona un grupo y trimestre.</div>';return;}
-  gradingData=await computeGroupGrading(gid,$('#gradingPeriod').value);const s=gradingData.scheme;
-  $('#workPct').value=s.work_pct;$('#projectPct').value=s.project_pct;$('#valuesPct').value=s.values_pct;$('#attitudesPct').value=s.attitudes_pct;updateSchemeUI();
-  $('#gradingGroupAverage').textContent=gradingData.group_average==null?'—':gradingData.group_average.toFixed(2);renderGradingTable();
+
+function schemeNumbers(){
+  return {
+    work:+$('#workPct').value||0,
+    project:+$('#projectPct').value||0,
+    values:+$('#valuesPct').value||0,
+    attitudes:+$('#attitudesPct').value||0
+  };
 }
-function localFinal(row){const s=schemeNumbers(),pairs=[[row.work_avg,s.work],[row.project_avg,s.project],[row.values_score,s.values],[row.attitudes_score,s.attitudes]],total=s.work+s.project+s.values+s.attitudes;if(total!==100)return null;let out=0;for(const [v,p] of pairs){if(p>0&&v==null)return null;if(v!=null)out+=+v*p/100;}return +out.toFixed(2);}
+function selectedPrincipalType(){
+  return $('#principalExamBtn')?.classList.contains('active')?'exam':'project';
+}
+function setPrincipalSelector(type,locked=false){
+  const project=$('#principalProjectBtn'),exam=$('#principalExamBtn');
+  if(project){project.classList.toggle('active',type!=='exam');project.disabled=locked;}
+  if(exam){exam.classList.toggle('active',type==='exam');exam.disabled=locked;}
+  const name=principalLabel(type);
+  if($('#principalPctLabel')) $('#principalPctLabel').textContent=name;
+  if($('#gradingPrincipalLabel')) $('#gradingPrincipalLabel').textContent=name;
+  if($('#principalModeNote')) $('#principalModeNote').textContent=locked?`${name} quedó definido para este parcial. Podrás cambiarlo al iniciar el siguiente parcial.`:'Elige Proyecto o Examen antes de guardar el esquema del parcial.';
+  setEvaluationNavLabel(type);
+}
+function updateSchemeUI(){
+  const s=schemeNumbers(),total=s.work+s.project+s.values+s.attitudes;
+  $('#schemeTotal').textContent=total+'%';
+  $('#schemeTotal').parentElement.classList.toggle('bad',total!==100);
+}
+['#workPct','#projectPct','#valuesPct','#attitudesPct'].forEach(id=>$(id).oninput=updateSchemeUI);
+$('#principalProjectBtn').onclick=()=>{if(!$('#principalProjectBtn').disabled)setPrincipalSelector('project',false);};
+$('#principalExamBtn').onclick=()=>{if(!$('#principalExamBtn').disabled)setPrincipalSelector('exam',false);};
+
+if($('#loadGrading'))$('#loadGrading').onclick=loadGrading;
+$('#gradingGroup').onchange=async()=>{const gid=+$('#gradingGroup').value;if(gid&&$('#evalGroup'))$('#evalGroup').value=String(gid);await loadGrading();await syncGroupPeriodIndicators(gid);};
+
+async function loadGrading(){
+  const gid=+$('#gradingGroup').value;
+  if(!gid){
+    $('#gradingTable').innerHTML='<div class="empty-state">Selecciona un grupo.</div>';
+    if($('#gradingPeriodBadge'))$('#gradingPeriodBadge').textContent='Selecciona un grupo';
+    return;
+  }
+  const g=await getGroupState(gid),period=String(g.current_period||1);
+  gradingData=await computeGroupGrading(gid,period);
+  const s=gradingData.scheme;
+  $('#workPct').value=s.work_pct;
+  $('#projectPct').value=s.project_pct;
+  $('#valuesPct').value=s.values_pct;
+  $('#attitudesPct').value=s.attitudes_pct;
+  setPrincipalSelector(s.principal_type||'project',!!s.mode_locked);
+  updateSchemeUI();
+  $('#gradingGroupAverage').textContent=gradingData.group_average==null?'—':gradingData.group_average.toFixed(2);
+  if($('#gradingPeriodBadge'))$('#gradingPeriodBadge').textContent=g.course_closed?`Parcial ${period} de ${totalPeriods(g)} cerrado · ciclo concluido`:`Parcial ${period} de ${totalPeriods(g)} · en curso`;
+  if($('#currentPartialNumber'))$('#currentPartialNumber').textContent=period;
+  renderGradingTable();
+  await syncGroupPeriodIndicators(gid);
+}
+
+function localFinal(row){
+  const s=schemeNumbers();
+  const pairs=[[row.work_avg,s.work],[row.principal_avg,s.project],[row.values_score,s.values],[row.attitudes_score,s.attitudes]];
+  const total=s.work+s.project+s.values+s.attitudes;
+  if(total!==100)return null;
+  let out=0;
+  for(const [v,p] of pairs){
+    if(p>0&&v==null)return null;
+    if(v!=null)out+=+v*p/100;
+  }
+  return +out.toFixed(2);
+}
+
 function renderGradingTable(){
   if(!gradingData)return;
+  const principal=principalLabel(gradingData.scheme.principal_type||'project');
   $('#gradingTable').className='';
-  $('#gradingTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Alumno</th><th>Trabajos</th><th>Proyectos</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${gradingData.students.map((s,i)=>`<tr><td>${s.list_number??''}</td><td><strong>${escapeHtml(s.name)}</strong></td><td><span class="auto-score">${fmtNum(s.work_avg)}</span></td><td><span class="auto-score">${fmtNum(s.project_avg)}</span></td><td><input data-comp="values" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.values_score??''}"></td><td><input data-comp="attitudes" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.attitudes_score??''}"></td><td id="final-${i}">${localFinal(s)==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${localFinal(s).toFixed(2)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
-  $$('#gradingTable input[data-comp]').forEach(inp=>inp.oninput=e=>{const i=+e.target.dataset.index,key=e.target.dataset.comp+'_score';gradingData.students[i][key]=e.target.value===''?null:+e.target.value;updateFinalCell(i);});
+  $('#gradingTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Alumno</th><th>Trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${gradingData.students.map((s,i)=>`<tr><td>${s.list_number??''}</td><td><strong>${escapeHtml(s.name)}</strong></td><td><span class="auto-score">${fmtNum(s.work_avg)}</span></td><td><span class="auto-score">${fmtNum(s.principal_avg)}</span></td><td><input data-comp="values" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.values_score??''}"></td><td><input data-comp="attitudes" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.attitudes_score??''}"></td><td id="final-${i}">${localFinal(s)==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${localFinal(s).toFixed(2)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+  $$('#gradingTable input[data-comp]').forEach(inp=>inp.oninput=e=>{
+    const i=+e.target.dataset.index,key=e.target.dataset.comp+'_score';
+    gradingData.students[i][key]=e.target.value===''?null:+e.target.value;
+    updateFinalCell(i);
+  });
   $('#saveComponents').classList.remove('hidden');
 }
-function updateFinalCell(i){const v=localFinal(gradingData.students[i]);$(`#final-${i}`).innerHTML=v==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${v.toFixed(2)}</span>`;}
+function updateFinalCell(i){
+  const v=localFinal(gradingData.students[i]);
+  $(`#final-${i}`).innerHTML=v==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${v.toFixed(2)}</span>`;
+}
 function updateAllFinalCells(){gradingData?.students.forEach((_,i)=>updateFinalCell(i));}
-$('#schemeForm').onsubmit=async e=>{e.preventDefault();const gid=+$('#gradingGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}const p=$('#gradingPeriod').value,s=schemeNumbers(),total=s.work+s.project+s.values+s.attitudes;if(total!==100){toast('Los porcentajes deben sumar exactamente 100%.',true);return;}await MiAulaDB.put('gradingSchemes',{key:`${gid}:${p}`,group_id:gid,period:String(p),work_pct:s.work,project_pct:s.project,values_pct:s.values,attitudes_pct:s.attitudes,updated_at:new Date().toISOString()});toast('Esquema guardado');gradingData.scheme=await getScheme(gid,p);updateAllFinalCells();};
-$('#saveComponents').onclick=async()=>{const gid=+$('#gradingGroup').value,p=$('#gradingPeriod').value;for(const s of gradingData.students){const key=`${gid}:${p}:${s.id}`;await MiAulaDB.put('studentComponents',{key,group_id:gid,period:String(p),student_id:s.id,values_score:s.values_score==null?null:+s.values_score,attitudes_score:s.attitudes_score==null?null:+s.attitudes_score,notes:s.notes||'',updated_at:new Date().toISOString()});}toast('Valores y actitudes guardados');await loadGrading();};
+
+$('#schemeForm').onsubmit=async e=>{
+  e.preventDefault();
+  const gid=+$('#gradingGroup').value;
+  if(!gid){toast('Selecciona un grupo',true);return;}
+  const g=await getGroupState(gid);
+  if(g.course_closed){toast(`Este grupo ya tiene sus ${totalPeriods(g)} parciales cerrados.`,true);return;}
+  const p=String(g.current_period||1),nums=schemeNumbers(),total=nums.work+nums.project+nums.values+nums.attitudes;
+  if(total!==100){toast('Los porcentajes deben sumar exactamente 100%.',true);return;}
+  const old=await getScheme(gid,p),type=selectedPrincipalType();
+  if(old.mode_locked && old.principal_type!==type){
+    toast(`Este parcial ya fue definido como ${principalLabel(old.principal_type)}.`,true);return;
+  }
+  await MiAulaDB.put('gradingSchemes',{
+    ...old,key:`${gid}:${p}`,group_id:gid,period:p,
+    work_pct:nums.work,project_pct:nums.project,values_pct:nums.values,attitudes_pct:nums.attitudes,
+    principal_type:type,mode_locked:true,updated_at:new Date().toISOString()
+  });
+  toast(`${principalLabel(type)} definido para el Parcial ${p}`);
+  await loadGrading();
+  if($('#evalGroup'))$('#evalGroup').value=String(gid);
+  await loadPrincipalWorkspace();
+};
+
+$('#saveComponents').onclick=async()=>{
+  const gid=+$('#gradingGroup').value;
+  if(!gid||!gradingData)return;
+  const p=gradingData.period;
+  for(const s of gradingData.students){
+    const key=`${gid}:${p}:${s.id}`;
+    const old=await MiAulaDB.get('studentComponents',key);
+    await MiAulaDB.put('studentComponents',{
+      ...(old||{}),key,group_id:gid,period:String(p),student_id:s.id,
+      values_score:s.values_score==null?null:+s.values_score,
+      attitudes_score:s.attitudes_score==null?null:+s.attitudes_score,
+      exam_score:old?.exam_score??s.exam_score??null,
+      notes:s.notes||'',updated_at:new Date().toISOString()
+    });
+  }
+  toast('Valores y actitudes guardados');
+  await loadGrading();
+};
 $('#fillValues10').onclick=()=>{if(!gradingData)return;gradingData.students.forEach(s=>s.values_score=10);renderGradingTable();};
 $('#fillAttitudes10').onclick=()=>{if(!gradingData)return;gradingData.students.forEach(s=>s.attitudes_score=10);renderGradingTable();};
+
+$('#closePeriodBtn').onclick=async()=>{
+  const gid=+$('#gradingGroup').value;
+  if(!gid){toast('Selecciona un grupo',true);return;}
+  const g=await getGroupState(gid),p=+g.current_period||1,total=totalPeriods(g);
+  if(g.course_closed){toast(`Los ${total} parciales ya están cerrados.`,true);return;}
+  const next=p<total?p+1:null;
+  const msg=next
+    ?`¿Cerrar el Parcial ${p} e iniciar el Parcial ${next}?\n\nLas actividades y el Proyecto/Examen del parcial actual dejarán de mostrarse en el área activa, pero NO se borrarán. Las rúbricas y listas de cotejo permanecerán disponibles.`
+    :`¿Cerrar el Parcial ${p}?\n\nSe conservará todo el historial y el banco de rúbricas/listas de cotejo. El grupo quedará marcado como ciclo concluido.`;
+  if(!confirm(msg))return;
+  g.closed_periods=[...new Set([...(g.closed_periods||[]),p])].sort((a,b)=>a-b);
+  if(next){g.current_period=next;g.course_closed=false;}else{g.course_closed=true;}
+  g.last_period_closed_at=new Date().toISOString();
+  await MiAulaDB.put('groups',g);
+  $('#gradePanel').classList.add('hidden');
+  toast(next?`Parcial ${p} cerrado · Parcial ${next} iniciado`:`Parcial ${p} cerrado`);
+  await refreshGroups();
+  $('#gradingGroup').value=String(gid);
+  $('#activityGroup').value=String(gid);
+  $('#activityFilter').value=String(gid);
+  $('#evalGroup').value=String(gid);
+  await loadGrading();
+  await loadActivities();
+  await loadPrincipalWorkspace();
+  await loadSummary();
+};
+
 
 // -------------------- RÚBRICAS / EVALUACIONES --------------------
 function addCriterion(name=''){
@@ -634,34 +961,169 @@ async function loadInstruments(){
   $('#instrumentCards').innerHTML=instruments.length?instruments.map(i=>`<div class="instrument-card"><div><strong>${escapeHtml(i.name)}</strong><br><small>${i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo'} · ${i.criteria.length} criterios · ${i.convert_to_grade?'0–10':'Evidencia'}</small></div><button class="btn small danger" onclick="deleteInstrument(${i.id})">Eliminar</button></div>`).join(''):'<div class="empty-state">Crea tu primera rúbrica o lista de cotejo.</div>';
   $('#evalInstrument').innerHTML='<option value="">Seleccionar…</option>'+instruments.map(i=>`<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('');
 }
-window.deleteInstrument=async id=>{const used=await MiAulaDB.byIndex('evaluations','instrument_id',id);if(used.length){toast('No puede eliminarse porque ya tiene evaluaciones.',true);return;}if(!confirm('¿Eliminar este instrumento?'))return;await MiAulaDB.remove('instruments',id);await loadInstruments();toast('Instrumento eliminado');};
-$('#evalGroup').onchange=()=>{loadEvalStudents();loadEvalHistory();};$('#evalInstrument').onchange=renderEvalCriteria;
-async function loadEvalStudents(){
-  const gid=+$('#evalGroup').value;if(!gid){$('#evalStudents').className='student-picker empty-state';$('#evalStudents').textContent='Selecciona un grupo.';return;}
+window.deleteInstrument=async id=>{
+  const used=await MiAulaDB.byIndex('evaluations','instrument_id',id);
+  if(used.length){toast('No puede eliminarse porque ya tiene evaluaciones guardadas.',true);return;}
+  if(!confirm('¿Eliminar este instrumento del banco?'))return;
+  await MiAulaDB.remove('instruments',id);await loadInstruments();toast('Instrumento eliminado');
+};
+
+$('#evalGroup').onchange=loadPrincipalWorkspace;
+$('#evalInstrument').onchange=renderEvalCriteria;
+
+async function loadPrincipalWorkspace(){
+  const gid=+$('#evalGroup').value;
+  if(!gid){
+    setEvaluationNavLabel('project');
+    $('#projectWorkspace')?.classList.remove('hidden');
+    $('#examWorkspace')?.classList.add('hidden');
+    if($('#evalStudents')){$('#evalStudents').className='student-picker empty-state';$('#evalStudents').textContent='Selecciona un grupo.';}
+    if($('#examGradeList'))$('#examGradeList').innerHTML='<div class="empty-state">Selecciona un grupo.</div>';
+    if($('#evaluationPeriodBadge'))$('#evaluationPeriodBadge').textContent='Selecciona un grupo';
+    return;
+  }
+  const g=await getGroupState(gid),p=String(g.current_period||1),scheme=await getScheme(gid,p),type=scheme.principal_type||'project';
+  setEvaluationNavLabel(type);
+  if($('#evaluationTitle'))$('#evaluationTitle').textContent=principalLabel(type);
+  if($('#evaluationPeriodBadge'))$('#evaluationPeriodBadge').textContent=g.course_closed?`Parcial ${p} de ${totalPeriods(g)} cerrado · ciclo concluido`:`Parcial ${p} de ${totalPeriods(g)} · en curso`;
+  $('#projectWorkspace')?.classList.toggle('hidden',type==='exam');
+  $('#examWorkspace')?.classList.toggle('hidden',type!=='exam');
+  $('#projectHistoryPanel')?.classList.toggle('hidden',type==='exam');
+
+  if(g.course_closed){
+    if($('#projectWorkspace'))$('#projectWorkspace').classList.add('hidden');
+    if($('#examWorkspace'))$('#examWorkspace').classList.add('hidden');
+    $('#projectHistoryPanel')?.classList.add('hidden');
+    if($('#closedPrincipalNotice')){$('#closedPrincipalNotice').classList.remove('hidden');$('#closedPrincipalNotice').textContent=`Los ${totalPeriods(g)} parciales están cerrados. El banco de rúbricas y listas de cotejo permanece disponible.`;}
+    return;
+  }
+  $('#closedPrincipalNotice')?.classList.add('hidden');
+
+  if(type==='exam'){
+    await loadExamScores(gid,p);
+  }else{
+    await loadEvalStudents(gid);
+    await loadEvalHistory(gid,p);
+  }
+  await syncGroupPeriodIndicators(gid);
+}
+
+async function loadEvalStudents(gid=+$('#evalGroup').value){
+  if(!gid){
+    $('#evalStudents').className='student-picker empty-state';
+    $('#evalStudents').textContent='Selecciona un grupo.';
+    return;
+  }
   const s=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  $('#evalStudents').className='student-picker';$('#evalStudents').innerHTML=s.map(x=>`<label class="student-pick"><input type="checkbox" value="${x.id}"><span><strong>${x.list_number??'—'}</strong> · ${escapeHtml(studentLabel(x))}</span></label>`).join('');
+  $('#evalStudents').className='student-picker';
+  $('#evalStudents').innerHTML=s.map(x=>`<label class="student-pick"><input type="checkbox" value="${x.id}"><span><strong>${x.list_number??'—'}</strong> · ${escapeHtml(studentLabel(x))}</span></label>`).join('');
 }
+
 function renderEvalCriteria(){
-  const inst=instruments.find(i=>i.id===+$('#evalInstrument').value);if(!inst){$('#evalCriteria').className='empty-state';$('#evalCriteria').textContent='Selecciona un instrumento.';return;}
-  $('#evalCriteria').className='';$('#evalCriteria').innerHTML=inst.criteria.map(c=>inst.instrument_type==='rubric'?`<div class="criterion-eval" data-cid="${c.id}" data-type="rubric"><strong>${escapeHtml(c.name)}</strong><div class="level-buttons">${Array.from({length:c.max},(_,k)=>k+1).map(v=>`<button type="button" data-value="${v}" onclick="pickLevel(this)">${v}</button>`).join('')}</div></div>`:`<div class="criterion-eval" data-cid="${c.id}" data-type="checklist"><strong>${escapeHtml(c.name)}</strong><div class="level-buttons"><button type="button" data-value="0" onclick="pickLevel(this)">No</button><button type="button" data-value="1" onclick="pickLevel(this)">Sí</button></div></div>`).join('');
+  const inst=instruments.find(i=>i.id===+$('#evalInstrument').value);
+  if(!inst){$('#evalCriteria').className='empty-state';$('#evalCriteria').textContent='Selecciona un instrumento.';return;}
+  $('#evalCriteria').className='';
+  $('#evalCriteria').innerHTML=inst.criteria.map(c=>inst.instrument_type==='rubric'
+    ?`<div class="criterion-eval" data-cid="${c.id}" data-type="rubric"><strong>${escapeHtml(c.name)}</strong><div class="level-buttons">${Array.from({length:c.max},(_,k)=>k+1).map(v=>`<button type="button" data-value="${v}" onclick="pickLevel(this)">${v}</button>`).join('')}</div></div>`
+    :`<div class="criterion-eval" data-cid="${c.id}" data-type="checklist"><strong>${escapeHtml(c.name)}</strong><div class="level-buttons"><button type="button" data-value="0" onclick="pickLevel(this)">No</button><button type="button" data-value="1" onclick="pickLevel(this)">Sí</button></div></div>`
+  ).join('');
 }
-window.pickLevel=el=>{el.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));el.classList.add('active');};
+window.pickLevel=el=>{
+  el.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+};
+
 $('#saveEvaluation').onclick=async()=>{
-  const gid=+$('#evalGroup').value,iid=+$('#evalInstrument').value,title=$('#evalTitle').value.trim(),ids=$$('#evalStudents input:checked').map(x=>+x.value),inst=instruments.find(i=>i.id===iid);
-  if(!gid||!iid||!title||!ids.length){toast('Selecciona grupo, instrumento, título y al menos un alumno',true);return;}
+  const gid=+$('#evalGroup').value;
+  if(!gid){toast('Selecciona un grupo',true);return;}
+  const g=await getGroupState(gid),p=String(g.current_period||1),scheme=await getScheme(gid,p);
+  if((scheme.principal_type||'project')!=='project'){toast('Este parcial está configurado como Examen.',true);return;}
+  const iid=+$('#evalInstrument').value,title=$('#evalTitle').value.trim(),ids=$$('#evalStudents input:checked').map(x=>+x.value),inst=instruments.find(i=>i.id===iid);
+  if(!iid||!title||!ids.length){toast('Selecciona instrumento, título y al menos un alumno',true);return;}
+  if(!scheme.mode_locked){scheme.principal_type='project';scheme.mode_locked=true;scheme.updated_at=new Date().toISOString();await MiAulaDB.put('gradingSchemes',scheme);}
   const details={};let raw=0,max=0,incomplete=false;
-  $$('#evalCriteria .criterion-eval').forEach(c=>{const b=c.querySelector('button.active');if(!b){incomplete=true;return;}const val=c.dataset.type==='checklist'?(b.dataset.value==='1'?1:0):+b.dataset.value;details[c.dataset.cid]=val;raw+=val;const crit=inst.criteria.find(x=>x.id===c.dataset.cid);max+=inst.instrument_type==='checklist'?1:+crit.max;});
+  $$('#evalCriteria .criterion-eval').forEach(c=>{
+    const b=c.querySelector('button.active');
+    if(!b){incomplete=true;return;}
+    const val=c.dataset.type==='checklist'?(b.dataset.value==='1'?1:0):+b.dataset.value;
+    details[c.dataset.cid]=val;raw+=val;
+    const crit=inst.criteria.find(x=>x.id===c.dataset.cid);
+    max+=inst.instrument_type==='checklist'?1:+crit.max;
+  });
   if(incomplete){toast('Evalúa todos los criterios',true);return;}
   const grade=inst.convert_to_grade&&max?Math.round(raw/max*1000)/100:null;
-  for(const sid of ids)await MiAulaDB.add('evaluations',{group_id:gid,instrument_id:iid,title,student_id:sid,team_name:$('#evalTeam').value.trim(),raw_score:raw,grade,details,notes:$('#evalNotes').value.trim(),evaluation_date:$('#evalDate').value,period:$('#evalPeriod').value,created_at:new Date().toISOString()});
-  toast('Evaluación guardada'+(grade!=null?` · ${grade.toFixed(2)}`:''));$$('#evalStudents input').forEach(x=>x.checked=false);$('#evalNotes').value='';await loadEvalHistory();await loadSummary();
+  for(const sid of ids){
+    await MiAulaDB.add('evaluations',{
+      group_id:gid,instrument_id:iid,title,student_id:sid,team_name:$('#evalTeam').value.trim(),
+      raw_score:raw,grade,details,notes:$('#evalNotes').value.trim(),
+      evaluation_date:$('#evalDate').value,period:p,created_at:new Date().toISOString()
+    });
+  }
+  toast('Proyecto guardado'+(grade!=null?` · ${grade.toFixed(2)}`:''));
+  $$('#evalStudents input').forEach(x=>x.checked=false);
+  $('#evalNotes').value='';
+  await loadEvalHistory(gid,p);
+  await loadSummary();
+  if(+$('#gradingGroup').value===gid)await loadGrading();
 };
-async function loadEvalHistory(){
-  const gid=+$('#evalGroup').value;if(!gid){$('#evalHistory').innerHTML='<div class="empty-state">Selecciona un grupo.</div>';return;}
-  const evals=(await MiAulaDB.byIndex('evaluations','group_id',gid)).sort((a,b)=>b.id-a.id),students=await MiAulaDB.groupStudents(gid,{includeInactive:true}),sm=new Map(students.map(s=>[s.id,s])),im=new Map(instruments.map(i=>[i.id,i]));
-  $('#evalHistory').innerHTML=evals.length?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>T</th><th>Alumno</th><th>Evaluación</th><th>Instrumento</th><th>Calif.</th><th></th></tr></thead><tbody>${evals.slice(0,100).map(e=>`<tr><td>${e.evaluation_date||''}</td><td>${e.period||'1'}</td><td>${escapeHtml(studentLabel(sm.get(e.student_id)||{}))}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(im.get(e.instrument_id)?.name||'')}</td><td><strong>${e.grade??''}</strong></td><td><button class="btn small danger" onclick="deleteEvaluation(${e.id})">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">Todavía no hay evaluaciones.</div>';
+
+async function loadEvalHistory(gid=+$('#evalGroup').value,period=null){
+  if(!gid){$('#evalHistory').innerHTML='<div class="empty-state">Selecciona un grupo.</div>';return;}
+  const g=await getGroupState(gid),p=String(period||g.current_period||1);
+  const evals=(await MiAulaDB.byIndex('evaluations','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
+  const students=await MiAulaDB.groupStudents(gid,{includeInactive:true}),sm=new Map(students.map(s=>[s.id,s])),im=new Map(instruments.map(i=>[i.id,i]));
+  $('#evalHistory').innerHTML=evals.length
+    ?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Alumno</th><th>Proyecto</th><th>Instrumento</th><th>Calif.</th><th></th></tr></thead><tbody>${evals.slice(0,100).map(e=>`<tr><td>${e.evaluation_date||''}</td><td>${escapeHtml(studentLabel(sm.get(e.student_id)||{}))}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(im.get(e.instrument_id)?.name||'')}</td><td><strong>${e.grade??''}</strong></td><td><button class="btn small danger" onclick="deleteEvaluation(${e.id})">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`
+    :`<div class="empty-state">No hay proyectos evaluados en el Parcial ${p}.</div>`;
 }
-window.deleteEvaluation=async id=>{if(!confirm('¿Eliminar esta evaluación?'))return;await MiAulaDB.remove('evaluations',id);await loadEvalHistory();await loadSummary();toast('Evaluación eliminada');};
+window.deleteEvaluation=async id=>{
+  if(!confirm('¿Eliminar esta evaluación de proyecto?'))return;
+  const e=await MiAulaDB.get('evaluations',id);
+  await MiAulaDB.remove('evaluations',id);
+  await loadEvalHistory(e?.group_id,e?.period);
+  await loadSummary();
+  toast('Evaluación eliminada');
+};
+
+let examData=[];
+async function loadExamScores(gid,period){
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const comps=await MiAulaDB.byIndex('studentComponents','group_period',[gid,String(period)]);
+  const cm=new Map(comps.map(c=>[c.student_id,c]));
+  examData=students.map(s=>({
+    student_id:s.id,list_number:s.list_number,name:studentLabel(s),
+    score:cm.get(s.id)?.exam_score??null
+  }));
+  renderExamScores();
+}
+function renderExamScores(){
+  if(!$('#examGradeList'))return;
+  $('#examGradeList').innerHTML=examData.length
+    ?examData.map((s,i)=>`<div class="grade-row"><strong>${s.list_number??'—'}</strong><div>${escapeHtml(s.name)}</div><input class="exam-score-input" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.score??''}"><div class="quick-score">${[10,9,8,7,6,5].map(v=>`<button onclick="quickExam(${i},${v})">${v}</button>`).join('')}<button onclick="quickExam(${i},null)">NP</button></div></div>`).join('')
+    :'<div class="empty-state">No hay alumnos activos.</div>';
+  $$('.exam-score-input').forEach(inp=>inp.oninput=e=>{examData[+e.target.dataset.index].score=e.target.value===''?null:+e.target.value;});
+}
+window.quickExam=(i,v)=>{examData[i].score=v;renderExamScores();};
+$('#fillExam10').onclick=()=>{examData.forEach(x=>x.score=10);renderExamScores();};
+$('#saveExamScores').onclick=async()=>{
+  const gid=+$('#evalGroup').value;
+  if(!gid){toast('Selecciona un grupo',true);return;}
+  const g=await getGroupState(gid),p=String(g.current_period||1),scheme=await getScheme(gid,p);
+  if((scheme.principal_type||'project')!=='exam'){toast('Este parcial está configurado como Proyecto.',true);return;}
+  if(!scheme.mode_locked){scheme.principal_type='exam';scheme.mode_locked=true;scheme.updated_at=new Date().toISOString();await MiAulaDB.put('gradingSchemes',scheme);}
+  for(const s of examData){
+    const key=`${gid}:${p}:${s.student_id}`,old=await MiAulaDB.get('studentComponents',key);
+    await MiAulaDB.put('studentComponents',{
+      ...(old||{}),key,group_id:gid,period:p,student_id:s.student_id,
+      values_score:old?.values_score??null,attitudes_score:old?.attitudes_score??null,
+      exam_score:s.score==null?null:+s.score,notes:old?.notes||'',updated_at:new Date().toISOString()
+    });
+  }
+  toast(`Examen del Parcial ${p} guardado`);
+  if(+$('#gradingGroup').value===gid)await loadGrading();
+  await loadSummary();
+};
+
 
 // -------------------- EXCEL / RESPALDO --------------------
 function attendanceTotals(records){
@@ -676,30 +1138,31 @@ async function buildWorkbook(gid){
   const allGrades=await MiAulaDB.all('grades'),actIds=new Set(activities.map(a=>a.id)),grades=allGrades.filter(x=>actIds.has(x.activity_id)),evals=(await MiAulaDB.byIndex('evaluations','group_id',gid)).sort((a,b)=>String(a.period).localeCompare(String(b.period))||String(a.evaluation_date).localeCompare(String(b.evaluation_date))),insts=await MiAulaDB.all('instruments');
   const im=new Map(insts.map(i=>[i.id,i])),sm=new Map(allStudents.map(s=>[s.id,s])),am=new Map(activities.map(a=>[a.id,a])),gradeKey=new Map(grades.map(gr=>[`${gr.activity_id}:${gr.student_id}`,gr]));
   const dates=[...new Set(attendance.map(a=>a.attendance_date))].sort(),attKey=new Map(attendance.map(a=>[`${a.student_id}:${a.attendance_date}`,a]));
-  const grading={};for(const p of ['1','2','3'])grading[p]=await computeGroupGrading(gid,p);
+  const periods=periodNumbers(g);const grading={};for(const p of periods)grading[p]=await computeGroupGrading(gid,p);
   const avgFinal=p=>{const v=grading[p].students.filter(x=>x.final_grade!=null).map(x=>x.final_grade);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const groupAttendance=attendanceTotals(attendance.filter(a=>sm.get(a.student_id)?.active!==0));
   const classBlocks=new Map();for(const a of attendance){const k=a.attendance_date;classBlocks.set(k,Math.max(classBlocks.get(k)||0,+a.class_hours||1));}
   const classHours=[...classBlocks.values()].reduce((a,b)=>a+b,0);
-  const resumen=[['Indicador','Valor'],['Grupo',g.name],['Grado / semestre',g.grade||''],['Disciplina',g.discipline||''],['Ciclo escolar',g.school_year||''],['Alumnos activos',students.length],['Alumnos dados de baja',inactive.length],['Horas de clase registradas',classHours],['Horas-presente',groupAttendance.P],['Horas-falta',groupAttendance.F],['Horas-retardo',groupAttendance.R],['Horas-justificadas',groupAttendance.J],['Asistencia ponderada por hora %',groupAttendance.pct],['Promedio final Trimestre 1',avgFinal('1')],['Promedio final Trimestre 2',avgFinal('2')],['Promedio final Trimestre 3',avgFinal('3')],['Generado',new Date().toLocaleString('es-MX')]];
-  const esquema=[['Trimestre','Trabajos %','Proyectos %','Valores %','Actitudes %','Total %']];for(const p of ['1','2','3']){const s=grading[p].scheme;esquema.push([p,s.work_pct,s.project_pct,s.values_pct,s.attitudes_pct,+s.work_pct+ +s.project_pct+ +s.values_pct+ +s.attitudes_pct]);}
-  const trim=[['No.','Código','Alumno','Trimestre','Trabajos','Trabajos %','Proyectos','Proyectos %','Valores','Valores %','Actitudes','Actitudes %','Final','Estado','Observación']];for(const p of ['1','2','3']){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.project_avg,sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
-  const conc=[['No.','Código','Alumno','Grado','Asistencia %','Hrs P','Hrs F','Hrs R','Hrs J',...activities.map(a=>`${a.title} [T${a.period}]`),'Prom. actividades','T1','T2','T3']];
+  const resumen=[['Indicador','Valor'],['Grupo',g.name],['Grado / semestre',g.grade||''],['Disciplina',g.discipline||''],['Ciclo escolar',g.school_year||''],['Parciales configurados',totalPeriods(g)],['Alumnos activos',students.length],['Alumnos dados de baja',inactive.length],['Horas de clase registradas',classHours],['Horas-presente',groupAttendance.P],['Horas-falta',groupAttendance.F],['Horas-retardo',groupAttendance.R],['Horas-justificadas',groupAttendance.J],['Asistencia ponderada por hora %',groupAttendance.pct],['Parcial activo',g.current_period||1],['Parciales cerrados',(g.closed_periods||[]).join(', ')||'Ninguno'],...periods.map(p=>[`Promedio final Parcial ${p}`,avgFinal(p)]),['Generado',new Date().toLocaleString('es-MX')]];
+  const esquema=[['Parcial','Componente principal','Trabajos %','Principal %','Valores %','Actitudes %','Total %','Estado']];for(const p of periods){const s=grading[p].scheme;esquema.push([p,principalLabel(s.principal_type||'project'),s.work_pct,s.project_pct,s.values_pct,s.attitudes_pct,+s.work_pct+ +s.project_pct+ +s.values_pct+ +s.attitudes_pct,(g.closed_periods||[]).includes(+p)?'Cerrado':(+g.current_period===+p&&!g.course_closed?'En curso':'Pendiente')]);}
+  const trim=[['No.','Código','Alumno','Parcial','Trabajos','Trabajos %','Componente principal','Tipo principal','Principal %','Valores','Valores %','Actitudes','Actitudes %','Final','Estado','Observación']];for(const p of periods){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.principal_avg,principalLabel(sc.principal_type||'project'),sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
+  const conc=[['No.','Código','Alumno','Grado','Asistencia %','Hrs P','Hrs F','Hrs R','Hrs J',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
     const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.P,at.F,at.R,at.J];
     for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=gr?.score??null;row.push(v);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
-    row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,grading['1'].students.find(x=>x.id===s.id)?.final_grade??null,grading['2'].students.find(x=>x.id===s.id)?.final_grade??null,grading['3'].students.find(x=>x.id===s.id)?.final_grade??null);conc.push(row);
+    row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,...periods.map(p=>grading[p].students.find(x=>x.id===s.id)?.final_grade??null));conc.push(row);
   }
   const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Total hrs','Asistencia %']];
   for(const s of students){const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa);asist.push([s.list_number,studentLabel(s),...dates.map(d=>{const a=attKey.get(`${s.id}:${d}`);return a?`${a.status} ×${a.class_hours||1}`:'';}),at.P,at.F,at.R,at.J,at.total,at.pct]);}
   const hourHeaders=['No.','Alumno'];for(const d of dates){const hrs=classBlocks.get(d)||1;for(let h=1;h<=hrs;h++)hourHeaders.push(`${d} H${h}`);}const asistHoras=[hourHeaders];
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
-  const acts=[['Actividad','Tipo','Trimestre','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
-  const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Trimestre','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,gr.score,a.max_score,gr.score==null?null:Math.round(+gr.score*1000/+a.max_score)/100,gr.notes||'']);}
-  const evalSheet=[['Fecha','Trimestre','Alumno','Estatus','Evaluación','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||'',i?.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
-  const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of ['1','2','3'])for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Trimestre ${p}`,'Valores y Actitudes',s.notes]);
+  const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
+  const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,gr.score,a.max_score,gr.score==null?null:Math.round(+gr.score*1000/+a.max_score)/100,gr.notes||'']);}
+  const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||'',i?.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
+  const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of periods)for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Parcial ${p}`,'Valores y Actitudes',s.notes]);
   const bajas=[['Último No.','Código','Apellido paterno','Apellido materno','Nombre(s)','Nombre completo','Fecha de baja','Hrs P','Hrs F','Hrs R','Hrs J','Asistencia %']];for(const s of inactive){const at=attendanceTotals(attendance.filter(a=>a.student_id===s.id));bajas.push([s.former_list_number??s.list_number,s.student_code,s.paternal_last_name||'',s.maternal_last_name||'',s.given_names||'',studentLabel(s),s.withdrawn_at?new Date(s.withdrawn_at).toLocaleDateString('es-MX'):'',at.P,at.F,at.R,at.J,at.pct]);}
-  return {sheets:[{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación trimestral',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Evaluaciones',rows:evalSheet},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
+  const instrumentBank=[['Instrumento','Tipo','Convierte a 0-10','Criterios']];for(const i of insts){instrumentBank.push([i.name,i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',i.convert_to_grade?'Sí':'No',(i.criteria||[]).map(c=>c.name).join(' · ')]);}
+  return {sheets:[{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
 $('#exportBtn').onclick=async()=>{
   const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}

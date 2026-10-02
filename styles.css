@@ -57,3 +57,40 @@ button{touch-action:manipulation}
 @media(max-width:1180px){.app-shell{grid-template-columns:88px 1fr}.sidebar{padding:17px 9px}.brand>div,.nav-item>span:last-child,.sidebar-foot small{display:none}.brand{justify-content:center;padding:2px 0 18px}.brand-icon{width:50px}.nav-item{justify-content:center;padding:11px}.nav-icon{width:34px;height:34px}.main{padding:0 18px 45px}.hero{grid-template-columns:1fr 270px}.grid-2{grid-template-columns:1fr}.kpis,.quick-actions{grid-template-columns:repeat(2,1fr)}.roulette-layout{grid-template-columns:1fr}.result-panel{min-height:auto}.wheel-wrap{width:min(64vh,610px)}.attendance-stats{grid-template-columns:repeat(3,1fr)}.about-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:820px) and (min-width:700px){.topbar h1{font-size:25px}.version-badge{display:none}.hero{grid-template-columns:1fr}.hero-brand{display:none}.quick-actions{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}.span-2{grid-column:auto}.student-row{grid-template-columns:42px 1fr}.status-buttons{grid-column:2;justify-content:flex-end}.grade-row{grid-template-columns:40px 1fr 86px}.grade-row .quick-score{grid-column:2/4}.wheel-wrap{width:min(66vw,570px)}}
 @media(max-width:699px){#appShell{display:none}.tablet-only{display:grid!important}}
+
+/* ===== MiAula 2.0 CETIS · Parciales ===== */
+.section-status-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 14px}.section-status-row>div{display:flex;align-items:center;gap:12px}.section-status-row h2{margin:0;font-size:26px}.period-badge{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;background:linear-gradient(135deg,#eaf2ff,#f7faff);border:1px solid #cddcf4;color:var(--navy);font-weight:850;font-size:12px;box-shadow:var(--shadow-soft)}.partial-header{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:18px 20px}.partial-header h2{font-size:34px;line-height:1;margin:4px 0 9px;color:var(--navy)}.partial-header-actions{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.partial-header-actions label{min-width:300px;margin:0}.danger-outline{background:#fff!important;border-color:#e3a9ae!important;color:var(--danger)!important}.danger-outline:hover{background:var(--danger-soft)!important}.danger-outline:disabled{opacity:.5;cursor:not-allowed;transform:none!important}.principal-choice{border:1px solid #cfe0f8;border-radius:16px;background:linear-gradient(180deg,#f8fbff,#eef5ff);padding:14px}.field-label{display:block;font-size:12px;font-weight:850;color:var(--navy);margin-bottom:9px}.principal-segmented{width:100%;display:grid;grid-template-columns:1fr 1fr}.principal-segmented button{font-size:15px;padding:12px}.principal-segmented button.active{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff}.principal-segmented button:disabled{cursor:not-allowed;opacity:.78}.principal-choice small{display:block;margin-top:9px;color:var(--muted);line-height:1.35}.notice-card{margin-bottom:14px;padding:14px 16px;border-radius:15px;background:var(--warning-soft);border:1px solid #ead5a6;color:#74551d;font-weight:750}.inline-select{min-width:330px;margin:0}.inline-select select{margin-top:5px}.exam-score-input{font-size:16px;font-weight:900;text-align:center}.scheme-item.variable:nth-of-type(2){border-left-color:#5c76d9}
+@media(max-width:1180px){.partial-header{align-items:flex-start;flex-direction:column}.partial-header-actions{width:100%}.partial-header-actions label{min-width:260px;flex:1}.inline-select{min-width:260px}.section-status-row{align-items:flex-end}}
+.group-period-chip{margin-top:10px;display:inline-flex;padding:6px 9px;border-radius:999px;background:#eef4ff;border:1px solid #d7e4fa;color:var(--navy);font-size:11px;font-weight:850}
+
+
+/* ===== MiAula 2.0.3 CETIS · Ruleta viva + pantalla completa ===== */
+.vivid-action{background:linear-gradient(135deg,#6c5ce7,#0a84ff)!important;border-color:transparent!important;color:#fff!important;box-shadow:0 8px 18px rgba(50,100,220,.22)!important}.vivid-action:hover{filter:brightness(1.04)}.vivid-action.active{background:linear-gradient(135deg,#ff2d55,#ff9500)!important}
+.wheel-panel{background:linear-gradient(180deg,#ffffff 0%,#f7faff 100%);overflow:hidden}.wheel-wrap:before{content:"";position:absolute;inset:5%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.9) 0%,rgba(215,231,255,.4) 48%,rgba(31,103,235,.08) 72%,transparent 73%);z-index:-1;filter:blur(8px)}
+.spin-center{background:linear-gradient(135deg,#071f4f 0%,#0a84ff 55%,#5e5ce6 100%);box-shadow:0 10px 30px rgba(10,80,200,.34),inset 0 0 0 2px rgba(255,255,255,.25)}
+.result-panel{position:relative;overflow:hidden}.result-panel:before{content:"";position:absolute;width:190px;height:190px;border-radius:50%;right:-80px;top:-80px;background:radial-gradient(circle,#dceaff,transparent 70%);pointer-events:none}.result-number{background:linear-gradient(135deg,#0a84ff,#5e5ce6,#ff2d55);-webkit-background-clip:text;background-clip:text;color:transparent}.winner-pop{animation:winnerPop .85s cubic-bezier(.2,.8,.2,1)}@keyframes winnerPop{0%{transform:scale(.98);box-shadow:var(--shadow-soft)}35%{transform:scale(1.025);box-shadow:0 20px 55px rgba(10,132,255,.28)}100%{transform:scale(1);box-shadow:var(--shadow)}}
+.used-chip{background:#d8dee8;color:#637083;opacity:.72;border:1px solid #c6cfdb}.used-chip b{color:#4f5a69}.wheel-actions{flex-wrap:wrap}
+
+/* Modo presentación para la ruleta. Funciona aun cuando el navegador no expone Fullscreen API. */
+body.roulette-focus{overflow:hidden;background:#061936}
+body.roulette-focus .sidebar,body.roulette-focus .topbar{display:none!important}
+body.roulette-focus .app-shell{display:block!important;min-height:100vh}
+body.roulette-focus .main{padding:0!important;min-height:100vh;background:radial-gradient(circle at 25% 35%,#173f86 0%,#071f4f 42%,#04152f 100%)}
+body.roulette-focus #view-dynamics{display:block!important;min-height:100vh;padding:0!important}
+body.roulette-focus #view-dynamics .dynamics-head{display:none!important}
+body.roulette-focus #teamsMode{display:none!important}
+body.roulette-focus #rouletteMode{display:block!important;min-height:100vh}
+body.roulette-focus .roulette-layout{height:100vh;grid-template-columns:minmax(620px,1.25fr) minmax(380px,.75fr);gap:16px;padding:16px;margin:0}
+body.roulette-focus .wheel-panel,body.roulette-focus .result-panel{margin:0!important;min-height:calc(100vh - 32px);border:1px solid rgba(255,255,255,.14);box-shadow:0 22px 70px rgba(0,0,0,.28)}
+body.roulette-focus .wheel-panel{background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(237,245,255,.98))}
+body.roulette-focus .wheel-wrap{width:min(82vh,68vw,820px)}
+body.roulette-focus .spin-center{width:132px;height:132px;font-size:20px}
+body.roulette-focus .result-panel{background:linear-gradient(160deg,#ffffff 0%,#f1f6ff 100%);padding:34px}
+body.roulette-focus .result-number{font-size:clamp(110px,12vw,190px)}
+body.roulette-focus .result-name{font-size:clamp(30px,3.1vw,52px)}
+body.roulette-focus .result-panel p{font-size:16px}
+body.roulette-focus .used-grid{max-height:28vh;overflow:auto;padding-right:4px}
+body.roulette-focus .wheel-actions{margin-top:8px}
+
+@media(max-width:1180px){body.roulette-focus .roulette-layout{grid-template-columns:1fr 390px}.wheel-actions .btn{padding:9px 11px}}
+@media(orientation:portrait){body.roulette-focus .roulette-layout{height:auto;min-height:100vh;grid-template-columns:1fr;padding:12px;overflow:auto}body.roulette-focus .wheel-panel,body.roulette-focus .result-panel{min-height:auto}body.roulette-focus .wheel-wrap{width:min(72vh,88vw,720px)}body.roulette-focus .result-panel{padding:22px}body.roulette-focus .result-number{font-size:100px}}

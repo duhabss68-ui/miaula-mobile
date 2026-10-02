@@ -8,16 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.0 · Tablet</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.0.0">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.0">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.0">
-  <link rel="stylesheet" href="styles.css?v=2.0.0">
+  <title>MiAula 2.0.3 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.0.3">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.3">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.3">
+  <link rel="stylesheet" href="styles.css?v=2.0.3">
 </head>
 <body>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.0.0" alt="MiAula">
+    <img src="assets/icon-books-192.png?v=2.0.3" alt="MiAula">
     <h1>MiAula 2.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
@@ -27,8 +27,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.0.0" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula</strong><span>2.0 · Tablet</span></div>
+      <img src="assets/icon-books-192.png?v=2.0.3" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula</strong><span>2.0.3 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
@@ -36,8 +36,8 @@
       <button class="nav-item" data-view="attendance"><span class="nav-icon">✓</span><span>Asistencia</span></button>
       <button class="nav-item" data-view="dynamics"><span class="nav-icon">◉</span><span>Ruleta y equipos</span></button>
       <button class="nav-item" data-view="activities"><span class="nav-icon">★</span><span>Calificaciones</span></button>
-      <button class="nav-item" data-view="grading"><span class="nav-icon">%</span><span>Trimestre</span></button>
-      <button class="nav-item" data-view="evaluation"><span class="nav-icon">◎</span><span>Evaluar</span></button>
+      <button class="nav-item" data-view="grading"><span class="nav-icon">%</span><span>Parcial</span></button>
+      <button class="nav-item" data-view="evaluation"><span class="nav-icon">◎</span><span id="evaluationNavLabel">Proyecto</span></button>
       <button class="nav-item" data-view="more"><span class="nav-icon">•••</span><span>Más</span></button>
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span><small id="systemStatus">Preparando almacenamiento…</small></div>
@@ -46,7 +46,7 @@
   <main class="main">
     <header class="topbar">
       <div><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
-      <div class="top-actions"><span class="version-badge">MiAula 2.0</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
+      <div class="top-actions"><span class="version-badge">MiAula 2.0.3 · CETIS</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
     </header>
 
     <section id="view-dashboard" class="view active">
@@ -54,7 +54,7 @@
         <div class="hero-copy">
           <span class="pill">Diseñada para Huawei MatePad 12X</span>
           <h2>Control de clase sin abrir la laptop.</h2>
-          <p>Asistencia por horas, calificaciones, ruleta de participación, equipos, rúbricas, trimestre y Excel; todo guardado en la tablet.</p>
+          <p>Asistencia por horas, calificaciones, ruleta de participación, equipos, rúbricas, parcial y Excel; todo guardado en la tablet.</p>
           <div class="hero-actions"><button class="btn light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="goView('dynamics')">Abrir ruleta</button></div>
         </div>
         <div class="hero-brand"><img src="assets/miaula_logo.png" alt="MiAula"></div>
@@ -64,7 +64,7 @@
         <button class="quick-card" onclick="goView('attendance')"><span>✓</span><div><strong>Asistencia</strong><small>Una captura, varias horas</small></div></button>
         <button class="quick-card" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Participación</strong><small>Ruleta por número</small></div></button>
         <button class="quick-card" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
-        <button class="quick-card" onclick="goView('activities')"><span>★</span><div><strong>Calificaciones</strong><small>Trabajos y proyectos</small></div></button>
+        <button class="quick-card" onclick="goView('activities')"><span>★</span><div><strong>Calificaciones</strong><small>Trabajos del parcial</small></div></button>
       </div>
       <div class="panel">
         <div class="panel-head"><div><h3>Mis grupos activos</h3><p>Selecciona una herramienta desde la barra lateral o usa los accesos rápidos.</p></div><button class="btn subtle" onclick="goView('groups')">Administrar</button></div>
@@ -80,7 +80,8 @@
             <label>Grado / semestre<input name="grade" placeholder="Ej. 1° / 2° semestre" required></label>
             <label>Grupo<input name="name" placeholder="Ej. 1J" required></label>
             <label class="span-2">Disciplina / asignatura<input name="discipline" placeholder="Ej. Cultura Digital" required></label>
-            <label class="span-2">Ciclo escolar<input name="school_year" value="2026-2027"></label>
+            <label>Ciclo escolar<input name="school_year" value="2026-2027"></label>
+            <label>Número de parciales<select name="total_periods"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
             <button class="btn primary span-2" type="submit">Crear grupo</button>
           </form>
         </div>
@@ -123,9 +124,13 @@
         <div class="roulette-layout">
           <div class="panel wheel-panel">
             <div class="wheel-wrap"><div class="wheel-pointer"></div><canvas id="rouletteCanvas" width="720" height="720"></canvas><button id="spinWheel" class="spin-center">GIRAR</button></div>
-            <div class="wheel-actions"><button class="btn subtle" id="resetWheel">Reiniciar ruleta</button><span id="rouletteCounter">0 disponibles</span></div>
+            <div class="wheel-actions">
+              <button class="btn vivid-action" id="fullscreenWheel" title="Mostrar la ruleta en pantalla completa">⛶ Pantalla completa</button>
+              <button class="btn subtle" id="resetWheel">Reiniciar ruleta</button>
+              <span id="rouletteCounter">0 disponibles</span>
+            </div>
           </div>
-          <div class="panel result-panel">
+          <div class="panel result-panel" id="rouletteResultPanel">
             <span class="result-label">Alumno seleccionado</span>
             <div id="rouletteNumber" class="result-number">—</div>
             <div id="rouletteName" class="result-name">Gira la ruleta</div>
@@ -145,83 +150,129 @@
     </section>
 
     <section id="view-activities" class="view">
+      <div class="section-status-row">
+        <span class="period-badge" id="activityPeriodBadge">Selecciona un grupo</span>
+      </div>
       <div class="grid-2">
-        <div class="panel"><div class="panel-head"><div><h3>Nueva actividad</h3><p>Trabajos, prácticas, proyectos, exposiciones o exámenes.</p></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Nueva actividad</h3><p>Trabajos, prácticas y exposiciones del parcial activo.</p></div></div>
           <form id="activityForm" class="form-grid">
             <label class="span-2">Grupo<select name="group_id" id="activityGroup"></select></label>
             <label class="span-2">Nombre<input name="title" placeholder="Ej. Actividad de funciones" required></label>
-            <label>Tipo<select name="activity_type"><option>Trabajo</option><option>Práctica</option><option>Proyecto</option><option>Exposición</option><option>Examen</option></select></label>
-            <label>Trimestre<select name="period"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
+            <label>Tipo<select name="activity_type"><option>Trabajo</option><option>Práctica</option><option>Exposición</option></select></label>
             <label>Puntaje máximo<input type="number" name="max_score" value="10" min="1" step="0.1"></label>
             <label>Peso<input type="number" name="weight" value="1" min="0" step="0.1"></label>
-            <label class="span-2">Fecha<input type="date" name="activity_date" id="activityDate"></label>
+            <label>Fecha<input type="date" name="activity_date" id="activityDate"></label>
             <button class="btn primary span-2" type="submit">Crear actividad</button>
           </form>
         </div>
-        <div class="panel"><div class="panel-head"><div><h3>Actividades</h3><p>Abre una actividad para capturar calificaciones.</p></div></div><label>Ver grupo<select id="activityFilter"></select></label><div id="activityCards" class="stack"></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Actividades del parcial</h3><p>Al cerrar el parcial, esta área inicia limpia; el historial se conserva.</p></div></div><label>Ver grupo<select id="activityFilter"></select></label><div id="activityCards" class="stack"></div></div>
       </div>
       <div id="gradePanel" class="panel hidden"><div class="panel-head"><div><h3 id="gradeTitle">Captura</h3><p>Usa botones rápidos o escribe la calificación.</p></div><button class="btn subtle" id="fillMax">Máximo a todos</button></div><div id="gradeList"></div><button id="saveGrades" class="btn primary wide">Guardar calificaciones</button></div>
     </section>
 
     <section id="view-grading" class="view">
-      <div class="toolbar grading-toolbar"><label>Grupo<select id="gradingGroup"></select></label><label>Trimestre<select id="gradingPeriod"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label><button class="btn primary" id="loadGrading">Cargar</button></div>
+      <div class="partial-header panel">
+        <div>
+          <span class="eyebrow">Periodo activo</span>
+          <h2>Parcial <span id="currentPartialNumber">1</span></h2>
+          <span class="period-badge" id="gradingPeriodBadge">Selecciona un grupo</span>
+        </div>
+        <div class="partial-header-actions">
+          <label>Grupo<select id="gradingGroup"></select></label>
+          <button class="btn danger-outline" id="closePeriodBtn">Cerrar parcial e iniciar siguiente</button>
+        </div>
+      </div>
+
       <div class="grid-2 grading-top">
-        <div class="panel"><div class="panel-head"><div><h3>Esquema de evaluación</h3><p>Trabajos y Proyectos los acuerda el grupo; Valores y Actitudes permanecen bajo tu criterio.</p></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Esquema de evaluación</h3><p>Define el porcentaje y elige si el componente principal será Proyecto o Examen.</p></div></div>
           <form id="schemeForm" class="scheme-grid">
+            <div class="principal-choice span-2">
+              <span class="field-label">Componente principal del parcial</span>
+              <div class="segmented principal-segmented">
+                <button type="button" id="principalProjectBtn" class="active">Proyecto</button>
+                <button type="button" id="principalExamBtn">Examen</button>
+              </div>
+              <small id="principalModeNote">Elige Proyecto o Examen antes de guardar el esquema del parcial.</small>
+            </div>
             <label class="scheme-item variable"><span>Trabajos <small>grupo</small></span><div class="percent-input"><input id="workPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
-            <label class="scheme-item variable"><span>Proyectos <small>grupo</small></span><div class="percent-input"><input id="projectPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
+            <label class="scheme-item variable"><span><span id="principalPctLabel">Proyecto</span> <small>grupo</small></span><div class="percent-input"><input id="projectPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
             <label class="scheme-item fixed"><span>Valores <small>docente</small></span><div class="percent-input"><input id="valuesPct" type="number" min="0" max="100" step="1" value="10"><b>%</b></div></label>
             <label class="scheme-item fixed"><span>Actitudes <small>docente</small></span><div class="percent-input"><input id="attitudesPct" type="number" min="0" max="100" step="1" value="10"><b>%</b></div></label>
             <div class="scheme-total span-2"><span>Total</span><strong id="schemeTotal">100%</strong></div>
-            <button class="btn primary span-2" type="submit">Guardar esquema</button>
+            <button class="btn primary span-2" type="submit">Guardar esquema del parcial</button>
           </form>
         </div>
-        <div class="panel"><div class="panel-head"><div><h3>Promedio del grupo</h3><p>El final aparece cuando todos los rubros con porcentaje tienen información.</p></div></div><div class="term-average"><span>Trimestre actual</span><strong id="gradingGroupAverage">—</strong></div><p class="muted-text">Proyectos combina actividades tipo Proyecto y evaluaciones que generan calificación.</p></div>
+        <div class="panel"><div class="panel-head"><div><h3>Promedio del grupo</h3><p>El final aparece cuando todos los rubros con porcentaje tienen información.</p></div></div><div class="term-average"><span>Parcial actual</span><strong id="gradingGroupAverage">—</strong></div><p class="muted-text"><span id="gradingPrincipalLabel">Proyecto</span> utiliza el mismo porcentaje definido como componente principal. Al cerrar el parcial, el siguiente inicia limpio.</p></div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>Valores, actitudes y final</h3><p>Trabajos y Proyectos se calculan automáticamente.</p></div><div class="action-row"><button class="btn small subtle" id="fillValues10">Valores 10</button><button class="btn small subtle" id="fillAttitudes10">Actitudes 10</button></div></div><div id="gradingTable" class="empty-state">Selecciona grupo y trimestre.</div><button id="saveComponents" class="btn primary wide hidden">Guardar Valores y Actitudes</button></div>
+
+      <div class="panel"><div class="panel-head"><div><h3>Valores, actitudes y final</h3><p>Trabajos y el componente principal se calculan automáticamente.</p></div><div class="action-row"><button class="btn small subtle" id="fillValues10">Valores 10</button><button class="btn small subtle" id="fillAttitudes10">Actitudes 10</button></div></div><div id="gradingTable" class="empty-state">Selecciona un grupo.</div><button id="saveComponents" class="btn primary wide hidden">Guardar Valores y Actitudes</button></div>
     </section>
 
     <section id="view-evaluation" class="view">
+      <div class="section-status-row">
+        <div>
+          <h2 id="evaluationTitle">Proyecto</h2>
+          <span class="period-badge" id="evaluationPeriodBadge">Selecciona un grupo</span>
+        </div>
+        <label class="inline-select">Grupo<select id="evalGroup"></select></label>
+      </div>
+
+      <div id="closedPrincipalNotice" class="notice-card hidden"></div>
+
       <div class="grid-2">
-        <div class="panel"><div class="panel-head"><div><h3>Banco de instrumentos</h3><p>Rúbricas y listas de cotejo reutilizables.</p></div></div>
+        <div class="panel"><div class="panel-head"><div><h3>Banco de instrumentos</h3><p>Tu compendio de rúbricas y listas de cotejo permanece entre parciales.</p></div></div>
           <form id="instrumentForm">
             <label>Nombre<input id="instrumentName" placeholder="Ej. Rúbrica de proyecto" required></label>
             <label>Tipo<select id="instrumentType"><option value="rubric">Rúbrica</option><option value="checklist">Lista de cotejo</option></select></label>
             <label class="check-line"><input type="checkbox" id="convertGrade" checked> Convertir resultado a calificación 0–10</label>
             <div class="criteria-editor"><div class="criteria-head"><strong>Criterios</strong><button type="button" class="btn small subtle" id="addCriterion">+ Agregar</button></div><div id="criteriaRows"></div></div>
-            <button class="btn primary wide" type="submit">Guardar instrumento</button>
+            <button class="btn primary wide" type="submit">Guardar en banco</button>
           </form>
           <div id="instrumentCards" class="stack instruments-stack"></div>
         </div>
-        <div class="panel"><div class="panel-head"><div><h3>Evaluación rápida</h3><p>Selecciona uno o varios alumnos.</p></div></div>
-          <div class="form-grid eval-top"><label>Grupo<select id="evalGroup"></select></label><label>Trimestre<select id="evalPeriod"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label><label class="span-2">Instrumento<select id="evalInstrument"></select></label><label class="span-2">Proyecto / evaluación<input id="evalTitle" placeholder="Ej. Proyecto Arduino"></label><label>Equipo<input id="evalTeam" placeholder="Opcional"></label><label>Fecha<input id="evalDate" type="date"></label></div>
+
+        <div id="projectWorkspace" class="panel">
+          <div class="panel-head"><div><h3>Evaluar proyecto</h3><p>Usa una rúbrica o lista de cotejo del banco.</p></div></div>
+          <div class="form-grid eval-top">
+            <label class="span-2">Instrumento<select id="evalInstrument"></select></label>
+            <label class="span-2">Nombre del proyecto<input id="evalTitle" placeholder="Ej. Proyecto Arduino"></label>
+            <label>Equipo<input id="evalTeam" placeholder="Opcional"></label>
+            <label>Fecha<input id="evalDate" type="date"></label>
+          </div>
           <h4>Alumnos activos</h4><div id="evalStudents" class="student-picker empty-state">Selecciona un grupo.</div>
           <h4>Instrumento</h4><div id="evalCriteria" class="empty-state">Selecciona un instrumento.</div>
           <label>Observaciones<textarea id="evalNotes" rows="3"></textarea></label>
-          <button id="saveEvaluation" class="btn primary wide">Guardar evaluación</button>
+          <button id="saveEvaluation" class="btn primary wide">Guardar proyecto</button>
+        </div>
+
+        <div id="examWorkspace" class="panel hidden">
+          <div class="panel-head"><div><h3>Calificación del examen</h3><p>Captura directamente de 0 a 10. Este valor ocupa el porcentaje asignado al componente principal.</p></div><button class="btn subtle" id="fillExam10">10 a todos</button></div>
+          <div id="examGradeList" class="empty-state">Selecciona un grupo.</div>
+          <button id="saveExamScores" class="btn primary wide">Guardar examen</button>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>Evaluaciones recientes</h3><p>Historial del grupo seleccionado.</p></div></div><div id="evalHistory"></div></div>
+
+      <div class="panel" id="projectHistoryPanel"><div class="panel-head"><div><h3>Proyectos del parcial activo</h3><p>Al cerrar el parcial dejan de mostrarse aquí, pero permanecen en el historial y Excel.</p></div></div><div id="evalHistory"></div></div>
     </section>
 
     <section id="view-more" class="view">
       <div class="grid-2">
-        <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, trimestres, actividades, evaluaciones y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
+        <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, parciales, actividades, proyecto/examen, instrumentos y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
         <div class="panel"><div class="panel-head"><div><h3>Respaldo</h3><p>Haz una copia antes de limpiar datos o actualizar MiAula.</p></div></div>
           <button class="btn primary wide" id="backupBtn">Descargar respaldo MiAula</button>
           <label class="upload-box compact">↥ <strong>Restaurar respaldo</strong><span>Archivo .json de MiAula</span><input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0 · Tablet</h3><p>Versión enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.0.0"></script>
-<script src="xlsx-lite.js?v=2.0.0"></script>
-<script src="app.js?v=2.0.0"></script>
+<script src="db.js?v=2.0.3"></script>
+<script src="xlsx-lite.js?v=2.0.3"></script>
+<script src="app.js?v=2.0.3"></script>
 </body>
 </html>

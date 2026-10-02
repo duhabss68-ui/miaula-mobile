@@ -119,6 +119,12 @@ const MiAulaDB = (() => {
     for(const g of groups){
       let changed=false;
       if(g.active===undefined){g.active=1;changed=true;}
+      if(!Number.isFinite(+g.current_period)||+g.current_period<1){g.current_period=1;changed=true;}
+      if(!Array.isArray(g.closed_periods)){g.closed_periods=[];changed=true;}
+      const highestUsed=Math.max(1,+g.current_period||1,...(g.closed_periods||[]).map(x=>+x||0));
+      if(!Number.isFinite(+g.total_periods)||+g.total_periods<1){g.total_periods=Math.max(3,highestUsed);changed=true;}
+      if(+g.total_periods<highestUsed){g.total_periods=highestUsed;changed=true;}
+      if(g.course_closed===undefined){g.course_closed=false;changed=true;}
       if(changed) await put('groups',g);
     }
     const students=await all('students');
@@ -216,7 +222,7 @@ const MiAulaDB = (() => {
   }
 
   async function exportBackup(){
-    const out={format:'MiAulaMobileBackup',schemaVersion:2,appVersion:'2.0',exportedAt:new Date().toISOString(),stores:{}};
+    const out={format:'MiAulaMobileBackup',schemaVersion:3,appVersion:'2.0-CETIS',exportedAt:new Date().toISOString(),stores:{}};
     for(const s of stores) out.stores[s]=await all(s);
     return out;
   }

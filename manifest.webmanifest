@@ -1,16 +1,32 @@
 {
-  "name": "MiAula Mobile",
+  "name": "MiAula 2.0.3 CETIS",
   "short_name": "MiAula",
-  "description": "Control docente offline: asistencia, calificaciones, rúbricas, trimestres y Excel.",
-  "start_url": "./index.html",
-  "scope": "./",
+  "description": "Control docente offline para CETIS: asistencia por horas, actividades, Proyecto o Examen por parcial, rúbricas, equipos, ruleta y Excel.",
+  "id": "/miaula-mobile/",
+  "start_url": "/miaula-mobile/index.html",
+  "scope": "/miaula-mobile/",
   "display": "standalone",
-  "background_color": "#f4f8ff",
-  "theme_color": "#082A67",
+  "background_color": "#f3f7fd",
+  "theme_color": "#071f4f",
   "orientation": "any",
   "icons": [
-    {"src":"assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
-    {"src":"assets/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+    {
+      "src": "assets/icon-books-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-books-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-books-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
