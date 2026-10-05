@@ -8,16 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.0.3 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.0.3">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.3">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.3">
-  <link rel="stylesheet" href="styles.css?v=2.0.3">
+  <title>MiAula 2.0.4 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.0.4">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.4">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.4">
+  <link rel="stylesheet" href="styles.css?v=2.0.4">
 </head>
 <body>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.0.3" alt="MiAula">
+    <img src="assets/icon-books-192.png?v=2.0.4" alt="MiAula">
     <h1>MiAula 2.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
@@ -27,8 +27,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.0.3" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula</strong><span>2.0.3 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.0.4" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula</strong><span>2.0.4 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
@@ -36,6 +36,7 @@
       <button class="nav-item" data-view="attendance"><span class="nav-icon">✓</span><span>Asistencia</span></button>
       <button class="nav-item" data-view="dynamics"><span class="nav-icon">◉</span><span>Ruleta y equipos</span></button>
       <button class="nav-item" data-view="activities"><span class="nav-icon">★</span><span>Calificaciones</span></button>
+      <button class="nav-item" data-view="notebook"><span class="nav-icon">▤</span><span>Cuaderno</span></button>
       <button class="nav-item" data-view="grading"><span class="nav-icon">%</span><span>Parcial</span></button>
       <button class="nav-item" data-view="evaluation"><span class="nav-icon">◎</span><span id="evaluationNavLabel">Proyecto</span></button>
       <button class="nav-item" data-view="more"><span class="nav-icon">•••</span><span>Más</span></button>
@@ -46,7 +47,7 @@
   <main class="main">
     <header class="topbar">
       <div><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
-      <div class="top-actions"><span class="version-badge">MiAula 2.0.3 · CETIS</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
+      <div class="top-actions"><span class="version-badge">MiAula 2.0.4 · CETIS</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
     </header>
 
     <section id="view-dashboard" class="view active">
@@ -65,6 +66,7 @@
         <button class="quick-card" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Participación</strong><small>Ruleta por número</small></div></button>
         <button class="quick-card" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
         <button class="quick-card" onclick="goView('activities')"><span>★</span><div><strong>Calificaciones</strong><small>Trabajos del parcial</small></div></button>
+        <button class="quick-card" onclick="openNotebook()"><span>▤</span><div><strong>Cuaderno digital</strong><small>Ver todo el grupo</small></div></button>
       </div>
       <div class="panel">
         <div class="panel-head"><div><h3>Mis grupos activos</h3><p>Selecciona una herramienta desde la barra lateral o usa los accesos rápidos.</p></div><button class="btn subtle" onclick="goView('groups')">Administrar</button></div>
@@ -170,6 +172,37 @@
       <div id="gradePanel" class="panel hidden"><div class="panel-head"><div><h3 id="gradeTitle">Captura</h3><p>Usa botones rápidos o escribe la calificación.</p></div><button class="btn subtle" id="fillMax">Máximo a todos</button></div><div id="gradeList"></div><button id="saveGrades" class="btn primary wide">Guardar calificaciones</button></div>
     </section>
 
+    <section id="view-notebook" class="view">
+      <div class="notebook-header panel">
+        <div>
+          <span class="eyebrow">Libreta digital del grupo</span>
+          <h2>Cuaderno de calificaciones</h2>
+          <p>Visualiza actividades, corrige calificaciones y revisa el resultado del parcial en una sola pantalla.</p>
+        </div>
+        <div class="notebook-header-actions">
+          <label>Grupo<select id="notebookGroup"></select></label>
+          <label>Vista<select id="notebookPeriod"></select></label>
+          <button class="btn vivid-action" id="notebookPresentation">▣ Presentación</button>
+          <button class="btn primary" id="notebookExcel">X · Generar Excel</button>
+        </div>
+      </div>
+      <div class="notebook-toolbar">
+        <div class="notebook-legend">
+          <span><b class="legend-dot captured"></b> Capturada</span>
+          <span><b class="legend-dot pending"></b> Pendiente</span>
+          <span><b class="legend-dot np"></b> NP</span>
+          <span id="notebookModeLabel" class="period-badge">Selecciona un grupo</span>
+        </div>
+        <div class="action-row">
+          <button class="btn subtle" id="notebookReload">↻ Recargar</button>
+          <button class="btn primary" id="notebookSave">Guardar correcciones</button>
+        </div>
+      </div>
+      <div id="notebookSummary" class="notebook-summary hidden"></div>
+      <div id="notebookTable" class="panel empty-state">Selecciona un grupo para abrir su cuaderno digital.</div>
+      <p class="notebook-help">Puedes escribir una calificación o <strong>NP</strong> en las actividades. En Proyecto, la calificación continúa calculándose desde las rúbricas/listas de cotejo; en Examen puedes corregir directamente de 0 a 10.</p>
+    </section>
+
     <section id="view-grading" class="view">
       <div class="partial-header panel">
         <div>
@@ -264,15 +297,15 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0.4 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.0.3"></script>
-<script src="xlsx-lite.js?v=2.0.3"></script>
-<script src="app.js?v=2.0.3"></script>
+<script src="db.js?v=2.0.4"></script>
+<script src="xlsx-lite.js?v=2.0.4"></script>
+<script src="app.js?v=2.0.4"></script>
 </body>
 </html>

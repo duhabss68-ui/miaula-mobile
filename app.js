@@ -12,6 +12,8 @@ let excelState=null;
 let gradingData=null;
 let currentView='dashboard';
 let currentStudentGroup=null;
+let notebookData=null;
+const notebookEdits={grades:new Map(),components:new Map()};
 
 const dynamics={
   mode:'roulette',
@@ -115,10 +117,11 @@ function goView(name){
   $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   $('#viewTitle').textContent={
     dashboard:'Inicio',groups:'Mis grupos',attendance:'Asistencia',dynamics:'Ruleta y equipos',
-    activities:'Calificaciones',grading:'Parcial',evaluation:'Proyecto',more:'Más'
+    activities:'Calificaciones',notebook:'Cuaderno digital',grading:'Parcial',evaluation:'Proyecto',more:'Más'
   }[name]||name;
   if(name==='dashboard') loadSummary();
   if(name==='activities') loadActivities();
+  if(name==='notebook') loadNotebook();
   if(name==='grading') loadGrading();
   if(name==='evaluation'){loadInstruments().then(()=>loadPrincipalWorkspace());}
   if(name==='dynamics') loadDynamicsStudents(true);
@@ -141,7 +144,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.0.3').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.0.4').catch(()=>{});
 }
 
 async function init(){
@@ -164,7 +167,7 @@ async function init(){
 
 async function refreshGroups(){
   const oldValues={};
-  ['#importGroup','#attendanceGroup','#dynamicsGroup','#activityGroup','#activityFilter','#gradingGroup','#evalGroup','#exportGroup'].forEach(id=>{
+  ['#importGroup','#attendanceGroup','#dynamicsGroup','#activityGroup','#activityFilter','#notebookGroup','#gradingGroup','#evalGroup','#exportGroup'].forEach(id=>{
     if($(id)) oldValues[id]=$(id).value;
   });
   groups=(await MiAulaDB.all('groups')).filter(g=>g.active!==0).sort((a,b)=>
@@ -213,7 +216,7 @@ async function loadSummary(){
     const th=ga.reduce((n,a)=>n+(+a.class_hours||1),0);
     const ah=ga.reduce((n,a)=>n+(a.status==='F'?0:(+a.class_hours||1)),0);
     const p=+g.current_period||1,total=totalPeriods(g),status=g.course_closed?'Ciclo cerrado':`Parcial ${p}/${total}`;
-    cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div><div class="group-period-chip">${status}</div></div>`);
+    cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div><div class="group-period-chip">${status}</div><button class="btn small primary group-notebook-btn" onclick="openNotebook(${g.id})">▤ Abrir cuaderno</button></div>`);
   }
   $('#dashboardGroups').innerHTML=cards.length?cards.join(''):'<div class="empty-state">Crea tu primer grupo o importa tu información anterior.</div>';
 }
@@ -238,7 +241,7 @@ async function renderGroupsTable(){
     const all=await MiAulaDB.groupStudents(g.id,{includeInactive:true});
     const active=all.filter(s=>s.active!==0).length;
     const inactive=all.length-active;
-    rows.push(`<tr><td><strong>${escapeHtml(g.name)}</strong></td><td>${escapeHtml(g.grade||'')}</td><td>${escapeHtml(g.discipline||'')}</td><td><span class="period-badge">${g.course_closed?'Cerrado':`P${+g.current_period||1}/${totalPeriods(g)}`}</span></td><td>${active}</td><td>${inactive}</td><td><div class="action-row"><button class="btn small primary" onclick="viewStudents(${g.id})">Alumnos</button><button class="btn small subtle" onclick="editGroup(${g.id})">Editar</button><button class="btn small danger" onclick="archiveGroup(${g.id})">Archivar</button></div></td></tr>`);
+    rows.push(`<tr><td><strong>${escapeHtml(g.name)}</strong></td><td>${escapeHtml(g.grade||'')}</td><td>${escapeHtml(g.discipline||'')}</td><td><span class="period-badge">${g.course_closed?'Cerrado':`P${+g.current_period||1}/${totalPeriods(g)}`}</span></td><td>${active}</td><td>${inactive}</td><td><div class="action-row"><button class="btn small primary" onclick="viewStudents(${g.id})">Alumnos</button><button class="btn small vivid-action" onclick="openNotebook(${g.id})">Cuaderno</button><button class="btn small subtle" onclick="editGroup(${g.id})">Editar</button><button class="btn small danger" onclick="archiveGroup(${g.id})">Archivar</button></div></td></tr>`);
   }
   $('#groupsTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Grado</th><th>Disciplina</th><th>Parcial</th><th>Activos</th><th>Bajas</th><th>Acciones</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
@@ -659,20 +662,20 @@ window.openGrades=async aid=>{
   activeActivity=activity;
   const students=(await MiAulaDB.groupStudents(activity.group_id,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
   const existing=await MiAulaDB.byIndex('grades','activity_id',aid),gm=new Map(existing.map(g=>[g.student_id,g]));
-  gradeData=students.map(s=>({student_id:s.id,list_number:s.list_number,name:studentLabel(s),score:gm.get(s.id)?.score??null,notes:gm.get(s.id)?.notes||''}));
+  gradeData=students.map(s=>({student_id:s.id,list_number:s.list_number,name:studentLabel(s),score:gm.get(s.id)?.score??null,status:gm.get(s.id)?.status||'',notes:gm.get(s.id)?.notes||''}));
   $('#gradePanel').classList.remove('hidden');$('#gradeTitle').textContent=`Calificar: ${activity.title}`;renderGrades();$('#gradePanel').scrollIntoView({behavior:'smooth'});
 };
 function renderGrades(){
   const max=+activeActivity.max_score,quick=[max,Math.max(max-1,0),Math.max(max-2,0),Math.max(max-3,0),'NP'];
-  $('#gradeList').innerHTML=gradeData.map((s,i)=>`<div class="grade-row"><strong>${s.list_number??'—'}</strong><div>${escapeHtml(s.name)}</div><input type="number" min="0" max="${max}" step="0.1" value="${s.score??''}" data-gi="${i}" class="grade-input"><div class="quick-score">${quick.map(q=>`<button onclick="quickGrade(${i},'${q}')">${q}</button>`).join('')}</div></div>`).join('');
-  $$('.grade-input').forEach(inp=>inp.oninput=e=>gradeData[+e.target.dataset.gi].score=e.target.value);
+  $('#gradeList').innerHTML=gradeData.map((s,i)=>`<div class="grade-row"><strong>${s.list_number??'—'}</strong><div>${escapeHtml(s.name)}</div><input type="text" inputmode="decimal" value="${s.score!=null?s.score:(String(s.status||'').toUpperCase()==='NP'?'NP':'')}" data-gi="${i}" class="grade-input"><div class="quick-score">${quick.map(q=>`<button onclick="quickGrade(${i},'${q}')">${q}</button>`).join('')}</div></div>`).join('');
+  $$('.grade-input').forEach(inp=>inp.oninput=e=>{const i=+e.target.dataset.gi,p=notebookParseScore(e.target.value,max);gradeData[i].score=p.invalid?e.target.value:p.score;gradeData[i].status=p.invalid?'':p.status;});
 }
-window.quickGrade=(i,v)=>{gradeData[i].score=v==='NP'?null:+v;renderGrades();};
-$('#fillMax').onclick=()=>{gradeData.forEach(x=>x.score=+activeActivity.max_score);renderGrades();};
+window.quickGrade=(i,v)=>{gradeData[i].score=v==='NP'?null:+v;gradeData[i].status=v==='NP'?'NP':'';renderGrades();};
+$('#fillMax').onclick=()=>{gradeData.forEach(x=>{x.score=+activeActivity.max_score;x.status='';});renderGrades();};
 $('#saveGrades').onclick=async()=>{
   for(const it of gradeData){
     const old=await MiAulaDB.firstByIndex('grades','unique_key',[activeActivity.id,it.student_id]);
-    const rec={...(old||{}),activity_id:activeActivity.id,student_id:it.student_id,score:it.score===''||it.score==null?null:+it.score,notes:it.notes||''};
+    const parsed=notebookParseScore(it.score==null?(it.status||''):it.score,+activeActivity.max_score);if(parsed.invalid){toast(`Calificación inválida para ${it.name}`,true);return;}const rec={...(old||{}),activity_id:activeActivity.id,student_id:it.student_id,score:parsed.score,status:it.status||parsed.status||'',notes:it.notes||''};
     if(old)await MiAulaDB.put('grades',rec);else await MiAulaDB.add('grades',rec);
   }
   toast('Calificaciones guardadas');await loadSummary();
@@ -1126,6 +1129,218 @@ $('#saveExamScores').onclick=async()=>{
 
 
 // -------------------- EXCEL / RESPALDO --------------------
+
+// -------------------- CUADERNO DIGITAL DEL GRUPO --------------------
+window.openNotebook=async function(gid=null){
+  goView('notebook');
+  if(gid){
+    $('#notebookGroup').value=String(gid);
+    await loadNotebook({resetPeriod:true});
+  }
+};
+
+function notebookGradeDisplay(rec){
+  if(rec?.score!=null) return String(rec.score);
+  return String(rec?.status||'').toUpperCase()==='NP'?'NP':'';
+}
+function notebookParseScore(raw,max=10){
+  const v=String(raw??'').trim().toUpperCase();
+  if(!v) return {score:null,status:''};
+  if(v==='NP') return {score:null,status:'NP'};
+  const n=Number(v.replace(',','.'));
+  if(!Number.isFinite(n) || n<0 || n>+max) return {invalid:true};
+  return {score:n,status:''};
+}
+async function buildNotebookPeriodData(gid,period){
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const activities=(await MiAulaDB.byIndex('activities','group_period',[gid,String(period)])).sort((a,b)=>String(a.activity_date||'').localeCompare(String(b.activity_date||''))||a.id-b.id);
+  const gradeLists=await Promise.all(activities.map(a=>MiAulaDB.byIndex('grades','activity_id',a.id)));
+  const grades=new Map();
+  gradeLists.flat().forEach(gr=>grades.set(`${gr.activity_id}:${gr.student_id}`,gr));
+  const components=await MiAulaDB.byIndex('studentComponents','group_period',[gid,String(period)]);
+  const compMap=new Map(components.map(c=>[c.student_id,c]));
+  const grading=await computeGroupGrading(gid,String(period));
+  const gradingMap=new Map(grading.students.map(r=>[r.id,r]));
+  return {period:String(period),students,activities,grades,components:compMap,grading,gradingMap,scheme:grading.scheme};
+}
+
+async function loadNotebook(opts={}){
+  const select=$('#notebookGroup');
+  let gid=+select.value;
+  if(!gid && groups.length){gid=groups[0].id;select.value=String(gid);}
+  if(!gid){
+    $('#notebookTable').className='panel empty-state';
+    $('#notebookTable').textContent='Crea o selecciona un grupo para abrir su cuaderno digital.';
+    $('#notebookPeriod').innerHTML='<option value="">—</option>';
+    $('#notebookModeLabel').textContent='Selecciona un grupo';
+    return;
+  }
+  const g=await getGroupState(gid); if(!g)return;
+  const periodSelect=$('#notebookPeriod');
+  const previous=opts.resetPeriod?'':periodSelect.value;
+  const periods=periodNumbers(g);
+  periodSelect.innerHTML=periods.map(p=>`<option value="${p}">Parcial ${p}${+p===+g.current_period?' · actual':''}</option>`).join('')+'<option value="all">Todos los parciales</option>';
+  const target=previous && (previous==='all'||periods.includes(previous))?previous:String(g.current_period||periods[0]||1);
+  periodSelect.value=target;
+  notebookEdits.grades.clear();notebookEdits.components.clear();
+  const wanted=target==='all'?periods:[target];
+  const data={group:g,selected:target,periods:{}};
+  for(const p of wanted)data.periods[p]=await buildNotebookPeriodData(gid,p);
+  notebookData=data;
+  $('#notebookModeLabel').textContent=target==='all'?`${g.name} · todos los parciales`:`${g.name} · Parcial ${target}`;
+  renderNotebook();
+}
+
+function notebookActivityCell(a,s,pd){
+  const rec=pd.grades.get(`${a.id}:${s.id}`);
+  const val=notebookGradeDisplay(rec);
+  const klass=val==='NP'?' np-value':val!==''?' captured-value':' pending-value';
+  return `<td class="notebook-grade-cell${klass}"><input class="notebook-score-input" inputmode="decimal" autocomplete="off" spellcheck="false" data-kind="grade" data-period="${pd.period}" data-student="${s.id}" data-activity="${a.id}" data-max="${a.max_score}" value="${escapeHtml(val)}" placeholder="—" aria-label="${escapeHtml(a.title)} · ${escapeHtml(studentLabel(s))}"></td>`;
+}
+function notebookComponentInput(field,s,pd,value){
+  return `<input class="notebook-score-input component-input" inputmode="decimal" autocomplete="off" data-kind="component" data-field="${field}" data-period="${pd.period}" data-student="${s.id}" data-max="10" value="${value==null?'':escapeHtml(value)}" placeholder="—">`;
+}
+function renderNotebookPeriod(pd){
+  const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
+  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span><small>${escapeHtml(a.activity_type)} · /${fmtNum(a.max_score,1)}</small></th>`).join('');
+  const body=pd.students.map(s=>{
+    const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
+    const principalCell=principalType==='exam'
+      ?notebookComponentInput('exam_score',s,pd,gr.exam_score??comp.exam_score??null)
+      :`<span class="auto-score notebook-auto" title="Calculado desde rúbricas y listas de cotejo">${fmtNum(gr.principal_avg)}</span>`;
+    const activityCells=pd.activities.length?pd.activities.map(a=>notebookActivityCell(a,s,pd)).join(''):'<td class="summary-cell">—</td>';
+    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><strong>${escapeHtml(studentLabel(s))}</strong></td>${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td><td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td><td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
+  }).join('');
+  const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
+  const colspan=Math.max(pd.activities.length,1)+7;
+  return `<div class="notebook-period-block" data-period-block="${pd.period}"><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><span class="period-badge">Trabajos ${pd.scheme.work_pct}% · ${principal} ${pd.scheme.project_pct}% · Valores ${pd.scheme.values_pct}% · Actitudes ${pd.scheme.attitudes_pct}%</span></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
+}
+function renderNotebook(){
+  if(!notebookData)return;
+  const pds=Object.values(notebookData.periods);
+  const totalActs=pds.reduce((n,p)=>n+p.activities.length,0),students=pds[0]?.students.length||0;
+  $('#notebookSummary').classList.remove('hidden');
+  $('#notebookSummary').innerHTML=`<div><span>Grupo</span><strong>${escapeHtml(notebookData.group.name)}</strong></div><div><span>Alumnos</span><strong>${students}</strong></div><div><span>Actividades visibles</span><strong>${totalActs}</strong></div><div><span>Vista</span><strong>${notebookData.selected==='all'?'Todos':`Parcial ${notebookData.selected}`}</strong></div>`;
+  $('#notebookTable').className='';
+  $('#notebookTable').innerHTML=pds.map(renderNotebookPeriod).join('');
+  $$('#notebookTable .notebook-score-input').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      inp.classList.add('changed');
+      const parsed=notebookParseScore(inp.value,+inp.dataset.max||10);
+      inp.classList.toggle('invalid',!!parsed.invalid);
+      recalcNotebookRow(inp.dataset.period,+inp.dataset.student);
+    });
+    inp.addEventListener('blur',()=>{
+      const parsed=notebookParseScore(inp.value,+inp.dataset.max||10);
+      if(!parsed.invalid && String(inp.value).trim().toUpperCase()==='NP')inp.value='NP';
+    });
+  });
+}
+function notebookCurrentValue(selector,max=10){
+  const el=document.querySelector(selector);if(!el)return {score:null,status:''};return notebookParseScore(el.value,max);
+}
+function recalcNotebookRow(period,studentId){
+  if(!notebookData?.periods?.[period])return;
+  const pd=notebookData.periods[period],scheme=pd.scheme,principalType=scheme.principal_type||'project';
+  let workTotal=0,workW=0,projectTotal=0,projectW=0;
+  for(const a of pd.activities){
+    const el=document.querySelector(`.notebook-score-input[data-kind="grade"][data-period="${period}"][data-student="${studentId}"][data-activity="${a.id}"]`);
+    const parsed=notebookParseScore(el?.value,+a.max_score||10);if(parsed.invalid||parsed.score==null)continue;
+    const normalized=parsed.score*10/(+a.max_score||10),w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
+    if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}else if(type!=='examen'){workTotal+=normalized*w;workW+=w;}
+  }
+  const work=workW?workTotal/workW:null;
+  const old=pd.gradingMap.get(studentId)||{};
+  let principal=principalType==='project'?old.principal_avg:null;
+  if(principalType==='exam'){
+    const x=notebookCurrentValue(`.notebook-score-input[data-kind="component"][data-field="exam_score"][data-period="${period}"][data-student="${studentId}"]`,10);principal=x.invalid?null:x.score;
+  }
+  const v=notebookCurrentValue(`.notebook-score-input[data-kind="component"][data-field="values_score"][data-period="${period}"][data-student="${studentId}"]`,10);
+  const a=notebookCurrentValue(`.notebook-score-input[data-kind="component"][data-field="attitudes_score"][data-period="${period}"][data-student="${studentId}"]`,10);
+  const workCell=document.querySelector(`[data-work-cell="${period}:${studentId}"]`);if(workCell)workCell.textContent=fmtNum(work);
+  let complete=true,final=0;
+  for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[v.invalid?null:v.score,+scheme.values_pct],[a.invalid?null:a.score,+scheme.attitudes_pct]]){if(pct>0){if(score==null)complete=false;else final+=score*pct/100;}}
+  const finalCell=document.querySelector(`[data-final-cell="${period}:${studentId}"]`);
+  if(finalCell)finalCell.innerHTML=complete?`<span class="final-score">${fmtNum(+final.toFixed(2))}</span>`:'<span class="pending-score">Pendiente</span>';
+}
+async function saveNotebookChanges(opts={}){
+  if(!notebookData)return false;
+  const gradeInputs=$$('#notebookTable .notebook-score-input[data-kind="grade"]');
+  const compInputs=$$('#notebookTable .notebook-score-input[data-kind="component"]');
+  const parsedGrades=[];const parsedComps=[];let invalid=false;
+  for(const inp of gradeInputs){
+    const parsed=notebookParseScore(inp.value,+inp.dataset.max||10);
+    inp.classList.toggle('invalid',!!parsed.invalid);
+    if(parsed.invalid){invalid=true;continue;}
+    parsedGrades.push({inp,parsed,activity_id:+inp.dataset.activity,student_id:+inp.dataset.student});
+  }
+  for(const inp of compInputs){
+    const parsed=notebookParseScore(inp.value,10);
+    inp.classList.toggle('invalid',!!parsed.invalid);
+    if(parsed.invalid){invalid=true;continue;}
+    parsedComps.push({inp,parsed,period:String(inp.dataset.period),student_id:+inp.dataset.student,field:inp.dataset.field});
+  }
+  if(invalid){toast('Hay calificaciones inválidas. Revisa las celdas marcadas.',true);return false;}
+  for(const item of parsedGrades){
+    const old=await MiAulaDB.firstByIndex('grades','unique_key',[item.activity_id,item.student_id]);
+    const rec={...(old||{}),activity_id:item.activity_id,student_id:item.student_id,score:item.parsed.score,status:item.parsed.status,notes:old?.notes||''};
+    if(old)await MiAulaDB.put('grades',rec);else if(item.parsed.score!=null||item.parsed.status)await MiAulaDB.add('grades',rec);
+  }
+  const grouped=new Map();
+  for(const item of parsedComps){
+    const key=`${notebookData.group.id}:${item.period}:${item.student_id}`;
+    if(!grouped.has(key))grouped.set(key,{period:item.period,student_id:item.student_id,fields:{}});
+    grouped.get(key).fields[item.field]=item.parsed.score;
+  }
+  for(const [key,item] of grouped){
+    const old=await MiAulaDB.get('studentComponents',key);
+    await MiAulaDB.put('studentComponents',{...(old||{}),key,group_id:notebookData.group.id,period:item.period,student_id:item.student_id,...item.fields,updated_at:new Date().toISOString()});
+  }
+  if(!opts.silent)toast('Cuaderno guardado');
+  await loadSummary();
+  if(!opts.noReload)await loadNotebook();
+  return true;
+}
+
+async function buildNotebookWorkbook(gid,selection){
+  const g=await getGroupState(gid);if(!g)throw new Error('Grupo no encontrado');
+  const periods=selection==='all'?periodNumbers(g):[String(selection)];
+  const sheets=[];
+  for(const p of periods){
+    const pd=await buildNotebookPeriodData(gid,p),principal=principalLabel(pd.scheme.principal_type||'project');
+    const headers=['No.','Alumno',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,'Valores','Actitudes','Final','Estado'];
+    const rows=[headers];
+    for(const s of pd.students){
+      const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
+      const scores=pd.activities.map(a=>{const rec=pd.grades.get(`${a.id}:${s.id}`);return rec?.score!=null?rec.score:(String(rec?.status||'').toUpperCase()==='NP'?'NP':'');});
+      rows.push([s.list_number,studentLabel(s),...scores,gr.work_avg,gr.principal_avg,gr.values_score,gr.attitudes_score,gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
+    }
+    sheets.push({name:`Libreta P${p}`,rows});
+  }
+  return {sheets};
+}
+
+$('#notebookGroup').onchange=()=>loadNotebook({resetPeriod:true});
+$('#notebookPeriod').onchange=()=>loadNotebook();
+$('#notebookReload').onclick=()=>loadNotebook();
+$('#notebookSave').onclick=()=>saveNotebookChanges();
+$('#notebookExcel').onclick=async()=>{
+  const gid=+$('#notebookGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
+  try{
+    const ok=await saveNotebookChanges({silent:true,noReload:true});if(!ok)return;
+    const g=await MiAulaDB.get('groups',gid),selection=$('#notebookPeriod').value||String(g.current_period||1),book=await buildNotebookWorkbook(gid,selection),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');
+    downloadBlob(blob,`MiAula_Cuaderno_${safe}_${selection==='all'?'Todos':`P${selection}`}_${today}.xlsx`);toast('Excel del cuaderno generado');
+    await loadNotebook();
+  }catch(e){console.error(e);toast(e.message,true);}
+};
+$('#notebookPresentation').onclick=async()=>{
+  const on=!document.body.classList.contains('notebook-focus');document.body.classList.toggle('notebook-focus',on);
+  $('#notebookPresentation').textContent=on?'✕ Salir de presentación':'▣ Presentación';
+  if(on && document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();}catch{}}
+  if(!on && document.fullscreenElement){try{await document.exitFullscreen();}catch{}}
+};
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.classList.contains('notebook-focus')){document.body.classList.remove('notebook-focus');if($('#notebookPresentation'))$('#notebookPresentation').textContent='▣ Presentación';}});
+
 function attendanceTotals(records){
   const out={P:0,F:0,R:0,J:0,total:0,attended:0};
   for(const a of records){const h=+a.class_hours||1;out[a.status]=(out[a.status]||0)+h;out.total+=h;if(a.status!=='F')out.attended+=h;}
@@ -1149,7 +1364,7 @@ async function buildWorkbook(gid){
   const conc=[['No.','Código','Alumno','Grado','Asistencia %','Hrs P','Hrs F','Hrs R','Hrs J',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
     const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.P,at.F,at.R,at.J];
-    for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=gr?.score??null;row.push(v);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
+    for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=gr?.score??null,shown=v!=null?v:(String(gr?.status||'').toUpperCase()==='NP'?'NP':'');row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
     row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,...periods.map(p=>grading[p].students.find(x=>x.id===s.id)?.final_grade??null));conc.push(row);
   }
   const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Total hrs','Asistencia %']];
@@ -1157,7 +1372,7 @@ async function buildWorkbook(gid){
   const hourHeaders=['No.','Alumno'];for(const d of dates){const hrs=classBlocks.get(d)||1;for(let h=1;h<=hrs;h++)hourHeaders.push(`${d} H${h}`);}const asistHoras=[hourHeaders];
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
   const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
-  const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,gr.score,a.max_score,gr.score==null?null:Math.round(+gr.score*1000/+a.max_score)/100,gr.notes||'']);}
+  const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,gr.score!=null?gr.score:(String(gr.status||'').toUpperCase()==='NP'?'NP':''),a.max_score,gr.score==null?null:Math.round(+gr.score*1000/+a.max_score)/100,gr.notes||'']);}
   const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||'',i?.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
   const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of periods)for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Parcial ${p}`,'Valores y Actitudes',s.notes]);
   const bajas=[['Último No.','Código','Apellido paterno','Apellido materno','Nombre(s)','Nombre completo','Fecha de baja','Hrs P','Hrs F','Hrs R','Hrs J','Asistencia %']];for(const s of inactive){const at=attendanceTotals(attendance.filter(a=>a.student_id===s.id));bajas.push([s.former_list_number??s.list_number,s.student_code,s.paternal_last_name||'',s.maternal_last_name||'',s.given_names||'',studentLabel(s),s.withdrawn_at?new Date(s.withdrawn_at).toLocaleDateString('es-MX'):'',at.P,at.F,at.R,at.J,at.pct]);}
@@ -1168,7 +1383,7 @@ $('#exportBtn').onclick=async()=>{
   const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{toast('Generando Excel…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel generado');}catch(e){console.error(e);toast(e.message,true);}
 };
-$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
+$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0.4_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
 $('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!confirm('Restaurar este respaldo reemplazará los datos actuales de la tablet. ¿Continuar?')){e.target.value='';return;}await MiAulaDB.restoreBackup(data);await refreshGroups();await loadInstruments();await loadSummary();toast('Respaldo restaurado correctamente');goView('dashboard');}catch(er){console.error(er);toast(er.message,true);}finally{e.target.value='';}};
 
 window.addEventListener('error',e=>{console.error(e.error||e.message);const b=$('#fatalBanner');b.textContent='Error de interfaz: '+(e.message||'desconocido');b.classList.remove('hidden');});

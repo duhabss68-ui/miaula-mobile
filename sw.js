@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='miaula-mobile-2.0.3';
+const CACHE='miaula-mobile-2.0.4';
 const ASSETS=[
-  './','./index.html','./styles.css?v=2.0.3','./db.js?v=2.0.3','./xlsx-lite.js?v=2.0.3','./app.js?v=2.0.3','./manifest.webmanifest?v=2.0.3',
-  './assets/miaula_logo.png','./assets/icon-books-192.png?v=2.0.3','./assets/icon-books-512.png?v=2.0.3','./assets/icon-books-maskable-512.png?v=2.0.3'
+  './','./index.html','./styles.css?v=2.0.4','./db.js?v=2.0.4','./xlsx-lite.js?v=2.0.4','./app.js?v=2.0.4','./manifest.webmanifest?v=2.0.4',
+  './assets/miaula_logo.png','./assets/icon-books-192.png?v=2.0.4','./assets/icon-books-512.png?v=2.0.4','./assets/icon-books-maskable-512.png?v=2.0.4'
 ];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));

@@ -222,7 +222,7 @@ const MiAulaDB = (() => {
   }
 
   async function exportBackup(){
-    const out={format:'MiAulaMobileBackup',schemaVersion:3,appVersion:'2.0-CETIS',exportedAt:new Date().toISOString(),stores:{}};
+    const out={format:'MiAulaMobileBackup',schemaVersion:3,appVersion:'2.0.4-CETIS',exportedAt:new Date().toISOString(),stores:{}};
     for(const s of stores) out.stores[s]=await all(s);
     return out;
   }
