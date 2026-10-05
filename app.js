@@ -175,7 +175,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.0.5').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.0.5.1').catch(()=>{});
 }
 
 async function init(){
@@ -1348,7 +1348,7 @@ window.openExtraModal=async function(period,studentId){
       <div class="extra-balance-card bad"><span>Puntos malos</span><strong>${formatBadExtras(ex.bad)}</strong><small>Registro informativo; no altera el promedio.</small></div>
     </div>
     <div class="extra-modal-grid">
-      <div class="extra-control-card"><h4>Agregar manualmente</h4><div class="extra-quick-row"><button type="button" class="btn success" onclick="addManualExtra('good','${p}',${studentId},1)">+1 bueno</button><button type="button" class="btn success" onclick="addManualExtra('good','${p}',${studentId},2)">+2 buenos</button><button type="button" class="btn danger" onclick="addManualExtra('bad','${p}',${studentId},1)">−1 malo</button><button type="button" class="btn danger" onclick="addManualExtra('bad','${p}',${studentId},2)">−2 malos</button></div><label>Otra cantidad de puntos buenos<input id="manualExtraGood" type="number" inputmode="numeric" min="1" max="99" step="1" value="1"></label><button type="button" class="btn success wide" onclick="addManualExtra('good','${p}',${studentId})">+ Agregar buenos</button><label>Otra cantidad de puntos malos<input id="manualExtraBad" type="number" inputmode="numeric" min="1" max="99" step="1" value="1"></label><button type="button" class="btn danger wide" onclick="addManualExtra('bad','${p}',${studentId})">− Agregar malos</button></div>
+      <div class="extra-control-card"><h4>Agregar manualmente</h4><div class="extra-quick-row"><button type="button" class="btn success" onclick="addManualExtra('good','${p}',${studentId},1)">+1 bueno</button><button type="button" class="btn success" onclick="addManualExtra('good','${p}',${studentId},2)">+2 buenos</button><button type="button" class="btn danger" onclick="addManualExtra('bad','${p}',${studentId},1)">−1 malo</button><button type="button" class="btn danger" onclick="addManualExtra('bad','${p}',${studentId},2)">−2 malos</button></div><label>Otra cantidad de puntos buenos<input id="manualExtraGood" type="number" inputmode="numeric" min="1" max="99" step="1" value="1"></label><button type="button" class="btn success wide" onclick="addManualExtra('good','${p}',${studentId})">+ Agregar buenos</button><label>Otra cantidad de puntos malos<input id="manualExtraBad" type="number" inputmode="numeric" min="1" max="99" step="1" value="1"></label><button type="button" class="btn danger wide" onclick="addManualExtra('bad','${p}',${studentId})">− Agregar malos</button><div class="extra-reset-row"><button type="button" class="btn danger wide" onclick="clearStudentExtras('${p}',${studentId})">Limpiar puntos · dejar en 0</button><small>Reinicia a cero los puntos buenos y malos de este alumno en el parcial.</small></div></div>
       <div class="extra-control-card"><h4>Usar puntos buenos en una actividad</h4><p class="muted-text">Solo se pueden aplicar a una actividad que ya tenga calificación. La actividad nunca supera su puntaje máximo.</p><label>Actividad<select id="extraTargetActivity"><option value="">Seleccionar…</option>${usable}</select></label><label>Puntos a utilizar<input id="extraUsePoints" type="number" inputmode="numeric" min="1" max="${Math.max(1,ex.goodAvailable)}" step="1" value="1" ${ex.goodAvailable<1?'disabled':''}></label><button type="button" class="btn primary wide" onclick="applyExtraToActivity('${p}',${studentId})" ${ex.goodAvailable<1?'disabled':''}>Aplicar a actividad</button></div>
     </div>
     <div class="extra-history"><h4>Últimos movimientos</h4>${movements}</div>`);
@@ -1361,6 +1361,19 @@ window.addManualExtra=async function(kind,period,studentId,forcedPoints=null){
   toast(kind==='good'?`+${n} punto(s) buenos agregados`:`-${n} punto(s) malos agregados`);
   await loadNotebook();
   await openExtraModal(period,studentId);
+};
+window.clearStudentExtras=async function(period,studentId){
+  if(!notebookData?.group?.id)return;
+  const gid=+notebookData.group.id,p=String(period);
+  const rows=await getStudentExtraRows(gid,+studentId,p);
+  if(!rows.length){toast('Los puntos extra ya están en 0.');return;}
+  const student=await MiAulaDB.get('students',+studentId);
+  const ok=window.confirm(`¿Dejar en 0 los puntos extra de ${studentLabel(student||{})}?\n\nSe borrarán los puntos buenos, malos y su historial de este parcial. Las calificaciones de actividades que ya recibieron puntos se conservarán.`);
+  if(!ok)return;
+  for(const r of rows)await MiAulaDB.remove('extraPoints',r.id);
+  toast('Puntos extra reiniciados a 0');
+  await loadNotebook();
+  await openExtraModal(p,+studentId);
 };
 window.applyExtraToActivity=async function(period,studentId){
   if(!notebookData?.group?.id)return;
@@ -1540,7 +1553,7 @@ $('#exportBtn').onclick=async()=>{
   const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{toast('Generando Excel…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel generado');}catch(e){console.error(e);toast(e.message,true);}
 };
-$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0.5_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
+$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0.5.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
 $('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!confirm('Restaurar este respaldo reemplazará los datos actuales de la tablet. ¿Continuar?')){e.target.value='';return;}await MiAulaDB.restoreBackup(data);await refreshGroups();await loadInstruments();await loadSummary();toast('Respaldo restaurado correctamente');goView('dashboard');}catch(er){console.error(er);toast(er.message,true);}finally{e.target.value='';}};
 
 window.addEventListener('error',e=>{console.error(e.error||e.message);const b=$('#fatalBanner');b.textContent='Error de interfaz: '+(e.message||'desconocido');b.classList.remove('hidden');});

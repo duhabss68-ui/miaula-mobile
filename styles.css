@@ -123,3 +123,6 @@ body.notebook-focus .extra-cell-button{border-color:transparent;background:trans
 @media(orientation:portrait){.notebook-table .sticky-col-3{left:232px}.extra-balance-grid{grid-template-columns:1fr 1fr}body.notebook-focus .notebook-table-wrap{max-height:calc(100vh - 190px)}}
 .extra-quick-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}.extra-quick-row .btn{padding:9px 8px;font-size:12px}
 body.roulette-focus .result-panel{overflow-y:auto!important;justify-content:flex-start}body.roulette-focus .used-grid{max-height:20vh}
+
+/* 2.0.5.1: reinicio de puntos extra */
+.extra-reset-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--border,#d9e0ea);display:grid;gap:6px}.extra-reset-row small{color:var(--muted,#64748b);line-height:1.35}
