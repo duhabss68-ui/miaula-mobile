@@ -21,7 +21,10 @@ const dynamics={
   used:new Set(),
   rotation:0,
   spinning:false,
-  teams:[]
+  teams:[],
+  lastWinner:null,
+  winnerRated:false,
+  ratingBusy:false
 };
 
 function localDateISO(d=new Date()){
@@ -52,6 +55,28 @@ function downloadBlob(blob,name){
 }
 function studentLabel(s){return MiAulaDB.displayName(s)||s.name||'';}
 function activeOnly(rows){return rows.filter(s=>s.active!==0);}
+
+function formatBadExtras(n){n=+n||0;return n>0?`-${n}`:'0';}
+function extraSummary(rows){
+  let goodEarned=0,goodUsed=0,bad=0;
+  for(const r of rows||[]){
+    const pts=Math.max(0,+r.points||0);
+    if(r.kind==='good')goodEarned+=pts;
+    else if(r.kind==='use')goodUsed+=pts;
+    else if(r.kind==='bad')bad+=pts;
+  }
+  return {goodEarned,goodUsed,goodAvailable:Math.max(0,goodEarned-goodUsed),bad};
+}
+async function getStudentExtraRows(groupId,studentId,period){
+  return MiAulaDB.byIndex('extraPoints','group_student_period',[+groupId,+studentId,String(period)]);
+}
+async function getStudentExtraSummary(groupId,studentId,period){
+  return extraSummary(await getStudentExtraRows(groupId,studentId,period));
+}
+async function addExtraRecord({groupId,studentId,period,kind,points=1,source='manual',activityId=null,note=''}){
+  const n=Math.max(1,Math.floor(+points||1));
+  return MiAulaDB.add('extraPoints',{group_id:+groupId,student_id:+studentId,period:String(period),kind,points:n,source,activity_id:activityId==null?null:+activityId,session_date:today,note:String(note||''),created_at:new Date().toISOString()});
+}
 
 function principalLabel(type){return type==='exam'?'Examen':'Proyecto';}
 function totalPeriods(g){
@@ -104,6 +129,12 @@ function resetDynamicsSession(){
   if(canvas){canvas.style.transition='none';canvas.style.transform='rotate(0deg)';setTimeout(()=>canvas.style.transition='',0);}
   if($('#rouletteNumber')) $('#rouletteNumber').textContent='—';
   if($('#rouletteName')) $('#rouletteName').textContent='Gira la ruleta';
+  dynamics.lastWinner=null;
+  dynamics.winnerRated=false;
+  dynamics.ratingBusy=false;
+  const extraActions=$('#rouletteExtraActions');
+  if(extraActions) extraActions.classList.add('hidden');
+  if($('#rouletteExtraStatus')) $('#rouletteExtraStatus').textContent='';
   if($('#teamsResult')) $('#teamsResult').innerHTML='<div class="empty-state">Selecciona un grupo y crea los equipos.</div>';
   renderUsedStudents();
   drawWheel();
@@ -144,7 +175,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.0.4').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.0.5').catch(()=>{});
 }
 
 async function init(){
@@ -451,9 +482,11 @@ $('#saveAttendance').onclick=async()=>{
 $$('#dynamicsTabs button').forEach(btn=>btn.onclick=()=>setDynamicsMode(btn.dataset.mode));
 $('#dynamicsGroup').onchange=()=>loadDynamicsStudents(true);
 $('#dynamicsPresentOnly').onchange=()=>loadDynamicsStudents(true);
-$('#resetWheel').onclick=()=>{dynamics.used.clear();dynamics.rotation=0;$('#rouletteNumber').textContent='—';$('#rouletteName').textContent='Gira la ruleta';const c=$('#rouletteCanvas');c.style.transition='none';c.style.transform='rotate(0deg)';setTimeout(()=>c.style.transition='',0);drawWheel();renderUsedStudents();updateRouletteCounter();toast('Ruleta reiniciada');};
+$('#resetWheel').onclick=()=>{resetDynamicsSession();updateRouletteCounter();toast('Ruleta reiniciada');};
 $('#spinWheel').onclick=spinWheel;
 $('#fullscreenWheel').onclick=toggleRouletteFullscreen;
+$('#rouletteGood').onclick=()=>recordRouletteExtra('good');
+$('#rouletteBad').onclick=()=>recordRouletteExtra('bad');
 $('#generateTeams').onclick=generateTeams;
 $('#copyTeams').onclick=copyTeams;
 
@@ -568,6 +601,46 @@ function renderUsedStudents(){
   el.innerHTML=used.length?used.map(s=>`<span class="used-chip"><b>${s.list_number}</b>${escapeHtml(studentLabel(s))}</span>`).join(''):'<span class="muted-text">Nadie todavía.</span>';
   updateRouletteCounter();
 }
+async function refreshWinnerExtraStatus(){
+  const box=$('#rouletteExtraActions'),status=$('#rouletteExtraStatus'),goodBtn=$('#rouletteGood'),badBtn=$('#rouletteBad');
+  const s=dynamics.lastWinner,gid=+$('#dynamicsGroup').value;
+  if(!box||!status||!goodBtn||!badBtn||!s||!gid){if(box)box.classList.add('hidden');return;}
+  const g=await getGroupState(gid),period=String(g?.current_period||1);
+  const rows=await getStudentExtraRows(gid,s.id,period);
+  const summary=extraSummary(rows);
+  const rouletteGoodToday=rows.filter(r=>r.kind==='good'&&r.source==='roulette'&&r.session_date===today).reduce((n,r)=>n+(+r.points||0),0);
+  box.classList.remove('hidden');
+  goodBtn.disabled=dynamics.winnerRated||dynamics.ratingBusy||rouletteGoodToday>=2;
+  badBtn.disabled=dynamics.winnerRated||dynamics.ratingBusy;
+  goodBtn.textContent=rouletteGoodToday>=2?'Extra + · límite 2/2':'Extra +';
+  if(dynamics.winnerRated){
+    status.textContent=`Participación registrada · Saldo: +${summary.goodAvailable} / ${formatBadExtras(summary.bad)}`;
+  }else if(rouletteGoodToday>=2){
+    status.textContent=`Ya tiene +2 de ruleta hoy. Puedes registrar Extra − o continuar.`;
+  }else{
+    status.textContent=`Disponibles en el Parcial ${period}: +${summary.goodAvailable} · Malos: ${formatBadExtras(summary.bad)} · Ruleta hoy: +${rouletteGoodToday}/2`;
+  }
+}
+async function recordRouletteExtra(kind){
+  if(dynamics.ratingBusy||dynamics.winnerRated||!dynamics.lastWinner)return;
+  const gid=+$('#dynamicsGroup').value;if(!gid)return;
+  dynamics.ratingBusy=true;
+  try{
+    const g=await getGroupState(gid),period=String(g?.current_period||1),s=dynamics.lastWinner;
+    if(kind==='good'){
+      const rows=await getStudentExtraRows(gid,s.id,period);
+      const usedToday=rows.filter(r=>r.kind==='good'&&r.source==='roulette'&&r.session_date===today).reduce((n,r)=>n+(+r.points||0),0);
+      if(usedToday>=2){toast('Este alumno ya alcanzó +2 puntos buenos de ruleta hoy.',true);dynamics.ratingBusy=false;await refreshWinnerExtraStatus();return;}
+      await addExtraRecord({groupId:gid,studentId:s.id,period,kind:'good',points:1,source:'roulette',note:'Participación en ruleta'});
+      toast(`+1 punto extra para ${studentLabel(s)}`);
+    }else{
+      await addExtraRecord({groupId:gid,studentId:s.id,period,kind:'bad',points:1,source:'roulette',note:'Participación en ruleta'});
+      toast(`-1 punto extra para ${studentLabel(s)}`);
+    }
+    dynamics.winnerRated=true;
+  }catch(e){console.error(e);toast(e.message||'No se pudo guardar el punto extra',true);}
+  finally{dynamics.ratingBusy=false;await refreshWinnerExtraStatus();}
+}
 function randomInt(max){
   if(max<=1)return 0;
   if(crypto?.getRandomValues){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%max;}
@@ -585,8 +658,11 @@ async function spinWheel(){
   const canvas=$('#rouletteCanvas');canvas.style.transition='transform 4.3s cubic-bezier(.12,.68,.08,1)';canvas.style.transform=`rotate(${dynamics.rotation}deg)`;
   await new Promise(r=>setTimeout(r,4350));
   dynamics.used.add(chosen.id);
+  dynamics.lastWinner=chosen;
+  dynamics.winnerRated=false;
   $('#rouletteNumber').textContent=chosen.list_number??index+1;
   $('#rouletteName').textContent=studentLabel(chosen);
+  await refreshWinnerExtraStatus();
   const result=$('#rouletteResultPanel');
   if(result){result.classList.remove('winner-pop');void result.offsetWidth;result.classList.add('winner-pop');setTimeout(()=>result.classList.remove('winner-pop'),900);}
   renderUsedStudents();
@@ -1159,9 +1235,15 @@ async function buildNotebookPeriodData(gid,period){
   gradeLists.flat().forEach(gr=>grades.set(`${gr.activity_id}:${gr.student_id}`,gr));
   const components=await MiAulaDB.byIndex('studentComponents','group_period',[gid,String(period)]);
   const compMap=new Map(components.map(c=>[c.student_id,c]));
+  const extraRows=await MiAulaDB.byIndex('extraPoints','group_period',[gid,String(period)]);
+  const extrasByStudent=new Map();
+  for(const s of students){
+    const rows=extraRows.filter(r=>+r.student_id===+s.id);
+    extrasByStudent.set(s.id,{...extraSummary(rows),rows});
+  }
   const grading=await computeGroupGrading(gid,String(period));
   const gradingMap=new Map(grading.students.map(r=>[r.id,r]));
-  return {period:String(period),students,activities,grades,components:compMap,grading,gradingMap,scheme:grading.scheme};
+  return {period:String(period),students,activities,grades,components:compMap,extraRows,extrasByStudent,grading,gradingMap,scheme:grading.scheme};
 }
 
 async function loadNotebook(opts={}){
@@ -1200,6 +1282,10 @@ function notebookActivityCell(a,s,pd){
 function notebookComponentInput(field,s,pd,value){
   return `<input class="notebook-score-input component-input" inputmode="decimal" autocomplete="off" data-kind="component" data-field="${field}" data-period="${pd.period}" data-student="${s.id}" data-max="10" value="${value==null?'':escapeHtml(value)}" placeholder="—">`;
 }
+function notebookExtraCell(s,pd){
+  const ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0};
+  return `<td class="sticky-col-3 notebook-extra-cell"><button type="button" class="extra-cell-button" onclick="openExtraModal('${pd.period}',${s.id})" aria-label="Puntos extra de ${escapeHtml(studentLabel(s))}"><span class="extra-good">+${ex.goodAvailable||0}</span><span class="extra-bad">${formatBadExtras(ex.bad)}</span><small>Editar</small></button></td>`;
+}
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
   const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span><small>${escapeHtml(a.activity_type)} · /${fmtNum(a.max_score,1)}</small></th>`).join('');
@@ -1209,11 +1295,11 @@ function renderNotebookPeriod(pd){
       ?notebookComponentInput('exam_score',s,pd,gr.exam_score??comp.exam_score??null)
       :`<span class="auto-score notebook-auto" title="Calculado desde rúbricas y listas de cotejo">${fmtNum(gr.principal_avg)}</span>`;
     const activityCells=pd.activities.length?pd.activities.map(a=>notebookActivityCell(a,s,pd)).join(''):'<td class="summary-cell">—</td>';
-    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><strong>${escapeHtml(studentLabel(s))}</strong></td>${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td><td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td><td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
+    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><strong>${escapeHtml(studentLabel(s))}</strong></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td><td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td><td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
   }).join('');
   const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
-  const colspan=Math.max(pd.activities.length,1)+7;
-  return `<div class="notebook-period-block" data-period-block="${pd.period}"><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><span class="period-badge">Trabajos ${pd.scheme.work_pct}% · ${principal} ${pd.scheme.project_pct}% · Valores ${pd.scheme.values_pct}% · Actitudes ${pd.scheme.attitudes_pct}%</span></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
+  const colspan=Math.max(pd.activities.length,1)+8;
+  return `<div class="notebook-period-block" data-period-block="${pd.period}"><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><span class="period-badge">Trabajos ${pd.scheme.work_pct}% · ${principal} ${pd.scheme.project_pct}% · Valores ${pd.scheme.values_pct}% · Actitudes ${pd.scheme.attitudes_pct}%</span></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
 }
 function renderNotebook(){
   if(!notebookData)return;
@@ -1236,6 +1322,67 @@ function renderNotebook(){
     });
   });
 }
+window.openExtraModal=async function(period,studentId){
+  if(!notebookData?.group?.id)return;
+  const gid=+notebookData.group.id,p=String(period);
+  let pd=notebookData.periods?.[p];
+  if(!pd)pd=await buildNotebookPeriodData(gid,p);
+  const student=pd.students.find(x=>+x.id===+studentId)||await MiAulaDB.get('students',+studentId);if(!student)return;
+  const rows=await getStudentExtraRows(gid,+studentId,p),ex=extraSummary(rows);
+  const usable=pd.activities.filter(a=>!['proyecto','examen'].includes(String(a.activity_type||'').trim().toLowerCase())).map(a=>{
+    const rec=pd.grades.get(`${a.id}:${studentId}`),score=rec?.score;
+    const max=+a.max_score||10,room=score==null?0:Math.floor(Math.max(0,max-(+score||0)));
+    const disabled=score==null||room<1;
+    const label=score==null?`${a.title} · sin calificación`:`${a.title} · ${fmtNum(score,1)}/${fmtNum(max,1)}${room<1?' · máximo':''}`;
+    return `<option value="${a.id}" ${disabled?'disabled':''}>${escapeHtml(label)}</option>`;
+  }).join('');
+  const movements=[...rows].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,8).map(r=>{
+    const sign=r.kind==='bad'?'-':r.kind==='use'?'↳':'+';
+    const cls=r.kind==='bad'?'extra-bad':r.kind==='use'?'extra-used':'extra-good';
+    const desc=r.kind==='use'?'Aplicado a actividad':r.source==='roulette'?'Ruleta':'Registro manual';
+    return `<div class="extra-history-row"><strong class="${cls}">${sign}${r.points}</strong><span>${escapeHtml(desc)}</span><small>${r.created_at?new Date(r.created_at).toLocaleString('es-MX'):'—'}</small></div>`;
+  }).join('')||'<div class="muted-text">Aún no hay movimientos en este parcial.</div>';
+  openModal(`Puntos extra · ${studentLabel(student)}`,`
+    <div class="extra-balance-grid">
+      <div class="extra-balance-card good"><span>Buenos disponibles</span><strong>+${ex.goodAvailable}</strong><small>${ex.goodEarned} ganados · ${ex.goodUsed} usados</small></div>
+      <div class="extra-balance-card bad"><span>Puntos malos</span><strong>${formatBadExtras(ex.bad)}</strong><small>Registro informativo; no altera el promedio.</small></div>
+    </div>
+    <div class="extra-modal-grid">
+      <div class="extra-control-card"><h4>Agregar manualmente</h4><div class="extra-quick-row"><button type="button" class="btn success" onclick="addManualExtra('good','${p}',${studentId},1)">+1 bueno</button><button type="button" class="btn success" onclick="addManualExtra('good','${p}',${studentId},2)">+2 buenos</button><button type="button" class="btn danger" onclick="addManualExtra('bad','${p}',${studentId},1)">−1 malo</button><button type="button" class="btn danger" onclick="addManualExtra('bad','${p}',${studentId},2)">−2 malos</button></div><label>Otra cantidad de puntos buenos<input id="manualExtraGood" type="number" inputmode="numeric" min="1" max="99" step="1" value="1"></label><button type="button" class="btn success wide" onclick="addManualExtra('good','${p}',${studentId})">+ Agregar buenos</button><label>Otra cantidad de puntos malos<input id="manualExtraBad" type="number" inputmode="numeric" min="1" max="99" step="1" value="1"></label><button type="button" class="btn danger wide" onclick="addManualExtra('bad','${p}',${studentId})">− Agregar malos</button></div>
+      <div class="extra-control-card"><h4>Usar puntos buenos en una actividad</h4><p class="muted-text">Solo se pueden aplicar a una actividad que ya tenga calificación. La actividad nunca supera su puntaje máximo.</p><label>Actividad<select id="extraTargetActivity"><option value="">Seleccionar…</option>${usable}</select></label><label>Puntos a utilizar<input id="extraUsePoints" type="number" inputmode="numeric" min="1" max="${Math.max(1,ex.goodAvailable)}" step="1" value="1" ${ex.goodAvailable<1?'disabled':''}></label><button type="button" class="btn primary wide" onclick="applyExtraToActivity('${p}',${studentId})" ${ex.goodAvailable<1?'disabled':''}>Aplicar a actividad</button></div>
+    </div>
+    <div class="extra-history"><h4>Últimos movimientos</h4>${movements}</div>`);
+};
+window.addManualExtra=async function(kind,period,studentId,forcedPoints=null){
+  if(!notebookData?.group?.id)return;
+  const id=kind==='good'?'#manualExtraGood':'#manualExtraBad',n=forcedPoints==null?Math.floor(+$(id)?.value||0):Math.floor(+forcedPoints||0);
+  if(n<1||n>99){toast('Escribe una cantidad entre 1 y 99.',true);return;}
+  await addExtraRecord({groupId:notebookData.group.id,studentId,period,kind,points:n,source:'manual',note:kind==='good'?'Punto bueno manual':'Punto malo manual'});
+  toast(kind==='good'?`+${n} punto(s) buenos agregados`:`-${n} punto(s) malos agregados`);
+  await loadNotebook();
+  await openExtraModal(period,studentId);
+};
+window.applyExtraToActivity=async function(period,studentId){
+  if(!notebookData?.group?.id)return;
+  const gid=+notebookData.group.id,activityId=+$('#extraTargetActivity')?.value,points=Math.floor(+$('#extraUsePoints')?.value||0);
+  if(!activityId){toast('Selecciona una actividad.',true);return;}
+  if(points<1){toast('Indica cuántos puntos quieres utilizar.',true);return;}
+  const ex=await getStudentExtraSummary(gid,studentId,String(period));
+  if(points>ex.goodAvailable){toast(`Solo hay +${ex.goodAvailable} punto(s) disponibles.`,true);return;}
+  const activity=await MiAulaDB.get('activities',activityId);if(!activity){toast('Actividad no encontrada.',true);return;}
+  const grade=await MiAulaDB.firstByIndex('grades','unique_key',[activityId,+studentId]);
+  if(!grade||grade.score==null){toast('Primero captura una calificación numérica en esa actividad.',true);return;}
+  const max=+activity.max_score||10,room=Math.floor(Math.max(0,max-(+grade.score||0)));
+  if(room<1){toast('Esa actividad ya está en su puntaje máximo.',true);return;}
+  if(points>room){toast(`Puedes aplicar como máximo ${room} punto(s) a esta actividad.`,true);return;}
+  grade.score=+(+grade.score+points).toFixed(2);grade.status='';
+  await MiAulaDB.put('grades',grade);
+  await addExtraRecord({groupId:gid,studentId,period,kind:'use',points,source:'activity',activityId,note:`Aplicado a ${activity.title}`});
+  toast(`Se aplicaron ${points} punto(s) a ${activity.title}`);
+  await loadNotebook();
+  await openExtraModal(period,studentId);
+  await loadSummary();
+};
 function notebookCurrentValue(selector,max=10){
   const el=document.querySelector(selector);if(!el)return {score:null,status:''};return notebookParseScore(el.value,max);
 }
@@ -1308,15 +1455,23 @@ async function buildNotebookWorkbook(gid,selection){
   const sheets=[];
   for(const p of periods){
     const pd=await buildNotebookPeriodData(gid,p),principal=principalLabel(pd.scheme.principal_type||'project');
-    const headers=['No.','Alumno',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,'Valores','Actitudes','Final','Estado'];
+    const headers=['No.','Alumno','Extra + disponibles','Extra -','Extra + ganados','Extra + aplicados',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,'Valores','Actitudes','Final','Estado'];
     const rows=[headers];
     for(const s of pd.students){
-      const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
+      const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{},ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0,goodEarned:0,goodUsed:0};
       const scores=pd.activities.map(a=>{const rec=pd.grades.get(`${a.id}:${s.id}`);return rec?.score!=null?rec.score:(String(rec?.status||'').toUpperCase()==='NP'?'NP':'');});
-      rows.push([s.list_number,studentLabel(s),...scores,gr.work_avg,gr.principal_avg,gr.values_score,gr.attitudes_score,gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
+      rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,gr.principal_avg,gr.values_score,gr.attitudes_score,gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
     }
     sheets.push({name:`Libreta P${p}`,rows});
   }
+  const extraRows=await MiAulaDB.all('extraPoints'),studentMap=new Map((await MiAulaDB.groupStudents(gid,{includeInactive:true})).map(s=>[s.id,s]));
+  const activityMap=new Map((await MiAulaDB.byIndex('activities','group_id',gid)).map(a=>[a.id,a]));
+  const history=[['Parcial','No.','Alumno','Movimiento','Puntos','Origen','Actividad','Fecha','Nota']];
+  for(const r of extraRows.filter(x=>+x.group_id===+gid).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')))){
+    const st=studentMap.get(r.student_id),ac=activityMap.get(r.activity_id);
+    history.push([r.period,st?.list_number??'',studentLabel(st||{}),r.kind==='good'?'Bueno':r.kind==='bad'?'Malo':'Aplicado',r.kind==='bad'?-r.points:r.points,r.source||'',ac?.title||'',r.created_at?new Date(r.created_at).toLocaleString('es-MX'):'',r.note||'']);
+  }
+  sheets.push({name:'Historial extras',rows:history});
   return {sheets};
 }
 
@@ -1377,13 +1532,15 @@ async function buildWorkbook(gid){
   const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of periods)for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Parcial ${p}`,'Valores y Actitudes',s.notes]);
   const bajas=[['Último No.','Código','Apellido paterno','Apellido materno','Nombre(s)','Nombre completo','Fecha de baja','Hrs P','Hrs F','Hrs R','Hrs J','Asistencia %']];for(const s of inactive){const at=attendanceTotals(attendance.filter(a=>a.student_id===s.id));bajas.push([s.former_list_number??s.list_number,s.student_code,s.paternal_last_name||'',s.maternal_last_name||'',s.given_names||'',studentLabel(s),s.withdrawn_at?new Date(s.withdrawn_at).toLocaleDateString('es-MX'):'',at.P,at.F,at.R,at.J,at.pct]);}
   const instrumentBank=[['Instrumento','Tipo','Convierte a 0-10','Criterios']];for(const i of insts){instrumentBank.push([i.name,i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',i.convert_to_grade?'Sí':'No',(i.criteria||[]).map(c=>c.name).join(' · ')]);}
-  return {sheets:[{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
+  const extraRows=(await MiAulaDB.all('extraPoints')).filter(r=>+r.group_id===+gid).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const extraSheet=[['Parcial','No.','Alumno','Movimiento','Puntos','Origen','Actividad','Fecha','Nota']];for(const r of extraRows){const st=sm.get(r.student_id),ac=am.get(r.activity_id);extraSheet.push([r.period,st?.list_number??'',studentLabel(st||{}),r.kind==='good'?'Bueno':r.kind==='bad'?'Malo':'Aplicado',r.kind==='bad'?-r.points:r.points,r.source||'',ac?.title||'',r.created_at?new Date(r.created_at).toLocaleString('es-MX'):'',r.note||'']);}
+  return {sheets:[{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
 $('#exportBtn').onclick=async()=>{
   const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{toast('Generando Excel…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel generado');}catch(e){console.error(e);toast(e.message,true);}
 };
-$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0.4_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
+$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0.5_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
 $('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!confirm('Restaurar este respaldo reemplazará los datos actuales de la tablet. ¿Continuar?')){e.target.value='';return;}await MiAulaDB.restoreBackup(data);await refreshGroups();await loadInstruments();await loadSummary();toast('Respaldo restaurado correctamente');goView('dashboard');}catch(er){console.error(er);toast(er.message,true);}finally{e.target.value='';}};
 
 window.addEventListener('error',e=>{console.error(e.error||e.message);const b=$('#fatalBanner');b.textContent='Error de interfaz: '+(e.message||'desconocido');b.classList.remove('hidden');});

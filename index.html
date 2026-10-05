@@ -8,16 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.0.4 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.0.4">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.4">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.4">
-  <link rel="stylesheet" href="styles.css?v=2.0.4">
+  <title>MiAula 2.0.5 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.0.5">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.5">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.5">
+  <link rel="stylesheet" href="styles.css?v=2.0.5">
 </head>
 <body>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.0.4" alt="MiAula">
+    <img src="assets/icon-books-192.png?v=2.0.5" alt="MiAula">
     <h1>MiAula 2.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
@@ -27,8 +27,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.0.4" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula</strong><span>2.0.4 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.0.5" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula</strong><span>2.0.5 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
@@ -47,7 +47,7 @@
   <main class="main">
     <header class="topbar">
       <div><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
-      <div class="top-actions"><span class="version-badge">MiAula 2.0.4 · CETIS</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
+      <div class="top-actions"><span class="version-badge">MiAula 2.0.5 · CETIS</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
     </header>
 
     <section id="view-dashboard" class="view active">
@@ -137,6 +137,11 @@
             <div id="rouletteNumber" class="result-number">—</div>
             <div id="rouletteName" class="result-name">Gira la ruleta</div>
             <p>La ruleta muestra únicamente números. Al detenerse, MiAula revela el nombre enlazado a la lista activa.</p>
+            <div id="rouletteExtraActions" class="roulette-extra-actions hidden">
+              <span class="result-label">Registrar participación</span>
+              <div class="roulette-extra-buttons"><button type="button" id="rouletteGood" class="btn extra-good-btn">Extra +</button><button type="button" id="rouletteBad" class="btn extra-bad-btn">Extra −</button></div>
+              <small id="rouletteExtraStatus">Cada participación registra un punto.</small>
+            </div>
             <div><h4>Ya participaron</h4><div id="usedStudents" class="used-grid"><span class="muted-text">Nadie todavía.</span></div></div>
           </div>
         </div>
@@ -200,7 +205,7 @@
       </div>
       <div id="notebookSummary" class="notebook-summary hidden"></div>
       <div id="notebookTable" class="panel empty-state">Selecciona un grupo para abrir su cuaderno digital.</div>
-      <p class="notebook-help">Puedes escribir una calificación o <strong>NP</strong> en las actividades. En Proyecto, la calificación continúa calculándose desde las rúbricas/listas de cotejo; en Examen puedes corregir directamente de 0 a 10.</p>
+      <p class="notebook-help">Puedes escribir una calificación o <strong>NP</strong> en las actividades. La columna <strong>Puntos extra</strong> permite agregar puntos buenos o malos y usar los buenos disponibles en una actividad ya calificada. En Proyecto, la calificación continúa calculándose desde las rúbricas/listas de cotejo; en Examen puedes corregir directamente de 0 a 10.</p>
     </section>
 
     <section id="view-grading" class="view">
@@ -290,22 +295,22 @@
 
     <section id="view-more" class="view">
       <div class="grid-2">
-        <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, parciales, actividades, proyecto/examen, instrumentos y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
+        <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, parciales, actividades, proyecto/examen, puntos extra, instrumentos y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
         <div class="panel"><div class="panel-head"><div><h3>Respaldo</h3><p>Haz una copia antes de limpiar datos o actualizar MiAula.</p></div></div>
           <button class="btn primary wide" id="backupBtn">Descargar respaldo MiAula</button>
           <label class="upload-box compact">↥ <strong>Restaurar respaldo</strong><span>Archivo .json de MiAula</span><input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0.4 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0.5 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.0.4"></script>
-<script src="xlsx-lite.js?v=2.0.4"></script>
-<script src="app.js?v=2.0.4"></script>
+<script src="db.js?v=2.0.5"></script>
+<script src="xlsx-lite.js?v=2.0.5"></script>
+<script src="app.js?v=2.0.5"></script>
 </body>
 </html>

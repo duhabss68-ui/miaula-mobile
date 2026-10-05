@@ -2,10 +2,10 @@
 
 const MiAulaDB = (() => {
   const DB_NAME = 'MiAulaMobileDB';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const stores = [
     'groups','students','attendance','activities','grades','instruments',
-    'evaluations','gradingSchemes','studentComponents','meta'
+    'evaluations','gradingSchemes','studentComponents','extraPoints','meta'
   ];
   let _db = null;
 
@@ -71,6 +71,13 @@ const MiAulaDB = (() => {
           const s=db.createObjectStore('studentComponents',{keyPath:'key'});
           s.createIndex('group_period',['group_id','period'],{unique:false});
           s.createIndex('student_id','student_id',{unique:false});
+        }
+        if(!db.objectStoreNames.contains('extraPoints')){
+          const s=db.createObjectStore('extraPoints',{keyPath:'id',autoIncrement:true});
+          s.createIndex('group_period',['group_id','period'],{unique:false});
+          s.createIndex('group_student_period',['group_id','student_id','period'],{unique:false});
+          s.createIndex('student_id','student_id',{unique:false});
+          s.createIndex('activity_id','activity_id',{unique:false});
         }
         if(!db.objectStoreNames.contains('meta')){
           db.createObjectStore('meta',{keyPath:'key'});
@@ -206,11 +213,13 @@ const MiAulaDB = (() => {
     const grades=await byIndex('grades','student_id',studentId); for(const r of grades) await remove('grades',r.id);
     const evals=await byIndex('evaluations','student_id',studentId); for(const r of evals) await remove('evaluations',r.id);
     const comps=await byIndex('studentComponents','student_id',studentId); for(const r of comps) await remove('studentComponents',r.key);
+    const extras=await byIndex('extraPoints','student_id',studentId); for(const r of extras) await remove('extraPoints',r.id);
     await remove('students',studentId);
   }
 
   async function deleteActivity(activityId){
     const grades=await byIndex('grades','activity_id',activityId); for(const r of grades) await remove('grades',r.id);
+    const extras=await byIndex('extraPoints','activity_id',activityId); for(const r of extras) if(r.kind==='use') await remove('extraPoints',r.id);
     await remove('activities',activityId);
   }
 
@@ -222,7 +231,7 @@ const MiAulaDB = (() => {
   }
 
   async function exportBackup(){
-    const out={format:'MiAulaMobileBackup',schemaVersion:3,appVersion:'2.0.4-CETIS',exportedAt:new Date().toISOString(),stores:{}};
+    const out={format:'MiAulaMobileBackup',schemaVersion:4,appVersion:'2.0.5-CETIS',exportedAt:new Date().toISOString(),stores:{}};
     for(const s of stores) out.stores[s]=await all(s);
     return out;
   }
