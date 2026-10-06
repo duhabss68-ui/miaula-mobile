@@ -14,6 +14,12 @@ let currentView='dashboard';
 let currentStudentGroup=null;
 let notebookData=null;
 const notebookEdits={grades:new Map(),components:new Map()};
+let notebookAutoSaveTimer=null;
+let lastNotebookEdit=null;
+let undoHideTimer=null;
+let classMode=false;
+let studentDrawerState={period:null,studentId:null};
+let lastStudentQuickScore=null;
 
 const dynamics={
   mode:'roulette',
@@ -104,6 +110,8 @@ async function getActivePeriod(gid){
 function setEvaluationNavLabel(type){
   const label=$('#evaluationNavLabel');
   if(label) label.textContent=principalLabel(type);
+  const moreLabel=$('#moreEvaluationLabel');
+  if(moreLabel) moreLabel.textContent=principalLabel(type);
   const btn=$('.nav-item[data-view="evaluation"]');
   if(btn) btn.title=principalLabel(type);
 }
@@ -142,6 +150,7 @@ function resetDynamicsSession(){
 
 function goView(name){
   if(currentView==='dynamics' && name!=='dynamics'){ resetDynamicsSession(); exitRouletteFullscreen(); }
+  if(currentView==='notebook' && name!=='notebook') closeStudentDrawer();
   currentView=name;
   $$('.view').forEach(v=>v.classList.remove('active'));
   $('#view-'+name)?.classList.add('active');
@@ -150,12 +159,14 @@ function goView(name){
     dashboard:'Inicio',groups:'Mis grupos',attendance:'Asistencia',dynamics:'Ruleta y equipos',
     activities:'Calificaciones',notebook:'Cuaderno digital',grading:'Parcial',evaluation:'Proyecto',more:'Más'
   }[name]||name;
+  updateAppNav();
   if(name==='dashboard') loadSummary();
   if(name==='activities') loadActivities();
   if(name==='notebook') loadNotebook();
   if(name==='grading') loadGrading();
   if(name==='evaluation'){loadInstruments().then(()=>loadPrincipalWorkspace());}
   if(name==='dynamics') loadDynamicsStudents(true);
+  try{localStorage.setItem('miaula:lastView',name);}catch{}
 }
 window.goView=goView;
 
@@ -175,7 +186,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.0.5.1').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.1.0').catch(()=>{});
 }
 
 async function init(){
@@ -198,7 +209,7 @@ async function init(){
 
 async function refreshGroups(){
   const oldValues={};
-  ['#importGroup','#attendanceGroup','#dynamicsGroup','#activityGroup','#activityFilter','#notebookGroup','#gradingGroup','#evalGroup','#exportGroup'].forEach(id=>{
+  ['#importGroup','#attendanceGroup','#dynamicsGroup','#activityGroup','#activityFilter','#notebookGroup','#gradingGroup','#evalGroup','#exportGroup','#contextGroup'].forEach(id=>{
     if($(id)) oldValues[id]=$(id).value;
   });
   groups=(await MiAulaDB.all('groups')).filter(g=>g.active!==0).sort((a,b)=>
@@ -211,6 +222,12 @@ async function refreshGroups(){
     if(groups.some(g=>String(g.id)===String(oldValues[id]))) $(id).value=oldValues[id];
   });
   await renderGroupsTable();
+  if($('#contextGroup') && !$('#contextGroup').value && groups.length){
+    let preferred=0;try{preferred=+localStorage.getItem('miaula:activeGroup')||0;}catch{}
+    $('#contextGroup').value=String(groups.some(g=>+g.id===preferred)?preferred:groups[0].id);
+  }
+  const contextId=+($('#contextGroup')?.value||0);
+  if(contextId) await setContextGroup(contextId,{propagate:true,refresh:false});
 }
 
 async function loadSummary(){
@@ -250,6 +267,7 @@ async function loadSummary(){
     cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div><div class="group-period-chip">${status}</div><button class="btn small primary group-notebook-btn" onclick="openNotebook(${g.id})">▤ Abrir cuaderno</button></div>`);
   }
   $('#dashboardGroups').innerHTML=cards.length?cards.join(''):'<div class="empty-state">Crea tu primer grupo o importa tu información anterior.</div>';
+  await renderClassSnapshot();
 }
 
 // -------------------- GRUPOS Y ALUMNOS --------------------
@@ -499,6 +517,7 @@ function setDynamicsMode(mode){
     dynamics.used.clear();dynamics.rotation=0;renderUsedStudents();drawWheel();exitRouletteFullscreen();
   }
   if(mode!=='teams'){dynamics.teams=[];$('#teamsResult').innerHTML='<div class="empty-state">Selecciona un grupo y crea los equipos.</div>';}
+  updateAppNav();
 }
 
 async function loadDynamicsStudents(reset=true){
@@ -1210,6 +1229,7 @@ $('#saveExamScores').onclick=async()=>{
 window.openNotebook=async function(gid=null){
   goView('notebook');
   if(gid){
+    await setContextGroup(gid,{propagate:true,refresh:false});
     $('#notebookGroup').value=String(gid);
     await loadNotebook({resetPeriod:true});
   }
@@ -1258,6 +1278,7 @@ async function loadNotebook(opts={}){
     return;
   }
   const g=await getGroupState(gid); if(!g)return;
+  await syncContextIndicators(gid);
   const periodSelect=$('#notebookPeriod');
   const previous=opts.resetPeriod?'':periodSelect.value;
   const periods=periodNumbers(g);
@@ -1295,7 +1316,7 @@ function renderNotebookPeriod(pd){
       ?notebookComponentInput('exam_score',s,pd,gr.exam_score??comp.exam_score??null)
       :`<span class="auto-score notebook-auto" title="Calculado desde rúbricas y listas de cotejo">${fmtNum(gr.principal_avg)}</span>`;
     const activityCells=pd.activities.length?pd.activities.map(a=>notebookActivityCell(a,s,pd)).join(''):'<td class="summary-cell">—</td>';
-    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><strong>${escapeHtml(studentLabel(s))}</strong></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td><td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td><td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
+    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td><td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td><td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
   }).join('');
   const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
   const colspan=Math.max(pd.activities.length,1)+8;
@@ -1310,17 +1331,26 @@ function renderNotebook(){
   $('#notebookTable').className='';
   $('#notebookTable').innerHTML=pds.map(renderNotebookPeriod).join('');
   $$('#notebookTable .notebook-score-input').forEach(inp=>{
+    inp.addEventListener('focus',()=>{inp.dataset.focusValue=inp.value;});
     inp.addEventListener('input',()=>{
+      if(inp.dataset.focusValue===undefined)inp.dataset.focusValue=inp.value;
+      lastNotebookEdit={
+        period:inp.dataset.period,student:inp.dataset.student,activity:inp.dataset.activity||'',field:inp.dataset.field||'',kind:inp.dataset.kind,
+        oldValue:inp.dataset.focusValue??'',newValue:inp.value
+      };
       inp.classList.add('changed');
       const parsed=notebookParseScore(inp.value,+inp.dataset.max||10);
       inp.classList.toggle('invalid',!!parsed.invalid);
       recalcNotebookRow(inp.dataset.period,+inp.dataset.student);
+      applyNotebookFilters();
+      scheduleNotebookAutoSave();
     });
     inp.addEventListener('blur',()=>{
       const parsed=notebookParseScore(inp.value,+inp.dataset.max||10);
       if(!parsed.invalid && String(inp.value).trim().toUpperCase()==='NP')inp.value='NP';
     });
   });
+  applyNotebookFilters();
 }
 window.openExtraModal=async function(period,studentId){
   if(!notebookData?.group?.id)return;
@@ -1425,6 +1455,7 @@ function recalcNotebookRow(period,studentId){
 }
 async function saveNotebookChanges(opts={}){
   if(!notebookData)return false;
+  setSaveState('saving','Guardando…');
   const gradeInputs=$$('#notebookTable .notebook-score-input[data-kind="grade"]');
   const compInputs=$$('#notebookTable .notebook-score-input[data-kind="component"]');
   const parsedGrades=[];const parsedComps=[];let invalid=false;
@@ -1440,7 +1471,7 @@ async function saveNotebookChanges(opts={}){
     if(parsed.invalid){invalid=true;continue;}
     parsedComps.push({inp,parsed,period:String(inp.dataset.period),student_id:+inp.dataset.student,field:inp.dataset.field});
   }
-  if(invalid){toast('Hay calificaciones inválidas. Revisa las celdas marcadas.',true);return false;}
+  if(invalid){setSaveState('error','Revisa las celdas');toast('Hay calificaciones inválidas. Revisa las celdas marcadas.',true);return false;}
   for(const item of parsedGrades){
     const old=await MiAulaDB.firstByIndex('grades','unique_key',[item.activity_id,item.student_id]);
     const rec={...(old||{}),activity_id:item.activity_id,student_id:item.student_id,score:item.parsed.score,status:item.parsed.status,notes:old?.notes||''};
@@ -1456,8 +1487,10 @@ async function saveNotebookChanges(opts={}){
     const old=await MiAulaDB.get('studentComponents',key);
     await MiAulaDB.put('studentComponents',{...(old||{}),key,group_id:notebookData.group.id,period:item.period,student_id:item.student_id,...item.fields,updated_at:new Date().toISOString()});
   }
+  setSaveState('saved','Todo guardado');
+  $$('#notebookTable .notebook-score-input.changed').forEach(el=>{el.classList.remove('changed');el.dataset.focusValue=el.value;});
   if(!opts.silent)toast('Cuaderno guardado');
-  await loadSummary();
+  if(!opts.skipSummary)await loadSummary();
   if(!opts.noReload)await loadNotebook();
   return true;
 }
@@ -1488,10 +1521,13 @@ async function buildNotebookWorkbook(gid,selection){
   return {sheets};
 }
 
-$('#notebookGroup').onchange=()=>loadNotebook({resetPeriod:true});
+$('#notebookGroup').onchange=()=>{syncContextFromControl('#notebookGroup');loadNotebook({resetPeriod:true});};
 $('#notebookPeriod').onchange=()=>loadNotebook();
 $('#notebookReload').onclick=()=>loadNotebook();
 $('#notebookSave').onclick=()=>saveNotebookChanges();
+$('#notebookSearch').oninput=applyNotebookFilters;
+$('#notebookFilter').onchange=applyNotebookFilters;
+$('#notebookStudentView').onclick=()=>openFirstVisibleStudent();
 $('#notebookExcel').onclick=async()=>{
   const gid=+$('#notebookGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{
@@ -1553,8 +1589,238 @@ $('#exportBtn').onclick=async()=>{
   const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{toast('Generando Excel…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel generado');}catch(e){console.error(e);toast(e.message,true);}
 };
-$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.0.5.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
+$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.1.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
 $('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!confirm('Restaurar este respaldo reemplazará los datos actuales de la tablet. ¿Continuar?')){e.target.value='';return;}await MiAulaDB.restoreBackup(data);await refreshGroups();await loadInstruments();await loadSummary();toast('Respaldo restaurado correctamente');goView('dashboard');}catch(er){console.error(er);toast(er.message,true);}finally{e.target.value='';}};
+
+
+// -------------------- MIAULA 2.1 · EXPERIENCIA DE TABLET --------------------
+function setSaveState(state='saved',text='Todo guardado'){
+  const wrap=$('#saveStateWrap'),label=$('#saveState');
+  if(!wrap||!label)return;
+  wrap.classList.remove('saved','saving','changed','error');wrap.classList.add(state);label.textContent=text;
+}
+
+function updateAppNav(){
+  $$('.app-tab').forEach(btn=>{
+    const v=btn.dataset.appView,mode=btn.dataset.mode;
+    let active=false;
+    if(v==='dynamics')active=currentView==='dynamics'&&(!mode||mode===dynamics.mode);
+    else if(['groups','activities','grading','evaluation'].includes(currentView))active=v==='more';
+    else active=v===currentView;
+    btn.classList.toggle('active',active);
+  });
+}
+
+$$('.app-tab').forEach(btn=>btn.addEventListener('click',()=>{
+  const view=btn.dataset.appView,mode=btn.dataset.mode;
+  if(view==='dynamics')openDynamicsMode(mode||'roulette'); else goView(view);
+}));
+
+async function syncContextIndicators(gid){
+  gid=+gid||0;
+  const periodEl=$('#contextPeriod');
+  if(!gid){if(periodEl)periodEl.textContent='Sin grupo';return;}
+  const g=await getGroupState(gid);if(!g)return;
+  if($('#contextGroup'))$('#contextGroup').value=String(gid);
+  if(periodEl)periodEl.textContent=g.course_closed?`Cerrado · ${totalPeriods(g)} parciales`:`Parcial ${g.current_period||1} de ${totalPeriods(g)}`;
+  try{localStorage.setItem('miaula:activeGroup',String(gid));}catch{}
+}
+
+async function setContextGroup(gid,{propagate=true,refresh=true}={}){
+  gid=+gid||0;if(!gid)return;
+  if($('#contextGroup'))$('#contextGroup').value=String(gid);
+  if(propagate){
+    ['#attendanceGroup','#dynamicsGroup','#activityGroup','#activityFilter','#notebookGroup','#gradingGroup','#evalGroup','#exportGroup'].forEach(id=>{if($(id)&&[...$(id).options].some(o=>+o.value===gid))$(id).value=String(gid);});
+  }
+  await syncContextIndicators(gid);
+  if(refresh)await renderClassSnapshot(gid);
+}
+
+function syncContextFromControl(selector){
+  const gid=+$(selector)?.value||0;if(gid)setContextGroup(gid,{propagate:false,refresh:true});
+}
+
+$('#contextGroup').addEventListener('change',async e=>{
+  const gid=+e.target.value||0;if(!gid)return;
+  await setContextGroup(gid);
+  if(currentView==='notebook')await loadNotebook({resetPeriod:true});
+  else if(currentView==='dynamics')await loadDynamicsStudents(true);
+  else if(currentView==='activities')await loadActivities();
+  else if(currentView==='grading')await loadGrading();
+  else if(currentView==='evaluation')await loadPrincipalWorkspace();
+});
+$('#contextNotebook').onclick=()=>{const gid=+$('#contextGroup').value||null;openNotebook(gid);};
+$('#contextAttendance').onclick=()=>{const gid=+$('#contextGroup').value||0;if(gid)$('#attendanceGroup').value=String(gid);goView('attendance');};
+['#attendanceGroup','#dynamicsGroup','#activityGroup','#activityFilter','#gradingGroup','#evalGroup','#exportGroup'].forEach(id=>$(id)?.addEventListener('change',()=>syncContextFromControl(id)));
+
+async function renderClassSnapshot(forcedGid=null){
+  const box=$('#classSnapshot');if(!box)return;
+  let gid=+forcedGid||+$('#contextGroup')?.value||0;
+  if(!gid&&groups.length){gid=groups[0].id;await setContextGroup(gid,{propagate:false,refresh:false});}
+  if(!gid){box.innerHTML='<div class="snapshot-empty">Crea o selecciona un grupo para comenzar.</div>';return;}
+  const g=await getGroupState(gid);if(!g)return;
+  const p=String(g.current_period||1);
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const activities=await MiAulaDB.byIndex('activities','group_period',[gid,p]);
+  const gradeLists=await Promise.all(activities.map(a=>MiAulaDB.byIndex('grades','activity_id',a.id)));
+  const gradeKey=new Map(gradeLists.flat().map(r=>[`${r.activity_id}:${r.student_id}`,r]));
+  let pendingStudents=0;
+  for(const st of students){
+    const pending=activities.some(a=>{const r=gradeKey.get(`${a.id}:${st.id}`);return !(r&&(r.score!=null||String(r.status||'').toUpperCase()==='NP'));});
+    if(pending)pendingStudents++;
+  }
+  const att=await MiAulaDB.byIndex('attendance','group_date',[gid,today]);
+  const attendanceText=att.length?`✓ Tomada · ${att.length} alumnos`:'Pendiente';
+  box.innerHTML=`<div class="snapshot-head"><div><span class="eyebrow">Clase activa</span><h3>${escapeHtml(g.name)} · Parcial ${p}</h3><p>${escapeHtml(g.discipline||'')}</p></div><button class="btn primary" onclick="openNotebook(${gid})">Abrir cuaderno</button></div><div class="snapshot-grid"><div><span>Alumnos</span><strong>${students.length}</strong></div><div><span>Asistencia hoy</span><strong class="${att.length?'ok':'warn'}">${attendanceText}</strong></div><div><span>Actividades</span><strong>${activities.length}</strong></div><div><span>Con pendientes</span><strong class="${pendingStudents?'warn':'ok'}">${pendingStudents}</strong></div></div>`;
+}
+
+function toggleClassMode(force=null){
+  classMode=force==null?!classMode:!!force;
+  document.body.classList.toggle('class-mode',classMode);
+  const text=classMode?'Salir de modo clase':'🎓 Modo clase';
+  if($('#classModeTop'))$('#classModeTop').textContent=text;
+  if($('#startClassMode'))$('#startClassMode').textContent=classMode?'✓ Modo clase activo':'🎓 Iniciar clase';
+  toast(classMode?'Modo clase activado':'Modo clase desactivado');
+}
+$('#classModeTop').onclick=()=>toggleClassMode();
+$('#startClassMode').onclick=()=>toggleClassMode(true);
+
+function applyNotebookFilters(){
+  const search=normalizeText($('#notebookSearch')?.value||''),filter=$('#notebookFilter')?.value||'all';
+  let shown=0,total=0;
+  $$('#notebookTable tbody tr[data-notebook-row]').forEach(row=>{
+    total++;
+    const name=normalizeText(row.querySelector('.notebook-student')?.textContent||'');
+    const inputs=[...row.querySelectorAll('.notebook-score-input')];
+    const hasPending=inputs.some(i=>String(i.value||'').trim()==='');
+    const hasNP=inputs.some(i=>String(i.value||'').trim().toUpperCase()==='NP');
+    const hasLow=inputs.some(i=>{const n=Number(String(i.value||'').replace(',','.'));return Number.isFinite(n)&&String(i.value||'').trim()!==''&&n<6;});
+    let match=!search||name.includes(search);
+    if(filter==='pending')match=match&&hasPending;
+    if(filter==='np')match=match&&hasNP;
+    if(filter==='low')match=match&&hasLow;
+    row.classList.toggle('notebook-row-hidden',!match);if(match)shown++;
+  });
+  if($('#notebookFilterCount'))$('#notebookFilterCount').textContent=total?`${shown} de ${total} alumnos`:'';
+}
+
+function scheduleNotebookAutoSave(){
+  setSaveState('changed','Cambios sin guardar');
+  clearTimeout(notebookAutoSaveTimer);
+  notebookAutoSaveTimer=setTimeout(async()=>{
+    const ok=await saveNotebookChanges({silent:true,noReload:true,skipSummary:true});
+    if(ok&&lastNotebookEdit)showUndoBar('Cambio guardado automáticamente');
+  },900);
+}
+
+function showUndoBar(message){
+  const bar=$('#undoBar');if(!bar)return;
+  $('#undoMessage').textContent=message||'Cambio guardado';bar.classList.remove('hidden');
+  clearTimeout(undoHideTimer);undoHideTimer=setTimeout(()=>bar.classList.add('hidden'),5500);
+}
+
+function notebookEditSelector(edit){
+  if(!edit)return'';
+  if(edit.kind==='grade')return `.notebook-score-input[data-kind="grade"][data-period="${edit.period}"][data-student="${edit.student}"][data-activity="${edit.activity}"]`;
+  return `.notebook-score-input[data-kind="component"][data-period="${edit.period}"][data-student="${edit.student}"][data-field="${edit.field}"]`;
+}
+$('#undoNotebook').onclick=async()=>{
+  if(!lastNotebookEdit)return;
+  const edit={...lastNotebookEdit},el=document.querySelector(notebookEditSelector(edit));
+  if(!el)return;
+  clearTimeout(notebookAutoSaveTimer);el.value=edit.oldValue;el.dataset.focusValue=edit.oldValue;el.dispatchEvent(new Event('input',{bubbles:true}));
+  clearTimeout(notebookAutoSaveTimer);await saveNotebookChanges({silent:true,noReload:true,skipSummary:true});
+  $('#undoBar').classList.add('hidden');lastNotebookEdit=null;toast('Cambio deshecho');
+};
+
+function openFirstVisibleStudent(){
+  const row=$('#notebookTable tbody tr[data-notebook-row]:not(.notebook-row-hidden)');
+  if(!row){toast('No hay alumnos visibles con este filtro.',true);return;}
+  const [period,studentId]=String(row.dataset.notebookRow).split(':');openStudentView(period,+studentId);
+}
+
+function drawerInputValue(kind,period,studentId,activityId='',field=''){
+  let sel='';
+  if(kind==='grade')sel=`.notebook-score-input[data-kind="grade"][data-period="${period}"][data-student="${studentId}"][data-activity="${activityId}"]`;
+  else sel=`.notebook-score-input[data-kind="component"][data-period="${period}"][data-student="${studentId}"][data-field="${field}"]`;
+  return document.querySelector(sel)?.value??'';
+}
+
+function quickButtonsHTML(inputId,max=10){
+  const vals=[10,9,8,7,6,5].filter(v=>v<=max);
+  return `<div class="student-quick-row">${vals.map(v=>`<button type="button" onclick="studentQuickScore('${inputId}','${v}')">${v}</button>`).join('')}<button type="button" class="np" onclick="studentQuickScore('${inputId}','NP')">NP</button></div>`;
+}
+
+window.studentQuickScore=function(inputId,value){
+  const el=document.getElementById(inputId);if(!el)return;el.value=value;lastStudentQuickScore=value;el.classList.add('changed');
+};
+
+window.openStudentView=async function(period,studentId){
+  if(!notebookData?.group?.id)return;
+  period=String(period);studentId=+studentId;
+  let pd=notebookData.periods?.[period];if(!pd)pd=await buildNotebookPeriodData(notebookData.group.id,period);
+  const student=pd.students.find(s=>+s.id===studentId);if(!student)return;
+  studentDrawerState={period,studentId};
+  const ex=await getStudentExtraSummary(notebookData.group.id,studentId,period),gr=pd.gradingMap.get(studentId)||{};
+  $('#studentDrawerTitle').textContent=studentLabel(student);
+  $('#studentDrawerMeta').textContent=`No. ${student.list_number??'—'} · ${notebookData.group.name} · Parcial ${period}`;
+  const activities=pd.activities.map((a,i)=>{
+    const id=`sv-grade-${period}-${studentId}-${a.id}`,val=drawerInputValue('grade',period,studentId,a.id),max=+a.max_score||10;
+    return `<div class="student-activity-card"><div class="student-activity-copy"><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.activity_type)} · máximo ${fmtNum(max,1)}</small></div><div class="student-score-box"><input id="${id}" class="drawer-score-input" data-kind="grade" data-period="${period}" data-student="${studentId}" data-activity="${a.id}" data-max="${max}" value="${escapeHtml(val)}" placeholder="—" inputmode="decimal">${max>=10?quickButtonsHTML(id,max):''}</div></div>`;
+  }).join('')||'<div class="empty-state">No hay actividades en este parcial.</div>';
+  const principalType=pd.scheme.principal_type||'project';
+  let principal='';
+  if(principalType==='exam'){
+    const id=`sv-exam-${period}-${studentId}`,val=drawerInputValue('component',period,studentId,'','exam_score');
+    principal=`<div class="student-component-card"><div><strong>Examen</strong><small>Componente principal</small></div><div class="student-score-box"><input id="${id}" class="drawer-score-input" data-kind="component" data-field="exam_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(val)}" placeholder="—">${quickButtonsHTML(id,10)}</div></div>`;
+  }else{
+    principal=`<div class="student-component-card readonly"><div><strong>Proyecto</strong><small>Calculado desde rúbricas/listas</small></div><b>${fmtNum(gr.principal_avg)}</b></div>`;
+  }
+  const valueId=`sv-values-${period}-${studentId}`,attId=`sv-att-${period}-${studentId}`;
+  const valuesVal=drawerInputValue('component',period,studentId,'','values_score'),attVal=drawerInputValue('component',period,studentId,'','attitudes_score');
+  $('#studentDrawerBody').innerHTML=`<div class="student-summary-strip"><button type="button" class="extra-summary-button" onclick="openExtraModal('${period}',${studentId})"><span>Puntos extra</span><b class="extra-good">+${ex.goodAvailable}</b><b class="extra-bad">${formatBadExtras(ex.bad)}</b><small>Editar</small></button><div><span>Prom. trabajos</span><strong>${fmtNum(gr.work_avg)}</strong></div><div><span>Final actual</span><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></div><div class="student-section-title"><h3>Actividades</h3><span>Califica alumno por alumno</span></div><div class="student-activities-list">${activities}</div><div class="student-section-title"><h3>Componentes</h3></div>${principal}<div class="student-component-card"><div><strong>Valores</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${valueId}" class="drawer-score-input" data-kind="component" data-field="values_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(valuesVal)}" placeholder="—">${quickButtonsHTML(valueId,10)}</div></div><div class="student-component-card"><div><strong>Actitudes</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${attId}" class="drawer-score-input" data-kind="component" data-field="attitudes_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(attVal)}" placeholder="—">${quickButtonsHTML(attId,10)}</div></div>`;
+  $$('#studentDrawer .drawer-score-input').forEach(inp=>inp.addEventListener('input',()=>{inp.classList.add('changed');setSaveState('changed','Cambios sin guardar');}));
+  $('#studentDrawer').classList.remove('hidden');$('#studentDrawer').setAttribute('aria-hidden','false');document.body.classList.add('drawer-open');
+  updateStudentDrawerNav(pd);
+};
+
+function updateStudentDrawerNav(pd){
+  const ids=pd.students.map(s=>+s.id),idx=ids.indexOf(+studentDrawerState.studentId),last=idx>=ids.length-1;
+  $('#studentPrev').disabled=idx<=0;$('#studentNext').disabled=idx<0||last;$('#studentSaveNext').disabled=idx<0;
+  $('#studentSaveNext').textContent=last?'Guardar alumno':'Guardar y siguiente →';
+}
+
+async function commitStudentDrawer(move=0){
+  if(!studentDrawerState.studentId)return;
+  const {period,studentId}=studentDrawerState;
+  for(const src of $$('#studentDrawer .drawer-score-input')){
+    let target=null;
+    if(src.dataset.kind==='grade')target=document.querySelector(`.notebook-score-input[data-kind="grade"][data-period="${period}"][data-student="${studentId}"][data-activity="${src.dataset.activity}"]`);
+    else target=document.querySelector(`.notebook-score-input[data-kind="component"][data-period="${period}"][data-student="${studentId}"][data-field="${src.dataset.field}"]`);
+    if(target&&target.value!==src.value){target.dataset.focusValue=target.value;target.value=src.value;target.dispatchEvent(new Event('input',{bubbles:true}));}
+  }
+  clearTimeout(notebookAutoSaveTimer);
+  const ok=await saveNotebookChanges({silent:true,noReload:true,skipSummary:true});if(!ok)return;
+  const pd=notebookData.periods?.[period]||await buildNotebookPeriodData(notebookData.group.id,period),ids=pd.students.map(s=>+s.id),idx=ids.indexOf(+studentId),next=ids[idx+move];
+  if(move&&next)await openStudentView(period,next);else toast('Alumno guardado');
+}
+
+function closeStudentDrawer(){
+  const d=$('#studentDrawer');if(!d)return;
+  const dirty=$$('#studentDrawer .drawer-score-input.changed').length>0;
+  if(dirty&&!confirm('Hay cambios en este alumno que todavía no se guardan. ¿Cerrar y descartarlos?'))return;
+  d.classList.add('hidden');d.setAttribute('aria-hidden','true');document.body.classList.remove('drawer-open');studentDrawerState={period:null,studentId:null};
+  if(dirty)setSaveState('saved','Todo guardado');
+}
+$('#studentDrawerClose').onclick=closeStudentDrawer;$('#studentDrawerBackdrop').onclick=closeStudentDrawer;
+$('#studentPrev').onclick=()=>commitStudentDrawer(-1);$('#studentNext').onclick=()=>commitStudentDrawer(1);$('#studentSaveNext').onclick=async()=>{
+  const pd=notebookData?.periods?.[studentDrawerState.period]||await buildNotebookPeriodData(notebookData.group.id,studentDrawerState.period);
+  const ids=pd.students.map(s=>+s.id),idx=ids.indexOf(+studentDrawerState.studentId);
+  await commitStudentDrawer(idx>=ids.length-1?0:1);
+};
+
+// Las preferencias de navegación son auxiliares; los datos académicos permanecen en IndexedDB.
+updateAppNav();
 
 window.addEventListener('error',e=>{console.error(e.error||e.message);const b=$('#fatalBanner');b.textContent='Error de interfaz: '+(e.message||'desconocido');b.classList.remove('hidden');});
 

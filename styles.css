@@ -124,5 +124,105 @@ body.notebook-focus .extra-cell-button{border-color:transparent;background:trans
 .extra-quick-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}.extra-quick-row .btn{padding:9px 8px;font-size:12px}
 body.roulette-focus .result-panel{overflow-y:auto!important;justify-content:flex-start}body.roulette-focus .used-grid{max-height:20vh}
 
-/* 2.0.5.1: reinicio de puntos extra */
+/* 2.1.0: reinicio de puntos extra */
 .extra-reset-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--border,#d9e0ea);display:grid;gap:6px}.extra-reset-row small{color:var(--muted,#64748b);line-height:1.35}
+
+/* =========================================================
+   MiAula 2.1 · UX para Huawei MatePad 12X (horizontal)
+   Conserva todas las funciones; reorganiza navegación y captura.
+   ========================================================= */
+:root{
+  --app-nav-h:82px;
+  --surface:#ffffff;
+  --surface-2:#f7faff;
+  --green:#188553;
+  --green-soft:#eaf8f0;
+  --orange:#d97706;
+  --orange-soft:#fff4e5;
+  --purple:#7454d8;
+  --purple-soft:#f1edff;
+  --slate:#47627d;
+  --slate-soft:#edf3f8;
+}
+
+/* Tablet horizontal: navegación inferior tipo app. La barra lateral se conserva en DOM. */
+@media(min-width:700px){
+  .app-shell{grid-template-columns:1fr!important;padding-bottom:var(--app-nav-h)}
+  .sidebar{display:none!important}
+  .main{padding:0 24px 34px;max-width:1600px;width:100%;margin:0 auto}
+  .bottom-app-nav{display:grid}
+}
+
+.app-topbar{position:sticky;top:0;z-index:24;padding:14px 0 9px;background:rgba(243,247,253,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.topbar-title h1{font-size:27px}.top-actions{flex-wrap:wrap;justify-content:flex-end}
+.save-state{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 11px;font-size:12px;font-weight:850;color:var(--muted);white-space:nowrap}
+.save-state-dot{width:8px;height:8px;border-radius:50%;background:#85a0ba;box-shadow:0 0 0 3px rgba(133,160,186,.12)}
+.save-state.saved{color:var(--success);border-color:#cfe8da;background:#f7fcf9}.save-state.saved .save-state-dot{background:#38b26f}
+.save-state.saving{color:var(--blue);border-color:#cfe0ff;background:#f7faff}.save-state.saving .save-state-dot{background:var(--blue);animation:savePulse 1s infinite}
+.save-state.changed{color:var(--warning);border-color:#f0dbab;background:#fffaf0}.save-state.changed .save-state-dot{background:#e6a52b}
+.save-state.error{color:var(--danger);border-color:#f1c7cb;background:#fff7f7}.save-state.error .save-state-dot{background:#d45a64}
+@keyframes savePulse{50%{opacity:.35;transform:scale(.78)}}
+.class-mode-btn{background:#fff;color:var(--navy);border-color:#bfd3ef}
+
+.context-bar{position:sticky;top:74px;z-index:22;display:flex;align-items:center;gap:12px;margin:0 0 16px;padding:9px 11px;border:1px solid rgba(205,219,238,.95);border-radius:17px;background:rgba(255,255,255,.96);box-shadow:0 7px 22px rgba(7,31,79,.08);backdrop-filter:blur(12px)}
+.context-brand{display:flex;align-items:center;gap:10px;min-width:260px}.context-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--blue-soft);color:var(--blue);font-weight:900;font-size:18px}
+.context-brand>div{display:grid;grid-template-columns:auto;min-width:0;flex:1}.context-brand small,.context-period small{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:850}
+.context-brand select{min-height:34px;height:34px;padding:4px 30px 4px 0;border:0;background:transparent;box-shadow:none;font-weight:900;color:var(--navy);font-size:15px}
+.context-period{padding:4px 14px;border-left:1px solid var(--line);min-width:142px}.context-period strong{display:block;margin-top:3px;color:var(--navy);font-size:14px}.context-spacer{flex:1}.context-action{min-height:42px;padding:8px 13px;border-radius:12px;border:1px solid #d5e2f4;background:#f8fbff;color:var(--navy);font-weight:850;cursor:pointer}.context-action:active{transform:scale(.98)}
+
+.bottom-app-nav{display:none;position:fixed;left:16px;right:16px;bottom:10px;z-index:70;grid-template-columns:repeat(6,1fr);gap:7px;padding:8px;border:1px solid rgba(199,215,236,.9);border-radius:23px;background:rgba(255,255,255,.96);box-shadow:0 15px 40px rgba(7,31,79,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.app-tab{min-width:0;min-height:59px;border:0;background:transparent;border-radius:16px;color:#64758b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-weight:850;transition:.16s}
+.app-tab span{font-size:21px;line-height:1}.app-tab b{font-size:11px}.app-tab.active{background:linear-gradient(145deg,#e9f2ff,#dceaff);color:#0b55c7;box-shadow:inset 0 0 0 1px #c8dcff}.app-tab:active{transform:scale(.97)}
+
+/* Inicio más visual, sin estética infantil */
+.hero{padding:27px 30px;border-radius:22px}.hero h2{font-size:31px}.hero-brand{max-width:310px;justify-self:end}
+.app-quick-actions{grid-template-columns:repeat(5,1fr)!important}.quick-card{min-height:86px}.quick-card>span{background:var(--blue-soft);color:var(--blue)}
+.quick-card.tone-green>span{background:var(--green-soft);color:var(--green)}.quick-card.tone-orange>span{background:var(--orange-soft);color:var(--orange)}.quick-card.tone-purple>span{background:var(--purple-soft);color:var(--purple)}.quick-card.tone-slate>span{background:var(--slate-soft);color:var(--slate)}
+.class-snapshot{padding:16px 18px}.snapshot-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:13px}.snapshot-head h3{font-size:21px;color:var(--navy);margin:2px 0}.snapshot-head p{margin:0;color:var(--muted);font-size:12px}.snapshot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.snapshot-grid>div{padding:12px 14px;border:1px solid #e3ebf6;border-radius:14px;background:#f9fbff}.snapshot-grid span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800}.snapshot-grid strong{display:block;color:var(--navy);font-size:18px;margin-top:4px}.snapshot-grid strong.ok{color:var(--green)}.snapshot-grid strong.warn{color:var(--orange)}.snapshot-empty{text-align:center;color:var(--muted);padding:8px}
+
+/* Cuaderno: búsqueda, filtros y enfoque alumno por alumno */
+.notebook-filter-bar{display:flex;align-items:center;gap:9px;margin:0 0 10px;padding:9px 10px;border:1px solid var(--line);border-radius:15px;background:#fff;box-shadow:var(--shadow-soft)}
+.notebook-search{margin:0;display:flex;align-items:center;gap:7px;flex:1;min-width:220px;padding:0 4px;color:var(--muted)}.notebook-search input{border:0;box-shadow:none;min-height:38px;padding:6px 4px;background:transparent}.notebook-filter-bar select{width:auto;min-width:190px;min-height:40px;padding:8px 35px 8px 10px}.student-view-btn{background:var(--purple-soft);color:#5135a8;border-color:#dcd2ff}.filter-count{font-size:11px;font-weight:850;color:var(--muted);white-space:nowrap}
+.notebook-row-hidden{display:none!important}.student-name-button{width:100%;border:0;background:transparent;color:var(--text);text-align:left;padding:2px 0;cursor:pointer}.student-name-button strong{display:block}.student-name-button small{display:block;color:var(--blue);font-size:9px;margin-top:2px;font-weight:850;opacity:.86}
+.notebook-table tbody tr:hover .student-name-button strong{color:var(--blue)}
+
+/* Vista alumno lateral */
+.student-drawer{position:fixed;inset:0;z-index:120;display:flex;justify-content:flex-end}.student-drawer-backdrop{position:absolute;inset:0;background:rgba(3,20,48,.36);backdrop-filter:blur(2px)}
+.student-drawer-panel{position:relative;z-index:1;width:min(680px,62vw);height:100%;background:#f5f8fd;box-shadow:-18px 0 45px rgba(4,24,63,.22);display:flex;flex-direction:column;overflow:hidden}
+.student-drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 20px 13px;background:#fff;border-bottom:1px solid var(--line)}.student-drawer-head h2{margin:3px 0 2px;color:var(--navy);font-size:25px}.student-drawer-head p{margin:0;color:var(--muted);font-size:12px}.large-close{font-size:24px;width:42px;height:42px}
+#studentDrawerBody{padding:15px 18px 22px;overflow:auto;flex:1;-webkit-overflow-scrolling:touch}.student-drawer-foot{display:grid;grid-template-columns:1fr 1.35fr 1fr;gap:8px;padding:11px 15px calc(11px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line)}
+.student-summary-strip{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:9px;margin-bottom:16px}.student-summary-strip>div,.extra-summary-button{min-height:78px;border:1px solid var(--line);border-radius:15px;background:#fff;padding:10px 12px;text-align:left}.student-summary-strip span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}.student-summary-strip strong{display:block;font-size:20px;color:var(--navy);margin-top:5px}.extra-summary-button{display:grid;grid-template-columns:1fr auto auto;grid-template-areas:'label label label' 'good bad edit';gap:3px 10px;cursor:pointer}.extra-summary-button span{grid-area:label}.extra-summary-button .extra-good{grid-area:good;font-size:20px}.extra-summary-button .extra-bad{grid-area:bad;font-size:20px}.extra-summary-button small{grid-area:edit;color:var(--blue);align-self:end;font-weight:850}
+.student-section-title{display:flex;align-items:end;justify-content:space-between;margin:14px 2px 8px}.student-section-title h3{margin:0;color:var(--navy);font-size:17px}.student-section-title span{font-size:11px;color:var(--muted)}.student-activities-list{display:grid;gap:8px}.student-activity-card,.student-component-card{display:grid;grid-template-columns:minmax(170px,1fr) minmax(310px,1.7fr);gap:12px;align-items:center;padding:11px 12px;border:1px solid #dfe8f4;border-radius:15px;background:#fff}.student-activity-copy strong,.student-component-card strong{display:block;color:var(--text)}.student-activity-copy small,.student-component-card small{display:block;color:var(--muted);font-size:10px;margin-top:3px}.student-component-card.readonly{grid-template-columns:1fr auto}.student-component-card.readonly>b{font-size:22px;color:var(--purple)}
+.student-score-box{display:grid;grid-template-columns:66px 1fr;gap:8px;align-items:center}.drawer-score-input{min-height:48px;padding:8px;border:2px solid #d6e2f0;border-radius:12px;text-align:center;font-size:18px;font-weight:900;color:var(--navy)}.student-quick-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.student-quick-row button{min-width:0;min-height:42px;border:1px solid #d7e2f1;border-radius:10px;background:#f8fbff;color:var(--navy);font-weight:900;cursor:pointer}.student-quick-row button:active{transform:scale(.96)}.student-quick-row .np{background:var(--orange-soft);color:#a85b00;border-color:#f5d2a6}
+
+/* Más: atajos a todas las herramientas administrativas existentes */
+.more-nav-panel{padding:16px}.more-nav-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.more-nav-card{border:1px solid #dee8f5;background:#fff;border-radius:16px;min-height:96px;padding:13px;text-align:left;display:grid;grid-template-columns:42px 1fr;grid-template-areas:'icon title' 'icon sub';column-gap:10px;align-content:center;cursor:pointer;color:var(--text)}.more-nav-card>span{grid-area:icon;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue);font-size:19px;font-weight:900}.more-nav-card strong{grid-area:title}.more-nav-card small{grid-area:sub;color:var(--muted);margin-top:3px}.more-nav-card:active{transform:scale(.985)}
+
+.undo-bar{position:fixed;left:50%;bottom:99px;transform:translateX(-50%);z-index:135;display:flex;align-items:center;gap:16px;padding:10px 12px 10px 16px;border-radius:14px;background:#142a45;color:#fff;box-shadow:0 12px 30px rgba(0,0,0,.22);font-size:12px;font-weight:750}.undo-bar button{border:0;background:#fff;color:#0b55c7;border-radius:9px;padding:7px 10px;font-weight:900;cursor:pointer}
+
+/* Modo clase: reduce ruido visual, sin ocultar funciones de navegación. */
+body.class-mode .version-badge{display:none}body.class-mode .context-bar{border-color:#c9daf1}body.class-mode .app-topbar{padding-top:10px}body.class-mode .hero-brand{opacity:.75}body.class-mode .bottom-app-nav{border-color:#bdd3f0;box-shadow:0 12px 34px rgba(7,31,79,.2)}
+
+/* Presentación del cuaderno conserva desplazamiento y oculta navegación de app. */
+body.notebook-focus .bottom-app-nav,body.roulette-focus .bottom-app-nav{display:none!important}body.notebook-focus .context-bar,body.roulette-focus .context-bar{display:none!important}
+body.notebook-focus .notebook-filter-bar{display:none!important}body.notebook-focus .main{max-width:none!important}
+
+@media(max-width:1180px){
+  .app-quick-actions{grid-template-columns:repeat(3,1fr)!important}.context-brand{min-width:220px}.context-action{padding:8px 10px}.snapshot-grid{grid-template-columns:repeat(4,1fr)}
+  .student-drawer-panel{width:min(700px,72vw)}.student-activity-card,.student-component-card{grid-template-columns:minmax(150px,1fr) minmax(280px,1.7fr)}
+  .more-nav-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:900px){
+  .version-badge{display:none}.context-action{display:none}.context-period{min-width:125px}.context-bar{top:70px}.bottom-app-nav{left:8px;right:8px}.app-tab b{font-size:10px}
+  .notebook-filter-bar{flex-wrap:wrap}.notebook-search{flex:1 1 45%}.notebook-filter-bar select{flex:1 1 34%}.student-view-btn{flex:0 0 auto}
+  .student-drawer-panel{width:84vw}.student-activity-card,.student-component-card{grid-template-columns:1fr}.student-score-box{grid-template-columns:64px 1fr}
+}
+@media(orientation:portrait){
+  .bottom-app-nav{grid-template-columns:repeat(6,1fr)}.app-tab{min-height:56px}.context-bar{position:relative;top:auto}.app-topbar{position:relative}.student-drawer-panel{width:92vw}.snapshot-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* Ajustes finales de capas y modo clase */
+.modal{z-index:155}.toast{z-index:175}
+body.notebook-focus .student-name-button{pointer-events:none}
+body.class-mode .bottom-app-nav{grid-template-columns:repeat(5,1fr)}
+body.class-mode .app-tab[data-app-view="more"]{display:none}

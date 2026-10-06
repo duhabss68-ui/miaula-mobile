@@ -8,17 +8,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.0.5.1 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.0.5.1">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.0.5.1">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.0.5.1">
-  <link rel="stylesheet" href="styles.css?v=2.0.5.1">
+  <title>MiAula 2.1.0 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.1.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.1.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.1.0">
+  <link rel="stylesheet" href="styles.css?v=2.1.0">
 </head>
 <body>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.0.5.1" alt="MiAula">
-    <h1>MiAula 2.0</h1>
+    <img src="assets/icon-books-192.png?v=2.1.0" alt="MiAula">
+    <h1>MiAula 2.1</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -27,8 +27,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.0.5.1" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula</strong><span>2.0.5 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.1.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula</strong><span>2.1 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
@@ -45,10 +45,22 @@
   </aside>
 
   <main class="main">
-    <header class="topbar">
-      <div><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
-      <div class="top-actions"><span class="version-badge">MiAula 2.0.5.1 · CETIS</span><button class="btn primary" id="quickAttendance">+ Asistencia</button></div>
+    <header class="topbar app-topbar">
+      <div class="topbar-title"><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
+      <div class="top-actions">
+        <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
+        <span class="version-badge">MiAula 2.1 · CETIS</span>
+        <button class="btn class-mode-btn" id="classModeTop">🎓 Modo clase</button>
+        <button class="btn primary" id="quickAttendance">+ Asistencia</button>
+      </div>
     </header>
+    <div class="context-bar" id="contextBar">
+      <div class="context-brand"><span class="context-icon">▦</span><div><small>Grupo activo</small><select id="contextGroup"><option value="">Seleccionar…</option></select></div></div>
+      <div class="context-period"><small>Periodo</small><strong id="contextPeriod">Sin grupo</strong></div>
+      <div class="context-spacer"></div>
+      <button class="context-action" id="contextNotebook">📒 Cuaderno</button>
+      <button class="context-action" id="contextAttendance">✓ Asistencia</button>
+    </div>
 
     <section id="view-dashboard" class="view active">
       <div class="hero">
@@ -56,17 +68,20 @@
           <span class="pill">Diseñada para Huawei MatePad 12X</span>
           <h2>Control de clase sin abrir la laptop.</h2>
           <p>Asistencia por horas, calificaciones, ruleta de participación, equipos, rúbricas, parcial y Excel; todo guardado en la tablet.</p>
-          <div class="hero-actions"><button class="btn light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="goView('dynamics')">Abrir ruleta</button></div>
+          <div class="hero-actions"><button class="btn light" id="startClassMode">🎓 Iniciar clase</button><button class="btn ghost-light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="openDynamicsMode('roulette')">Abrir ruleta</button></div>
         </div>
         <div class="hero-brand"><img src="assets/miaula_logo.png" alt="MiAula"></div>
       </div>
       <div class="kpis" id="kpis"></div>
-      <div class="quick-actions">
-        <button class="quick-card" onclick="goView('attendance')"><span>✓</span><div><strong>Asistencia</strong><small>Una captura, varias horas</small></div></button>
-        <button class="quick-card" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Participación</strong><small>Ruleta por número</small></div></button>
-        <button class="quick-card" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
-        <button class="quick-card" onclick="goView('activities')"><span>★</span><div><strong>Calificaciones</strong><small>Trabajos del parcial</small></div></button>
-        <button class="quick-card" onclick="openNotebook()"><span>▤</span><div><strong>Cuaderno digital</strong><small>Ver todo el grupo</small></div></button>
+      <div class="quick-actions app-quick-actions">
+        <button class="quick-card tone-green" onclick="goView('attendance')"><span>✓</span><div><strong>Asistencia</strong><small>Una captura, varias horas</small></div></button>
+        <button class="quick-card tone-blue" onclick="openNotebook()"><span>▤</span><div><strong>Cuaderno digital</strong><small>Revisar alumno por alumno</small></div></button>
+        <button class="quick-card tone-orange" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Ruleta</strong><small>Participación y extras</small></div></button>
+        <button class="quick-card tone-purple" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
+        <button class="quick-card tone-slate" onclick="goView('activities')"><span>★</span><div><strong>Nueva actividad</strong><small>Crear trabajo o práctica</small></div></button>
+      </div>
+      <div id="classSnapshot" class="class-snapshot panel">
+        <div class="snapshot-empty">Selecciona un grupo activo para ver el estado de la clase.</div>
       </div>
       <div class="panel">
         <div class="panel-head"><div><h3>Mis grupos activos</h3><p>Selecciona una herramienta desde la barra lateral o usa los accesos rápidos.</p></div><button class="btn subtle" onclick="goView('groups')">Administrar</button></div>
@@ -191,6 +206,12 @@
           <button class="btn primary" id="notebookExcel">X · Generar Excel</button>
         </div>
       </div>
+      <div class="notebook-filter-bar">
+        <label class="notebook-search">🔎<input id="notebookSearch" type="search" placeholder="Buscar alumno…" autocomplete="off"></label>
+        <select id="notebookFilter" aria-label="Filtrar cuaderno"><option value="all">Todos los alumnos</option><option value="pending">Con pendientes</option><option value="np">Con NP</option><option value="low">Con calificación menor a 6</option></select>
+        <button class="btn student-view-btn" id="notebookStudentView">👤 Vista alumno</button>
+        <span id="notebookFilterCount" class="filter-count"></span>
+      </div>
       <div class="notebook-toolbar">
         <div class="notebook-legend">
           <span><b class="legend-dot captured"></b> Capturada</span>
@@ -294,6 +315,15 @@
     </section>
 
     <section id="view-more" class="view">
+      <div class="panel more-nav-panel">
+        <div class="panel-head"><div><h3>Herramientas de administración</h3><p>Todo lo que ya tenía MiAula sigue disponible aquí.</p></div></div>
+        <div class="more-nav-grid">
+          <button class="more-nav-card" onclick="goView('groups')"><span>▦</span><strong>Grupos y alumnos</strong><small>Altas, bajas y listas</small></button>
+          <button class="more-nav-card" onclick="goView('activities')"><span>★</span><strong>Calificaciones</strong><small>Crear y revisar actividades</small></button>
+          <button class="more-nav-card" onclick="goView('grading')"><span>%</span><strong>Parcial</strong><small>Esquema y cierre</small></button>
+          <button class="more-nav-card" onclick="goView('evaluation')"><span>◎</span><strong id="moreEvaluationLabel">Proyecto</strong><small>Rúbricas, listas o examen</small></button>
+        </div>
+      </div>
       <div class="grid-2">
         <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, parciales, actividades, proyecto/examen, puntos extra, instrumentos y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
         <div class="panel"><div class="panel-head"><div><h3>Respaldo</h3><p>Haz una copia antes de limpiar datos o actualizar MiAula.</p></div></div>
@@ -302,15 +332,35 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.0.5.1 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.1.0 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
 
+<nav class="bottom-app-nav" id="bottomAppNav" aria-label="Navegación principal">
+  <button class="app-tab active" data-app-view="dashboard"><span>⌂</span><b>Inicio</b></button>
+  <button class="app-tab" data-app-view="attendance"><span>✓</span><b>Asistencia</b></button>
+  <button class="app-tab" data-app-view="notebook"><span>▤</span><b>Cuaderno</b></button>
+  <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span>◉</span><b>Ruleta</b></button>
+  <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span>♟</span><b>Equipos</b></button>
+  <button class="app-tab" data-app-view="more"><span>•••</span><b>Más</b></button>
+</nav>
+
+<div id="undoBar" class="undo-bar hidden"><span id="undoMessage">Cambio guardado</span><button type="button" id="undoNotebook">Deshacer</button></div>
+
+<div id="studentDrawer" class="student-drawer hidden" aria-hidden="true">
+  <div class="student-drawer-backdrop" id="studentDrawerBackdrop"></div>
+  <aside class="student-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="studentDrawerTitle">
+    <div class="student-drawer-head"><div><span class="eyebrow">Vista alumno</span><h2 id="studentDrawerTitle">Alumno</h2><p id="studentDrawerMeta"></p></div><button class="icon-btn large-close" id="studentDrawerClose" aria-label="Cerrar">×</button></div>
+    <div id="studentDrawerBody"></div>
+    <div class="student-drawer-foot"><button class="btn subtle" id="studentPrev">← Anterior</button><button class="btn primary" id="studentSaveNext">Guardar y siguiente →</button><button class="btn subtle" id="studentNext">Siguiente →</button></div>
+  </aside>
+</div>
+
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.0.5.1"></script>
-<script src="xlsx-lite.js?v=2.0.5.1"></script>
-<script src="app.js?v=2.0.5.1"></script>
+<script src="db.js?v=2.1.0"></script>
+<script src="xlsx-lite.js?v=2.1.0"></script>
+<script src="app.js?v=2.1.0"></script>
 </body>
 </html>
