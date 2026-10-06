@@ -152,6 +152,8 @@ function goView(name){
   if(currentView==='dynamics' && name!=='dynamics'){ resetDynamicsSession(); exitRouletteFullscreen(); }
   if(currentView==='notebook' && name!=='notebook') closeStudentDrawer();
   currentView=name;
+  const mainMenuBtn=$('#mainMenuBtn');
+  if(mainMenuBtn) mainMenuBtn.classList.toggle('hidden',name==='dashboard');
   $$('.view').forEach(v=>v.classList.remove('active'));
   $('#view-'+name)?.classList.add('active');
   $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
@@ -177,6 +179,8 @@ function openDynamicsMode(mode){
 window.openDynamicsMode=openDynamicsMode;
 
 $$('.nav-item').forEach(b=>b.onclick=()=>goView(b.dataset.view));
+const mainMenuBtn=$('#mainMenuBtn');
+if(mainMenuBtn) mainMenuBtn.onclick=()=>goView('dashboard');
 $('#quickAttendance').onclick=()=>goView('attendance');
 
 const fmtDate=new Intl.DateTimeFormat('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -186,7 +190,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.1.0').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.1.2').catch(()=>{});
 }
 
 async function init(){
@@ -1589,7 +1593,17 @@ $('#exportBtn').onclick=async()=>{
   const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{toast('Generando Excel…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel generado');}catch(e){console.error(e);toast(e.message,true);}
 };
-$('#backupBtn').onclick=async()=>{const data=await MiAulaDB.exportBackup(),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`MiAula_2.1.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);toast('Respaldo generado');};
+async function downloadMiAulaBackup(){
+  try{
+    const data=await MiAulaDB.exportBackup();
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    downloadBlob(blob,`MiAula_2.1.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    toast('Respaldo generado');
+  }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
+}
+$('#backupBtn').onclick=downloadMiAulaBackup;
+const bottomBackupBtn=$('#bottomBackupBtn');
+if(bottomBackupBtn)bottomBackupBtn.onclick=downloadMiAulaBackup;
 $('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!confirm('Restaurar este respaldo reemplazará los datos actuales de la tablet. ¿Continuar?')){e.target.value='';return;}await MiAulaDB.restoreBackup(data);await refreshGroups();await loadInstruments();await loadSummary();toast('Respaldo restaurado correctamente');goView('dashboard');}catch(er){console.error(er);toast(er.message,true);}finally{e.target.value='';}};
 
 

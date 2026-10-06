@@ -170,7 +170,7 @@ body.roulette-focus .result-panel{overflow-y:auto!important;justify-content:flex
 .context-brand select{min-height:34px;height:34px;padding:4px 30px 4px 0;border:0;background:transparent;box-shadow:none;font-weight:900;color:var(--navy);font-size:15px}
 .context-period{padding:4px 14px;border-left:1px solid var(--line);min-width:142px}.context-period strong{display:block;margin-top:3px;color:var(--navy);font-size:14px}.context-spacer{flex:1}.context-action{min-height:42px;padding:8px 13px;border-radius:12px;border:1px solid #d5e2f4;background:#f8fbff;color:var(--navy);font-weight:850;cursor:pointer}.context-action:active{transform:scale(.98)}
 
-.bottom-app-nav{display:none;position:fixed;left:16px;right:16px;bottom:10px;z-index:70;grid-template-columns:repeat(6,1fr);gap:7px;padding:8px;border:1px solid rgba(199,215,236,.9);border-radius:23px;background:rgba(255,255,255,.96);box-shadow:0 15px 40px rgba(7,31,79,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.bottom-app-nav{display:none;position:fixed;left:16px;right:16px;bottom:10px;z-index:70;grid-template-columns:repeat(7,1fr);gap:7px;padding:8px;border:1px solid rgba(199,215,236,.9);border-radius:23px;background:rgba(255,255,255,.96);box-shadow:0 15px 40px rgba(7,31,79,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .app-tab{min-width:0;min-height:59px;border:0;background:transparent;border-radius:16px;color:#64758b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-weight:850;transition:.16s}
 .app-tab span{font-size:21px;line-height:1}.app-tab b{font-size:11px}.app-tab.active{background:linear-gradient(145deg,#e9f2ff,#dceaff);color:#0b55c7;box-shadow:inset 0 0 0 1px #c8dcff}.app-tab:active{transform:scale(.97)}
 
@@ -218,11 +218,26 @@ body.notebook-focus .notebook-filter-bar{display:none!important}body.notebook-fo
   .student-drawer-panel{width:84vw}.student-activity-card,.student-component-card{grid-template-columns:1fr}.student-score-box{grid-template-columns:64px 1fr}
 }
 @media(orientation:portrait){
-  .bottom-app-nav{grid-template-columns:repeat(6,1fr)}.app-tab{min-height:56px}.context-bar{position:relative;top:auto}.app-topbar{position:relative}.student-drawer-panel{width:92vw}.snapshot-grid{grid-template-columns:repeat(2,1fr)}
+  .bottom-app-nav{grid-template-columns:repeat(7,1fr)}.app-tab{min-height:56px}.context-bar{position:relative;top:auto}.app-topbar{position:relative}.student-drawer-panel{width:92vw}.snapshot-grid{grid-template-columns:repeat(2,1fr)}
 }
 
 /* Ajustes finales de capas y modo clase */
 .modal{z-index:155}.toast{z-index:175}
 body.notebook-focus .student-name-button{pointer-events:none}
-body.class-mode .bottom-app-nav{grid-template-columns:repeat(5,1fr)}
+body.class-mode .bottom-app-nav{grid-template-columns:repeat(6,1fr)}
 body.class-mode .app-tab[data-app-view="more"]{display:none}
+
+
+/* 2.1.1 · acceso directo al menú principal y firma de portada */
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}.topbar-title{min-width:0}
+.menu-home-btn{min-height:46px;display:inline-flex;align-items:center;gap:8px;padding:0 14px;border:1px solid #c4d5ec;border-radius:14px;background:#fff;color:var(--navy);font:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:var(--shadow-soft);white-space:nowrap}
+.menu-home-btn span{display:grid;place-items:center;width:27px;height:27px;border-radius:9px;background:#eaf2ff;color:#0f56bd;font-size:18px}.menu-home-btn:active{transform:translateY(1px)}.menu-home-btn.hidden{display:none!important}
+.hero .hero-author{font-size:18px;font-weight:800;letter-spacing:.01em;color:#fff;margin-top:5px}
+@media(max-width:900px){.menu-home-btn b{display:none}.menu-home-btn{padding:0 10px}.topbar-left{gap:8px}}
+
+
+/* 2.1.2 · acceso directo a respaldo */
+.app-tab.backup-tab{color:#315e4b}
+.app-tab.backup-tab span{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#eaf8f0;color:#188553;font-size:19px}
+.app-tab.backup-tab:active{background:#edf9f2}
+@media(max-width:900px){.app-tab.backup-tab b{font-size:9px}}

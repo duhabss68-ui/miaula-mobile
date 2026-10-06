@@ -8,16 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.1.0 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.1.0">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.1.0">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.1.0">
-  <link rel="stylesheet" href="styles.css?v=2.1.0">
+  <title>MiAula 2.1.2 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.1.2">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.1.2">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.1.2">
+  <link rel="stylesheet" href="styles.css?v=2.1.2">
 </head>
 <body>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.1.0" alt="MiAula">
+    <img src="assets/icon-books-192.png?v=2.1.2" alt="MiAula">
     <h1>MiAula 2.1</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
@@ -27,7 +27,7 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.1.0" alt="MiAula" class="brand-icon">
+      <img src="assets/icon-books-192.png?v=2.1.2" alt="MiAula" class="brand-icon">
       <div><strong>MiAula</strong><span>2.1 · CETIS</span></div>
     </div>
     <nav>
@@ -46,7 +46,10 @@
 
   <main class="main">
     <header class="topbar app-topbar">
-      <div class="topbar-title"><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
+      <div class="topbar-left">
+        <button class="menu-home-btn hidden" id="mainMenuBtn" type="button" aria-label="Volver al menú principal"><span>⌂</span><b>Menú principal</b></button>
+        <div class="topbar-title"><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
+      </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
         <span class="version-badge">MiAula 2.1 · CETIS</span>
@@ -65,9 +68,8 @@
     <section id="view-dashboard" class="view active">
       <div class="hero">
         <div class="hero-copy">
-          <span class="pill">Diseñada para Huawei MatePad 12X</span>
-          <h2>Control de clase sin abrir la laptop.</h2>
-          <p>Asistencia por horas, calificaciones, ruleta de participación, equipos, rúbricas, parcial y Excel; todo guardado en la tablet.</p>
+          <h2>Control de bitacora</h2>
+          <p class="hero-author">by Ing. Niccolás C.M.</p>
           <div class="hero-actions"><button class="btn light" id="startClassMode">🎓 Iniciar clase</button><button class="btn ghost-light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="openDynamicsMode('roulette')">Abrir ruleta</button></div>
         </div>
         <div class="hero-brand"><img src="assets/miaula_logo.png" alt="MiAula"></div>
@@ -326,13 +328,13 @@
       </div>
       <div class="grid-2">
         <div class="panel export-panel"><div class="excel-icon">X</div><h2>Exportar a Excel</h2><p>Incluye estadísticas de asistencia por hora, concentrado, parciales, actividades, proyecto/examen, puntos extra, instrumentos y bajas.</p><label>Grupo<select id="exportGroup"></select></label><button class="btn primary large" id="exportBtn">Generar Excel</button></div>
-        <div class="panel"><div class="panel-head"><div><h3>Respaldo</h3><p>Haz una copia antes de limpiar datos o actualizar MiAula.</p></div></div>
+        <div class="panel" id="backupPanel"><div class="panel-head"><div><h3>Respaldo</h3><p>Haz una copia antes de limpiar datos o actualizar MiAula.</p></div></div>
           <button class="btn primary wide" id="backupBtn">Descargar respaldo MiAula</button>
           <label class="upload-box compact">↥ <strong>Restaurar respaldo</strong><span>Archivo .json de MiAula</span><input id="restoreFile" type="file" accept=".json,application/json" hidden></label>
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.1.0 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.1.2 · CETIS</h3><p>Versión CETIS enfocada en uso diario dentro del salón.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -343,6 +345,7 @@
   <button class="app-tab" data-app-view="notebook"><span>▤</span><b>Cuaderno</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span>◉</span><b>Ruleta</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span>♟</span><b>Equipos</b></button>
+  <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span>⇩</span><b>Respaldo</b></button>
   <button class="app-tab" data-app-view="more"><span>•••</span><b>Más</b></button>
 </nav>
 
@@ -359,8 +362,8 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.1.0"></script>
-<script src="xlsx-lite.js?v=2.1.0"></script>
-<script src="app.js?v=2.1.0"></script>
+<script src="db.js?v=2.1.2"></script>
+<script src="xlsx-lite.js?v=2.1.2"></script>
+<script src="app.js?v=2.1.2"></script>
 </body>
 </html>
