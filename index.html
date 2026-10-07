@@ -3,22 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#08111f">
+  <meta name="theme-color" content="#000000">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.2.2 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.2.2">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.2.2">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.2.2">
-  <link rel="stylesheet" href="styles.css?v=2.2.2">
+  <title>MiAula Dark 2.3.0 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.3.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.3.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.3.0">
+  <link rel="stylesheet" href="styles.css?v=2.3.0">
 </head>
 <body>
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/></symbol>
+  <symbol id="i-groups" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-attendance" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 2.4 2.4L16.8 8"/></symbol>
+  <symbol id="i-roulette" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6M12 21v-6M3 12h6"/></symbol>
+  <symbol id="i-notebook" viewBox="0 0 24 24"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v18H7.5A2.5 2.5 0 0 0 5 22z"/><path d="M5 4.5V22H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1"/><path d="M9 7h7M9 11h7M9 15h5"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M9 11l2 2 4-4"/><path d="M9 17h6"/><path d="M6 2h9l4 4v16H6z"/><path d="M15 2v5h4"/></symbol>
+  <symbol id="i-percent" viewBox="0 0 24 24"><path d="m19 5-14 14"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></symbol>
+  <symbol id="i-eval" viewBox="0 0 24 24"><path d="M9 5h6"/><path d="M9 3h6v4H9z"/><path d="M6 5H4v17h16V5h-2"/><path d="m8 14 2.2 2.2L16 10.5"/></symbol>
+  <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+  <symbol id="i-class" viewBox="0 0 24 24"><path d="m3 10 9-5 9 5-9 5z"/><path d="M7 12.5V17c2.7 2 7.3 2 10 0v-4.5"/><path d="M21 10v6"/></symbol>
+  <symbol id="i-teams" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20a6 6 0 0 1 12 0"/><path d="M14 16a5 5 0 0 1 8 4"/></symbol>
+  <symbol id="i-backup" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-excel" viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6z"/><path d="M15 2v5h4"/><path d="m9 11 6 6M15 11l-6 6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.3 6.3L4 9M5.5 15a7 7 0 0 0 12.2 2.7L20 15"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.2.2" alt="MiAula">
-    <h1>MiAula 2.2.2</h1>
+    <img src="assets/icon-books-192.png?v=2.3.0" alt="MiAula">
+    <h1>MiAula Dark 2.3.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -27,19 +47,19 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.2.2" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula</strong><span>2.2.2 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.3.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Dark</strong><span>2.3.0 · CETIS</span></div>
     </div>
     <nav>
-      <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
-      <button class="nav-item" data-view="groups"><span class="nav-icon">▦</span><span>Grupos</span></button>
-      <button class="nav-item" data-view="attendance"><span class="nav-icon">✓</span><span>Asistencia</span></button>
-      <button class="nav-item" data-view="dynamics"><span class="nav-icon">◉</span><span>Ruleta y equipos</span></button>
-      <button class="nav-item" data-view="activities"><span class="nav-icon">★</span><span>Calificaciones</span></button>
-      <button class="nav-item" data-view="notebook"><span class="nav-icon">▤</span><span>Cuaderno</span></button>
-      <button class="nav-item" data-view="grading"><span class="nav-icon">%</span><span>Parcial</span></button>
-      <button class="nav-item" data-view="evaluation"><span class="nav-icon">◎</span><span id="evaluationNavLabel">Proyecto</span></button>
-      <button class="nav-item" data-view="more"><span class="nav-icon">⚙</span><span>Administración</span></button>
+      <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
+      <button class="nav-item" data-view="groups"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-groups"></use></svg></span><span>Grupos</span></button>
+      <button class="nav-item" data-view="attendance"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-attendance"></use></svg></span><span>Asistencia</span></button>
+      <button class="nav-item" data-view="dynamics"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg></span><span>Ruleta y equipos</span></button>
+      <button class="nav-item" data-view="activities"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-activity"></use></svg></span><span>Calificaciones</span></button>
+      <button class="nav-item" data-view="notebook"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg></span><span>Cuaderno</span></button>
+      <button class="nav-item" data-view="grading"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-percent"></use></svg></span><span>Parcial</span></button>
+      <button class="nav-item" data-view="evaluation"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><span id="evaluationNavLabel">Proyecto</span></button>
+      <button class="nav-item" data-view="more"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-data"></use></svg></span><span>Datos</span></button>
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span><small id="systemStatus">Preparando almacenamiento…</small></div>
   </aside>
@@ -47,22 +67,22 @@
   <main class="main">
     <header class="topbar app-topbar">
       <div class="topbar-left">
-        <button class="menu-home-btn hidden" id="mainMenuBtn" type="button" aria-label="Volver al menú principal"><span>⌂</span><b>Menú principal</b></button>
+        <button class="menu-home-btn hidden" id="mainMenuBtn" type="button" aria-label="Volver al menú principal"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><b>Menú principal</b></button>
         <div class="topbar-title"><div class="eyebrow" id="todayLabel"></div><h1 id="viewTitle">Inicio</h1></div>
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula 2.2.2 · CETIS</span>
-        <button class="btn class-mode-btn" id="classModeTop">🎓 Modo clase</button>
+        <span class="version-badge">MiAula Dark · 2.3.0</span>
+        <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
       </div>
     </header>
     <div class="context-bar" id="contextBar">
-      <div class="context-brand"><span class="context-icon">▦</span><div><small>Grupo activo</small><select id="contextGroup"><option value="">Seleccionar…</option></select></div></div>
+      <div class="context-brand"><span class="context-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-groups"></use></svg></span><div><small>Grupo activo</small><select id="contextGroup"><option value="">Seleccionar…</option></select></div></div>
       <div class="context-period"><small>Periodo</small><strong id="contextPeriod">Sin grupo</strong></div>
       <div class="context-spacer"></div>
-      <button class="context-action" id="contextNotebook">📒 Cuaderno</button>
-      <button class="context-action" id="contextAttendance">✓ Asistencia</button>
+      <button class="context-action" id="contextNotebook"><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg><span>Cuaderno</span></button>
+      <button class="context-action" id="contextAttendance"><svg class="ui-icon" aria-hidden="true"><use href="#i-attendance"></use></svg><span>Asistencia</span></button>
     </div>
 
     <section id="view-dashboard" class="view active">
@@ -70,18 +90,18 @@
         <div class="hero-copy">
           <h2>Control de bitacora</h2>
           <p class="hero-author">by Ing. Niccolás C.M.</p>
-          <div class="hero-actions"><button class="btn light" id="startClassMode">🎓 Iniciar clase</button><button class="btn ghost-light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="openDynamicsMode('roulette')">Abrir ruleta</button></div>
+          <div class="hero-actions"><button class="btn primary hero-class-cta" id="startClassMode"><svg class="ui-icon" aria-hidden="true"><use href="#i-class"></use></svg><span>Iniciar clase</span></button><button class="btn ghost-light" onclick="goView('attendance')">Tomar asistencia</button><button class="btn ghost-light" onclick="openDynamicsMode('roulette')">Abrir ruleta</button></div>
         </div>
         <div class="hero-brand"><img src="assets/miaula_logo.png" alt="MiAula"></div>
       </div>
       <div class="kpis" id="kpis"></div>
       <div class="quick-actions app-quick-actions">
-        <button class="quick-card tone-green" onclick="goView('attendance')"><span>✓</span><div><strong>Asistencia</strong><small>Una captura, varias horas</small></div></button>
-        <button class="quick-card tone-blue" onclick="openNotebook()"><span>▤</span><div><strong>Cuaderno digital</strong><small>Revisar alumno por alumno</small></div></button>
-        <button class="quick-card tone-orange" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Ruleta</strong><small>Participación y extras</small></div></button>
-        <button class="quick-card tone-purple" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
-        <button class="quick-card tone-slate" onclick="goView('activities')"><span>★</span><div><strong>Nueva actividad</strong><small>Crear trabajo o práctica</small></div></button>
-        <button class="quick-card tone-admin" onclick="goView('more')"><span>⚙</span><div><strong>Administración</strong><small>Porcentajes, Excel y respaldo</small></div></button>
+        <button class="quick-card tone-green" onclick="goView('attendance')"><span class="quick-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-attendance"></use></svg></span><div><strong>Asistencia</strong><small>Una captura, varias horas</small></div></button>
+        <button class="quick-card tone-blue" onclick="openNotebook()"><span class="quick-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg></span><div><strong>Cuaderno digital</strong><small>Revisar alumno por alumno</small></div></button>
+        <button class="quick-card tone-orange" onclick="openDynamicsMode('roulette')"><span class="quick-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg></span><div><strong>Ruleta</strong><small>Participación y extras</small></div></button>
+        <button class="quick-card tone-purple" onclick="openDynamicsMode('teams')"><span class="quick-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg></span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
+        <button class="quick-card tone-slate" onclick="goView('activities')"><span class="quick-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-activity"></use></svg></span><div><strong>Nueva actividad</strong><small>Crear trabajo o práctica</small></div></button>
+        <button class="quick-card tone-admin" onclick="goView('more')"><span class="quick-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-data"></use></svg></span><div><strong>Administración</strong><small>Porcentajes, Excel y respaldo</small></div></button>
       </div>
       <div id="classSnapshot" class="class-snapshot panel">
         <div class="snapshot-empty">Selecciona un grupo activo para ver el estado de la clase.</div>
@@ -124,7 +144,7 @@
       </div>
       <div id="attendanceStats" class="attendance-stats hidden"></div>
       <div class="panel">
-        <div class="panel-head"><div><h3>Asistencia</h3><p>Pasas lista una vez; MiAula contabiliza cada hora para la estadística.</p></div><div class="legend"><span>🟢 P</span><span>🔴 F</span><span>🟡 R</span><span>🔵 J</span></div></div>
+        <div class="panel-head"><div><h3>Asistencia</h3><p>Pasas lista una vez; MiAula contabiliza cada hora para la estadística.</p></div><div class="legend attendance-legend"><span class="status-key present"><i></i><b>P</b> Presente</span><span class="status-key absent"><i></i><b>F</b> Falta</span><span class="status-key late"><i></i><b>R</b> Retardo</span><span class="status-key justified"><i></i><b>J</b> Justificada</span></div></div>
         <div id="attendanceList" class="student-list empty-state">Selecciona grupo, fecha y horas.</div>
         <button id="saveAttendance" class="btn primary wide hidden">Guardar asistencia</button>
       </div>
@@ -134,7 +154,7 @@
       <div class="panel dynamics-head">
         <div class="dynamics-controls">
           <label>Grupo<select id="dynamicsGroup"></select></label>
-          <div class="segmented" id="dynamicsTabs"><button class="active" data-mode="roulette">◉ Participación</button><button data-mode="teams">♟ Formar equipos</button></div>
+          <div class="segmented" id="dynamicsTabs"><button class="active" data-mode="roulette"><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg><span>Participación</span></button><button data-mode="teams"><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg><span>Formar equipos</span></button></div>
           <label class="toggle-line"><input type="checkbox" id="dynamicsPresentOnly" checked><span>Solo alumnos presentes hoy</span></label>
         </div>
         <div id="dynamicsSourceInfo" class="source-info">Selecciona un grupo.</div>
@@ -205,14 +225,14 @@
         <div class="notebook-header-actions">
           <label>Grupo<select id="notebookGroup"></select></label>
           <label>Vista<select id="notebookPeriod"></select></label>
-          <button class="btn vivid-action" id="notebookPresentation">▣ Presentación</button>
-          <button class="btn primary" id="notebookExcel">X · Generar Excel</button>
+          <button class="btn vivid-action" id="notebookPresentation"><svg class="ui-icon" aria-hidden="true"><use href="#i-screen"></use></svg><span>Presentación</span></button>
+          <button class="btn primary" id="notebookExcel"><svg class="ui-icon" aria-hidden="true"><use href="#i-excel"></use></svg><span>Generar Excel</span></button>
         </div>
       </div>
       <div class="notebook-filter-bar">
-        <label class="notebook-search">🔎<input id="notebookSearch" type="search" placeholder="Buscar alumno…" autocomplete="off"></label>
+        <label class="notebook-search"><svg class="ui-icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="notebookSearch" type="search" placeholder="Buscar alumno…" autocomplete="off"></label>
         <select id="notebookFilter" aria-label="Filtrar cuaderno"><option value="all">Todos los alumnos</option><option value="pending">Con pendientes</option><option value="np">Con NP</option><option value="low">Con calificación menor a 6</option></select>
-        <button class="btn student-view-btn" id="notebookStudentView">👤 Vista alumno</button>
+        <button class="btn student-view-btn" id="notebookStudentView"><svg class="ui-icon" aria-hidden="true"><use href="#i-groups"></use></svg><span>Vista alumno</span></button>
         <span id="notebookFilterCount" class="filter-count"></span>
       </div>
       <div class="notebook-toolbar">
@@ -223,7 +243,7 @@
           <span id="notebookModeLabel" class="period-badge">Selecciona un grupo</span>
         </div>
         <div class="action-row">
-          <button class="btn subtle" id="notebookReload">↻ Recargar</button>
+          <button class="btn subtle" id="notebookReload"><svg class="ui-icon" aria-hidden="true"><use href="#i-refresh"></use></svg><span>Recargar</span></button>
           <button class="btn primary" id="notebookSave">Guardar correcciones</button>
         </div>
       </div>
@@ -323,18 +343,18 @@
         <div class="admin-current" id="adminCurrentGroup"><span>Grupo activo</span><strong>Selecciona un grupo</strong><small>—</small></div>
       </div>
       <div class="admin-primary-grid">
-        <button class="admin-primary-card tone-percent" onclick="goView('grading')"><span class="admin-card-icon">%</span><div><small>Evaluación</small><strong>Porcentajes del parcial</strong><p id="adminSchemeSummary">Trabajos · Principal · Valores · Actitudes</p></div><b>→</b></button>
-        <button class="admin-primary-card tone-principal" onclick="goView('evaluation')"><span class="admin-card-icon">◎</span><div><small>Componente principal</small><strong id="adminPrincipalTitle">Proyecto / Examen</strong><p id="adminPrincipalSummary">Configura el componente del parcial activo</p></div><b>→</b></button>
-        <button class="admin-primary-card tone-excel" id="adminExportBtn" type="button"><span class="admin-card-icon">X</span><div><small>Concentrado completo</small><strong>Exportar todo a Excel</strong><p>Asistencia, actividades, parciales, extras e instrumentos</p></div><b>↓</b></button>
-        <button class="admin-primary-card tone-backup" id="adminBackupBtn" type="button"><span class="admin-card-icon">⇩</span><div><small>Seguridad</small><strong>Crear respaldo</strong><p>Copia completa de los datos de esta tablet</p></div><b>↓</b></button>
+        <button class="admin-primary-card tone-percent" onclick="goView('grading')"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-percent"></use></svg></span><div><small>Evaluación</small><strong>Porcentajes del parcial</strong><p id="adminSchemeSummary">Trabajos · Principal · Valores · Actitudes</p></div><b>→</b></button>
+        <button class="admin-primary-card tone-principal" onclick="goView('evaluation')"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><div><small>Componente principal</small><strong id="adminPrincipalTitle">Proyecto / Examen</strong><p id="adminPrincipalSummary">Configura el componente del parcial activo</p></div><b>→</b></button>
+        <button class="admin-primary-card tone-excel" id="adminExportBtn" type="button"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-excel"></use></svg></span><div><small>Concentrado completo</small><strong>Exportar todo a Excel</strong><p>Asistencia, actividades, parciales, extras e instrumentos</p></div><b>↓</b></button>
+        <button class="admin-primary-card tone-backup" id="adminBackupBtn" type="button"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><div><small>Seguridad</small><strong>Crear respaldo</strong><p>Copia completa de los datos de esta tablet</p></div><b>↓</b></button>
       </div>
       <div class="panel more-nav-panel">
         <div class="panel-head"><div><h3>Gestión</h3><p>Herramientas complementarias de MiAula.</p></div></div>
         <div class="more-nav-grid compact-admin-grid">
-          <button class="more-nav-card" onclick="goView('groups')"><span>▦</span><strong>Grupos y alumnos</strong><small>Altas, bajas y listas</small></button>
-          <button class="more-nav-card" onclick="goView('activities')"><span>★</span><strong>Calificaciones</strong><small>Crear y revisar actividades</small></button>
-          <button class="more-nav-card" onclick="goView('grading')"><span>%</span><strong>Parcial</strong><small>Esquema, porcentajes y cierre</small></button>
-          <button class="more-nav-card" onclick="goView('evaluation')"><span>◎</span><strong id="moreEvaluationLabel">Proyecto</strong><small>Proyecto, rúbricas o examen</small></button>
+          <button class="more-nav-card" onclick="goView('groups')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-groups"></use></svg></span><strong>Grupos y alumnos</strong><small>Altas, bajas y listas</small></button>
+          <button class="more-nav-card" onclick="goView('activities')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-activity"></use></svg></span><strong>Calificaciones</strong><small>Crear y revisar actividades</small></button>
+          <button class="more-nav-card" onclick="goView('grading')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-percent"></use></svg></span><strong>Parcial</strong><small>Esquema, porcentajes y cierre</small></button>
+          <button class="more-nav-card" onclick="goView('evaluation')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><strong id="moreEvaluationLabel">Proyecto</strong><small>Proyecto, rúbricas o examen</small></button>
         </div>
       </div>
       <div class="grid-2">
@@ -345,19 +365,19 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.2.2 · CETIS</h3><p>Versión CETIS Dark Glass con Centro de Administración visible para porcentajes, Proyecto/Examen, Excel y respaldo.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Dark 2.3.0 · CETIS</h3><p>Rediseño visual inspirado en Dala / Refero, optimizado para tablet y compatible con tus datos actuales.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
 
 <nav class="bottom-app-nav" id="bottomAppNav" aria-label="Navegación principal">
-  <button class="app-tab active" data-app-view="dashboard"><span>⌂</span><b>Inicio</b></button>
-  <button class="app-tab" data-app-view="attendance"><span>✓</span><b>Asistencia</b></button>
-  <button class="app-tab" data-app-view="notebook"><span>▤</span><b>Cuaderno</b></button>
-  <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span>◉</span><b>Ruleta</b></button>
-  <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span>♟</span><b>Equipos</b></button>
-  <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span>⇩</span><b>Respaldo</b></button>
-  <button class="app-tab" data-app-view="more"><span>⚙</span><b>Admin</b></button>
+  <button class="app-tab active" data-app-view="dashboard"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><b>Inicio</b></button>
+  <button class="app-tab" data-app-view="attendance"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-attendance"></use></svg></span><b>Asistencia</b></button>
+  <button class="app-tab" data-app-view="notebook"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg></span><b>Cuaderno</b></button>
+  <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg></span><b>Ruleta</b></button>
+  <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg></span><b>Equipos</b></button>
+  <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><b>Respaldo</b></button>
+  <button class="app-tab" data-app-view="more"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-data"></use></svg></span><b>Datos</b></button>
 </nav>
 
 <div id="undoBar" class="undo-bar hidden"><span id="undoMessage">Cambio guardado</span><button type="button" id="undoNotebook">Deshacer</button></div>
@@ -366,7 +386,7 @@
   <div class="student-drawer-backdrop" id="studentDrawerBackdrop"></div>
   <aside class="student-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="studentDrawerTitle">
     <div class="student-drawer-head"><div><span class="eyebrow">Vista alumno</span><h2 id="studentDrawerTitle">Alumno</h2><p id="studentDrawerMeta"></p></div><button class="icon-btn large-close" id="studentDrawerClose" aria-label="Cerrar">×</button></div>
-    <div class="student-drawer-searchbox"><label for="studentDrawerSearch"><span aria-hidden="true">⌕</span><input id="studentDrawerSearch" type="search" autocomplete="off" placeholder="Buscar por nombre, apellido o No. de lista" aria-label="Buscar alumno"></label><div id="studentDrawerSearchResults" class="student-search-results hidden"></div></div>
+    <div class="student-drawer-searchbox"><label for="studentDrawerSearch"><svg class="ui-icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="studentDrawerSearch" type="search" autocomplete="off" placeholder="Buscar por nombre, apellido o No. de lista" aria-label="Buscar alumno"></label><div id="studentDrawerSearchResults" class="student-search-results hidden"></div></div>
     <div id="studentDrawerBody"></div>
     <div class="student-drawer-foot"><button class="btn subtle" id="studentPrev">← Anterior</button><button class="btn primary" id="studentSaveNext">Guardar y siguiente →</button><button class="btn subtle" id="studentNext">Siguiente →</button></div>
   </aside>
@@ -374,8 +394,8 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.2.2"></script>
-<script src="xlsx-lite.js?v=2.2.2"></script>
-<script src="app.js?v=2.2.2"></script>
+<script src="db.js?v=2.3.0"></script>
+<script src="xlsx-lite.js?v=2.3.0"></script>
+<script src="app.js?v=2.3.0"></script>
 </body>
 </html>

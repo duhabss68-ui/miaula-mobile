@@ -1,8 +1,8 @@
 'use strict';
-const CACHE='miaula-mobile-2.2.2';
+const CACHE='miaula-mobile-2.3.0';
 const ASSETS=[
-  './','./index.html','./styles.css?v=2.2.2','./db.js?v=2.2.2','./xlsx-lite.js?v=2.2.2','./app.js?v=2.2.2','./manifest.webmanifest?v=2.2.2',
-  './assets/miaula_logo.png','./assets/icon-books-192.png?v=2.2.2','./assets/icon-books-512.png?v=2.2.2','./assets/icon-books-maskable-512.png?v=2.2.2'
+  './','./index.html','./styles.css?v=2.3.0','./styles-legacy.css?v=2.3.0','./db.js?v=2.3.0','./xlsx-lite.js?v=2.3.0','./app.js?v=2.3.0','./manifest.webmanifest?v=2.3.0',
+  './assets/miaula_logo.png','./assets/icon-books-192.png?v=2.3.0','./assets/icon-books-512.png?v=2.3.0','./assets/icon-books-maskable-512.png?v=2.3.0'
 ];
 
 self.addEventListener('install',event=>{
@@ -16,7 +16,7 @@ self.addEventListener('install',event=>{
 self.addEventListener('activate',event=>{
   event.waitUntil(
     caches.keys()
-      .then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
+      .then(keys=>Promise.all(keys.filter(k=>k.startsWith('miaula-mobile-')&&k!==CACHE).map(k=>caches.delete(k))))
       .then(()=>self.clients.claim())
   );
 });

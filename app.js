@@ -220,7 +220,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.2.2',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.3.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -308,7 +308,7 @@ async function loadSummary(){
     const th=ga.reduce((n,a)=>n+(+a.class_hours||1),0);
     const ah=ga.reduce((n,a)=>n+(a.status==='F'?0:(+a.class_hours||1)),0);
     const p=+g.current_period||1,total=totalPeriods(g),status=g.course_closed?'Ciclo cerrado':`Parcial ${p}/${total}`;
-    cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div><div class="group-period-chip">${status}</div><button class="btn small primary group-notebook-btn" onclick="openNotebook(${g.id})">▤ Abrir cuaderno</button></div>`);
+    cards.push(`<div class="group-card"><div class="grade">${escapeHtml(g.name)}</div><div class="disc">${escapeHtml(g.discipline||'')}</div><div class="group-stats"><span>${gs.length} alumnos</span><span>${th?(ah*100/th).toFixed(0)+'%':'—'} asistencia</span></div><div class="group-period-chip">${status}</div><button class="btn small primary group-notebook-btn" onclick="openNotebook(${g.id})">Abrir cuaderno</button></div>`);
   }
   $('#dashboardGroups').innerHTML=cards.length?cards.join(''):'<div class="empty-state">Crea tu primer grupo o importa tu información anterior.</div>';
   await renderClassSnapshot();
@@ -1659,7 +1659,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.2.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.3.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
@@ -1783,9 +1783,9 @@ async function renderClassSnapshot(forcedGid=null){
 function toggleClassMode(force=null){
   classMode=force==null?!classMode:!!force;
   document.body.classList.toggle('class-mode',classMode);
-  const text=classMode?'Salir de modo clase':'🎓 Modo clase';
+  const text=classMode?'Salir de modo clase':'Modo clase';
   if($('#classModeTop'))$('#classModeTop').textContent=text;
-  if($('#startClassMode'))$('#startClassMode').textContent=classMode?'✓ Modo clase activo':'🎓 Iniciar clase';
+  if($('#startClassMode'))$('#startClassMode').innerHTML=`<svg class="ui-icon" aria-hidden="true"><use href="#i-class"></use></svg><span>${classMode?'Modo clase activo':'Iniciar clase'}</span>`;
   toast(classMode?'Modo clase activado':'Modo clase desactivado');
 }
 $('#classModeTop').onclick=()=>toggleClassMode();
