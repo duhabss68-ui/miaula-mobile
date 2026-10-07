@@ -491,3 +491,22 @@ table{background:#fff;color:#17283f}th{background:#edf3f9;color:#435873;border-c
 
 /* Strong accessibility: no accidental white text on white surfaces */
 .panel :where(h1,h2,h3,h4,h5,strong,b),.notebook-header :where(h1,h2,h3,h4,strong,b),.student-drawer-panel :where(h1,h2,h3,h4,strong,b){text-shadow:none}
+
+/* 2.2.2 · Centro de Administración visible */
+.app-quick-actions{grid-template-columns:repeat(6,1fr)!important}
+.quick-card.tone-admin>span{background:#edf0ff;color:#4d57b8}
+.admin-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:19px 21px!important}
+.admin-hero-copy h2{margin:4px 0 5px;color:#10233f;font-size:24px}.admin-hero-copy p{margin:0;color:#6b7d94;font-size:13px}
+.admin-current{min-width:285px;padding:13px 16px;border:1px solid #dce5f1;border-radius:16px;background:#f8fbff;color:#10233f}
+.admin-current span,.admin-current small{display:block;color:#72839a;font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:850}.admin-current strong{display:block;margin:5px 0 3px;font-size:16px}.admin-current small{text-transform:none;letter-spacing:0;font-weight:700}
+.admin-primary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.admin-primary-card{position:relative;min-height:142px;display:grid;grid-template-columns:48px minmax(0,1fr) 22px;align-items:start;gap:12px;text-align:left;padding:17px;border:1px solid #dfe7f2;border-radius:20px;background:#fff;color:#12243f;box-shadow:0 10px 26px rgba(7,31,79,.08);cursor:pointer;overflow:hidden}
+.admin-primary-card:before{content:"";position:absolute;inset:0;background:linear-gradient(150deg,rgba(255,255,255,.72),rgba(255,255,255,.12));pointer-events:none}.admin-primary-card>*{position:relative}
+.admin-primary-card:active{transform:scale(.985)}.admin-primary-card .admin-card-icon{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;font-size:20px;font-weight:950;background:#eef4ff;color:#1769ff}.admin-primary-card small{display:block;color:#7b8ca2;font-size:9px;text-transform:uppercase;letter-spacing:.07em;font-weight:900}.admin-primary-card strong{display:block;margin:5px 0 7px;font-size:16px;color:#10233f}.admin-primary-card p{margin:0;color:#65778e;font-size:11px;line-height:1.35}.admin-primary-card>b{align-self:center;color:#7a8da8;font-size:20px}
+.admin-primary-card.tone-percent .admin-card-icon{background:#edf1ff;color:#5360c7}.admin-primary-card.tone-principal .admin-card-icon{background:#f3edff;color:#7454d8}.admin-primary-card.tone-excel .admin-card-icon{background:#eaf8f0;color:#188553}.admin-primary-card.tone-backup .admin-card-icon{background:#eaf4ff;color:#2173d8}
+.compact-admin-grid{grid-template-columns:repeat(4,1fr)}
+/* Administración debe seguir accesible también en Modo Clase. */
+body.class-mode .bottom-app-nav{grid-template-columns:repeat(7,1fr)!important}
+body.class-mode .app-tab[data-app-view="more"]{display:flex!important}
+@media(max-width:1180px){.app-quick-actions{grid-template-columns:repeat(3,1fr)!important}.admin-primary-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:900px){.admin-primary-grid{grid-template-columns:repeat(2,1fr)}.admin-hero{align-items:stretch;flex-direction:column}.admin-current{min-width:0;width:100%}}

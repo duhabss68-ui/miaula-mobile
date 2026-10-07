@@ -8,17 +8,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula 2.2.1 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.2.1">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.2.1">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.2.1">
-  <link rel="stylesheet" href="styles.css?v=2.2.1">
+  <title>MiAula 2.2.2 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.2.2">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.2.2">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.2.2">
+  <link rel="stylesheet" href="styles.css?v=2.2.2">
 </head>
 <body>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.2.1" alt="MiAula">
-    <h1>MiAula 2.1</h1>
+    <img src="assets/icon-books-192.png?v=2.2.2" alt="MiAula">
+    <h1>MiAula 2.2.2</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -27,8 +27,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.2.1" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula</strong><span>2.1 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.2.2" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula</strong><span>2.2.2 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Inicio</span></button>
@@ -39,7 +39,7 @@
       <button class="nav-item" data-view="notebook"><span class="nav-icon">▤</span><span>Cuaderno</span></button>
       <button class="nav-item" data-view="grading"><span class="nav-icon">%</span><span>Parcial</span></button>
       <button class="nav-item" data-view="evaluation"><span class="nav-icon">◎</span><span id="evaluationNavLabel">Proyecto</span></button>
-      <button class="nav-item" data-view="more"><span class="nav-icon">•••</span><span>Más</span></button>
+      <button class="nav-item" data-view="more"><span class="nav-icon">⚙</span><span>Administración</span></button>
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span><small id="systemStatus">Preparando almacenamiento…</small></div>
   </aside>
@@ -52,7 +52,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula 2.1 · CETIS</span>
+        <span class="version-badge">MiAula 2.2.2 · CETIS</span>
         <button class="btn class-mode-btn" id="classModeTop">🎓 Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
       </div>
@@ -81,6 +81,7 @@
         <button class="quick-card tone-orange" onclick="openDynamicsMode('roulette')"><span>◉</span><div><strong>Ruleta</strong><small>Participación y extras</small></div></button>
         <button class="quick-card tone-purple" onclick="openDynamicsMode('teams')"><span>♟</span><div><strong>Equipos</strong><small>2 o 3 integrantes</small></div></button>
         <button class="quick-card tone-slate" onclick="goView('activities')"><span>★</span><div><strong>Nueva actividad</strong><small>Crear trabajo o práctica</small></div></button>
+        <button class="quick-card tone-admin" onclick="goView('more')"><span>⚙</span><div><strong>Administración</strong><small>Porcentajes, Excel y respaldo</small></div></button>
       </div>
       <div id="classSnapshot" class="class-snapshot panel">
         <div class="snapshot-empty">Selecciona un grupo activo para ver el estado de la clase.</div>
@@ -317,13 +318,23 @@
     </section>
 
     <section id="view-more" class="view">
+      <div class="admin-hero panel">
+        <div class="admin-hero-copy"><span class="eyebrow">Centro de administración</span><h2>Configuración y seguridad</h2><p>Accesos directos a las funciones que no deben perderse de vista.</p></div>
+        <div class="admin-current" id="adminCurrentGroup"><span>Grupo activo</span><strong>Selecciona un grupo</strong><small>—</small></div>
+      </div>
+      <div class="admin-primary-grid">
+        <button class="admin-primary-card tone-percent" onclick="goView('grading')"><span class="admin-card-icon">%</span><div><small>Evaluación</small><strong>Porcentajes del parcial</strong><p id="adminSchemeSummary">Trabajos · Principal · Valores · Actitudes</p></div><b>→</b></button>
+        <button class="admin-primary-card tone-principal" onclick="goView('evaluation')"><span class="admin-card-icon">◎</span><div><small>Componente principal</small><strong id="adminPrincipalTitle">Proyecto / Examen</strong><p id="adminPrincipalSummary">Configura el componente del parcial activo</p></div><b>→</b></button>
+        <button class="admin-primary-card tone-excel" id="adminExportBtn" type="button"><span class="admin-card-icon">X</span><div><small>Concentrado completo</small><strong>Exportar todo a Excel</strong><p>Asistencia, actividades, parciales, extras e instrumentos</p></div><b>↓</b></button>
+        <button class="admin-primary-card tone-backup" id="adminBackupBtn" type="button"><span class="admin-card-icon">⇩</span><div><small>Seguridad</small><strong>Crear respaldo</strong><p>Copia completa de los datos de esta tablet</p></div><b>↓</b></button>
+      </div>
       <div class="panel more-nav-panel">
-        <div class="panel-head"><div><h3>Herramientas de administración</h3><p>Todo lo que ya tenía MiAula sigue disponible aquí.</p></div></div>
-        <div class="more-nav-grid">
+        <div class="panel-head"><div><h3>Gestión</h3><p>Herramientas complementarias de MiAula.</p></div></div>
+        <div class="more-nav-grid compact-admin-grid">
           <button class="more-nav-card" onclick="goView('groups')"><span>▦</span><strong>Grupos y alumnos</strong><small>Altas, bajas y listas</small></button>
           <button class="more-nav-card" onclick="goView('activities')"><span>★</span><strong>Calificaciones</strong><small>Crear y revisar actividades</small></button>
-          <button class="more-nav-card" onclick="goView('grading')"><span>%</span><strong>Parcial</strong><small>Esquema y cierre</small></button>
-          <button class="more-nav-card" onclick="goView('evaluation')"><span>◎</span><strong id="moreEvaluationLabel">Proyecto</strong><small>Rúbricas, listas o examen</small></button>
+          <button class="more-nav-card" onclick="goView('grading')"><span>%</span><strong>Parcial</strong><small>Esquema, porcentajes y cierre</small></button>
+          <button class="more-nav-card" onclick="goView('evaluation')"><span>◎</span><strong id="moreEvaluationLabel">Proyecto</strong><small>Proyecto, rúbricas o examen</small></button>
         </div>
       </div>
       <div class="grid-2">
@@ -334,7 +345,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.2.1 · CETIS</h3><p>Versión CETIS Dark Glass: entorno oscuro, superficies claras y alta legibilidad para uso diario.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula 2.2.2 · CETIS</h3><p>Versión CETIS Dark Glass con Centro de Administración visible para porcentajes, Proyecto/Examen, Excel y respaldo.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -346,7 +357,7 @@
   <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span>◉</span><b>Ruleta</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span>♟</span><b>Equipos</b></button>
   <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span>⇩</span><b>Respaldo</b></button>
-  <button class="app-tab" data-app-view="more"><span>•••</span><b>Más</b></button>
+  <button class="app-tab" data-app-view="more"><span>⚙</span><b>Admin</b></button>
 </nav>
 
 <div id="undoBar" class="undo-bar hidden"><span id="undoMessage">Cambio guardado</span><button type="button" id="undoNotebook">Deshacer</button></div>
@@ -363,8 +374,8 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.2.1"></script>
-<script src="xlsx-lite.js?v=2.2.1"></script>
-<script src="app.js?v=2.2.1"></script>
+<script src="db.js?v=2.2.2"></script>
+<script src="xlsx-lite.js?v=2.2.2"></script>
+<script src="app.js?v=2.2.2"></script>
 </body>
 </html>

@@ -187,7 +187,7 @@ function goView(name){
   $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   $('#viewTitle').textContent={
     dashboard:'Inicio',groups:'Mis grupos',attendance:'Asistencia',dynamics:'Ruleta y equipos',
-    activities:'Calificaciones',notebook:'Cuaderno digital',grading:'Parcial',evaluation:'Proyecto',more:'Más'
+    activities:'Calificaciones',notebook:'Cuaderno digital',grading:'Parcial',evaluation:'Proyecto',more:'Administración'
   }[name]||name;
   updateAppNav();
   if(name==='dashboard') loadSummary();
@@ -196,6 +196,7 @@ function goView(name){
   if(name==='grading') loadGrading();
   if(name==='evaluation'){loadInstruments().then(()=>loadPrincipalWorkspace());}
   if(name==='dynamics') loadDynamicsStudents(true);
+  if(name==='more') loadAdminOverview();
   try{localStorage.setItem('miaula:lastView',name);}catch{}
 }
 window.goView=goView;
@@ -219,7 +220,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.2.1',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.2.2',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1649,15 +1650,16 @@ async function buildWorkbook(gid){
   const extraSheet=[['Parcial','No.','Alumno','Movimiento','Puntos','Origen','Actividad','Fecha','Nota']];for(const r of extraRows){const st=sm.get(r.student_id),ac=am.get(r.activity_id);extraSheet.push([r.period,st?.list_number??'',studentLabel(st||{}),r.kind==='good'?'Bueno':r.kind==='bad'?'Malo':'Aplicado',r.kind==='bad'?-r.points:r.points,r.source||'',ac?.title||'',r.created_at?new Date(r.created_at).toLocaleString('es-MX'):'',r.note||'']);}
   return {sheets:[{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
-$('#exportBtn').onclick=async()=>{
-  const gid=+$('#exportGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
-  try{toast('Generando Excel…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel generado');}catch(e){console.error(e);toast(e.message,true);}
-};
+async function exportFullExcelForGroup(gid){
+  gid=+gid||0;if(!gid){toast('Selecciona un grupo',true);return;}
+  try{toast('Generando Excel completo…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel completo generado');}catch(e){console.error(e);toast(e.message,true);}
+}
+$('#exportBtn').onclick=async()=>{await exportFullExcelForGroup(+$('#exportGroup').value);};
 async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.2.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.2.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
@@ -1666,6 +1668,35 @@ const bottomBackupBtn=$('#bottomBackupBtn');
 if(bottomBackupBtn)bottomBackupBtn.onclick=downloadMiAulaBackup;
 $('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!confirm('Restaurar este respaldo reemplazará los datos actuales de la tablet. ¿Continuar?')){e.target.value='';return;}await MiAulaDB.restoreBackup(data);await refreshGroups();await loadInstruments();await loadSummary();toast('Respaldo restaurado correctamente');goView('dashboard');}catch(er){console.error(er);toast(er.message,true);}finally{e.target.value='';}};
 
+
+// -------------------- CENTRO DE ADMINISTRACIÓN --------------------
+async function loadAdminOverview(){
+  const box=$('#adminCurrentGroup'),schemeText=$('#adminSchemeSummary'),principalTitle=$('#adminPrincipalTitle'),principalSummary=$('#adminPrincipalSummary');
+  let gid=+$('#contextGroup')?.value||+$('#exportGroup')?.value||0;
+  if(!gid&&groups.length)gid=+groups[0].id;
+  if(!gid){
+    if(box)box.innerHTML='<span>Grupo activo</span><strong>Sin grupo seleccionado</strong><small>Selecciona un grupo arriba</small>';
+    if(schemeText)schemeText.textContent='Selecciona un grupo para ver el esquema';
+    if(principalTitle)principalTitle.textContent='Proyecto / Examen';
+    if(principalSummary)principalSummary.textContent='Selecciona un grupo para continuar';
+    return;
+  }
+  const g=await getGroupState(gid);if(!g)return;
+  const period=String(g.current_period||1),scheme=await getScheme(gid,period),principal=principalLabel(scheme.principal_type||'project');
+  if(box)box.innerHTML=`<span>Grupo activo</span><strong>${escapeHtml(g.name)} · ${escapeHtml(g.discipline||'')}</strong><small>Parcial ${period} de ${totalPeriods(g)}</small>`;
+  if(schemeText)schemeText.textContent=`Trabajos ${scheme.work_pct}% · ${principal} ${scheme.project_pct}% · Valores ${scheme.values_pct}% · Actitudes ${scheme.attitudes_pct}%`;
+  if(principalTitle)principalTitle.textContent=principal;
+  if(principalSummary)principalSummary.textContent=`Parcial ${period} · ${scheme.project_pct}% del total`;
+}
+
+const adminExportBtn=$('#adminExportBtn');
+if(adminExportBtn)adminExportBtn.onclick=async()=>{
+  const gid=+$('#contextGroup')?.value||+$('#exportGroup')?.value||0;
+  if(!gid){toast('Selecciona un grupo activo',true);return;}
+  await exportFullExcelForGroup(gid);
+};
+const adminBackupBtn=$('#adminBackupBtn');
+if(adminBackupBtn)adminBackupBtn.onclick=downloadMiAulaBackup;
 
 // -------------------- MIAULA 2.1 · EXPERIENCIA DE TABLET --------------------
 function setSaveState(state='saved',text='Todo guardado'){
@@ -1722,6 +1753,7 @@ $('#contextGroup').addEventListener('change',async e=>{
   else if(currentView==='activities')await loadActivities();
   else if(currentView==='grading')await loadGrading();
   else if(currentView==='evaluation')await loadPrincipalWorkspace();
+  else if(currentView==='more')await loadAdminOverview();
 });
 $('#contextNotebook').onclick=()=>{const gid=+$('#contextGroup').value||null;openNotebook(gid);};
 $('#contextAttendance').onclick=()=>{const gid=+$('#contextGroup').value||0;if(gid)$('#attendanceGroup').value=String(gid);goView('attendance');};
