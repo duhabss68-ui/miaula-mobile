@@ -258,3 +258,7 @@ body.class-mode .app-tab[data-app-view="more"]{display:none}
 .student-search-result:last-child{border-bottom:0}.student-search-result:active{background:#edf5ff}.student-search-result b{display:flex;align-items:center;justify-content:center;min-width:34px;height:32px;border-radius:9px;background:#e9f2ff;color:var(--blue);font-size:13px}.student-search-result span{font-weight:750;line-height:1.2}
 .student-search-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
 @media(max-width:900px){.student-drawer-searchbox{padding-left:12px;padding-right:12px}.student-search-results{left:12px;right:12px}}
+
+
+/* 2.1.4 · edición no destructiva de fecha de actividad */
+.date-edit-summary{display:flex;flex-direction:column;gap:4px;padding:12px 14px;margin-bottom:12px;border:1px solid var(--line);border-radius:14px;background:#f8fbff}.date-edit-summary strong{color:var(--navy);font-size:1.05rem}.date-edit-summary small{color:var(--muted)}

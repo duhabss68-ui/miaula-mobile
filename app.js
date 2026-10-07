@@ -218,7 +218,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.1.3').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.1.4').catch(()=>{});
 }
 
 async function init(){
@@ -780,7 +780,7 @@ async function loadActivities(){
   if(g.course_closed){$('#activityCards').innerHTML=`<div class="empty-state">Los ${totalPeriods(g)} parciales están cerrados. El historial permanece en la exportación de Excel.</div>`;return;}
   const arr=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
   $('#activityCards').innerHTML=arr.length
-    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
+    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Fecha ${escapeHtml(a.activity_date||'Sin fecha')} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small subtle" onclick="editActivityDate(${a.id})">Editar fecha</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
     :`<div class="empty-state">Parcial ${p} limpio. Crea la primera actividad.</div>`;
   await syncGroupPeriodIndicators(gid);
 }
@@ -807,6 +807,27 @@ $('#saveGrades').onclick=async()=>{
   }
   toast('Calificaciones guardadas');await loadSummary();
 };
+window.editActivityDate=async id=>{
+  const activity=await MiAulaDB.get('activities',+id);
+  if(!activity){toast('Actividad no encontrada.',true);return;}
+  const current=activity.activity_date||today;
+  openModal('Editar fecha de actividad',`<form id="editActivityDateForm"><div class="date-edit-summary"><strong>${escapeHtml(activity.title)}</strong><small>Parcial ${escapeHtml(activity.period)} · La actividad y sus calificaciones se conservarán.</small></div><label>Fecha de la actividad<input type="date" name="activity_date" value="${escapeHtml(current)}" required></label><p class="muted-text">Al guardar, MiAula recalculará el indicador rojo de calificación máxima con la nueva fecha. No se borrarán calificaciones, puntos extra ni historial.</p><button class="btn primary wide" type="submit">Guardar nueva fecha</button></form>`);
+  $('#editActivityDateForm').onsubmit=async e=>{
+    e.preventDefault();
+    const fd=new FormData(e.target),newDate=String(fd.get('activity_date')||'').trim();
+    if(!parseISODateLocal(newDate)){toast('Selecciona una fecha válida.',true);return;}
+    activity.activity_date=newDate;
+    activity.updated_at=new Date().toISOString();
+    await MiAulaDB.put('activities',activity);
+    if(activeActivity?.id===activity.id) activeActivity=activity;
+    closeModal();
+    await loadActivities();
+    if(notebookData?.group?.id===activity.group_id) await loadNotebook();
+    await loadSummary();
+    toast('Fecha actualizada · calificaciones conservadas');
+  };
+};
+
 window.deleteActivity=async id=>{if(!confirm('¿Eliminar esta actividad y sus calificaciones?'))return;await MiAulaDB.deleteActivity(id);$('#gradePanel').classList.add('hidden');await loadActivities();await loadSummary();toast('Actividad eliminada');};
 
 // -------------------- PARCIAL / ESQUEMA DE EVALUACIÓN --------------------
@@ -1625,7 +1646,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.1.3_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.1.4_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
