@@ -48,6 +48,34 @@ function normalizeText(s){
 function fmtNum(v,d=2){
   return v==null||Number.isNaN(+v)?'—':Number(v).toFixed(d).replace(/\.00$/,'');
 }
+function parseISODateLocal(value){
+  const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return null;
+  const d=new Date(+m[1],+m[2]-1,+m[3]);
+  return Number.isNaN(d.getTime())?null:d;
+}
+function schoolDaysElapsed(activityDate,referenceDate=new Date()){
+  const start=parseISODateLocal(activityDate);if(!start)return 0;
+  const end=new Date(referenceDate.getFullYear(),referenceDate.getMonth(),referenceDate.getDate());
+  if(end<=start)return 0;
+  let count=0;
+  const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+1);
+  while(d<=end){
+    const day=d.getDay();
+    if(day!==0&&day!==6)count++;
+    d.setDate(d.getDate()+1);
+  }
+  return count;
+}
+function activityAvailableMax(activity,referenceDate=new Date()){
+  const original=Number.isFinite(+activity?.max_score)?Math.max(0,+activity.max_score):10;
+  const elapsed=schoolDaysElapsed(activity?.activity_date,referenceDate);
+  return Math.max(0,+(original-elapsed).toFixed(2));
+}
+function activityMaxIndicator(activity){
+  const available=activityAvailableMax(activity);
+  return `<small class="activity-daily-max${available<=0?' zero':''}" title="Indicador según días hábiles transcurridos; no limita la calificación que captures.">Máx. ${fmtNum(available,1)}</small>`;
+}
 function toast(msg,error=false){
   const t=$('#toast');
   t.textContent=msg;
@@ -190,7 +218,7 @@ $('#activityDate').value=today;
 $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  navigator.serviceWorker.register('sw.js?v=2.1.2').catch(()=>{});
+  navigator.serviceWorker.register('sw.js?v=2.1.3').catch(()=>{});
 }
 
 async function init(){
@@ -752,7 +780,7 @@ async function loadActivities(){
   if(g.course_closed){$('#activityCards').innerHTML=`<div class="empty-state">Los ${totalPeriods(g)} parciales están cerrados. El historial permanece en la exportación de Excel.</div>`;return;}
   const arr=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
   $('#activityCards').innerHTML=arr.length
-    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong><br><small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Máx. ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
+    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
     :`<div class="empty-state">Parcial ${p} limpio. Crea la primera actividad.</div>`;
   await syncGroupPeriodIndicators(gid);
 }
@@ -1313,7 +1341,7 @@ function notebookExtraCell(s,pd){
 }
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
-  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span><small>${escapeHtml(a.activity_type)} · /${fmtNum(a.max_score,1)}</small></th>`).join('');
+  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · /${fmtNum(a.max_score,1)}</small></th>`).join('');
   const body=pd.students.map(s=>{
     const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
     const principalCell=principalType==='exam'
@@ -1597,7 +1625,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.1.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.1.3_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
@@ -1778,9 +1806,12 @@ window.openStudentView=async function(period,studentId){
   const ex=await getStudentExtraSummary(notebookData.group.id,studentId,period),gr=pd.gradingMap.get(studentId)||{};
   $('#studentDrawerTitle').textContent=studentLabel(student);
   $('#studentDrawerMeta').textContent=`No. ${student.list_number??'—'} · ${notebookData.group.name} · Parcial ${period}`;
+  const searchInput=$('#studentDrawerSearch'),searchResults=$('#studentDrawerSearchResults');
+  if(searchInput)searchInput.value='';
+  if(searchResults){searchResults.innerHTML='';searchResults.classList.add('hidden');}
   const activities=pd.activities.map((a,i)=>{
     const id=`sv-grade-${period}-${studentId}-${a.id}`,val=drawerInputValue('grade',period,studentId,a.id),max=+a.max_score||10;
-    return `<div class="student-activity-card"><div class="student-activity-copy"><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.activity_type)} · máximo ${fmtNum(max,1)}</small></div><div class="student-score-box"><input id="${id}" class="drawer-score-input" data-kind="grade" data-period="${period}" data-student="${studentId}" data-activity="${a.id}" data-max="${max}" value="${escapeHtml(val)}" placeholder="—" inputmode="decimal">${max>=10?quickButtonsHTML(id,max):''}</div></div>`;
+    return `<div class="student-activity-card"><div class="student-activity-copy"><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · puntaje original ${fmtNum(max,1)}</small></div><div class="student-score-box"><input id="${id}" class="drawer-score-input" data-kind="grade" data-period="${period}" data-student="${studentId}" data-activity="${a.id}" data-max="${max}" value="${escapeHtml(val)}" placeholder="—" inputmode="decimal">${max>=10?quickButtonsHTML(id,max):''}</div></div>`;
   }).join('')||'<div class="empty-state">No hay actividades en este parcial.</div>';
   const principalType=pd.scheme.principal_type||'project';
   let principal='';
@@ -1804,7 +1835,7 @@ function updateStudentDrawerNav(pd){
   $('#studentSaveNext').textContent=last?'Guardar alumno':'Guardar y siguiente →';
 }
 
-async function commitStudentDrawer(move=0){
+async function commitStudentDrawer(move=0,targetStudentId=null){
   if(!studentDrawerState.studentId)return;
   const {period,studentId}=studentDrawerState;
   for(const src of $$('#studentDrawer .drawer-score-input')){
@@ -1815,8 +1846,39 @@ async function commitStudentDrawer(move=0){
   }
   clearTimeout(notebookAutoSaveTimer);
   const ok=await saveNotebookChanges({silent:true,noReload:true,skipSummary:true});if(!ok)return;
-  const pd=notebookData.periods?.[period]||await buildNotebookPeriodData(notebookData.group.id,period),ids=pd.students.map(s=>+s.id),idx=ids.indexOf(+studentId),next=ids[idx+move];
-  if(move&&next)await openStudentView(period,next);else toast('Alumno guardado');
+  const pd=notebookData.periods?.[period]||await buildNotebookPeriodData(notebookData.group.id,period),ids=pd.students.map(s=>+s.id),idx=ids.indexOf(+studentId);
+  const next=targetStudentId!=null?+targetStudentId:ids[idx+move];
+  if((targetStudentId!=null||move)&&next)await openStudentView(period,next);else toast('Alumno guardado');
+}
+
+function renderStudentDrawerSearch(){
+  const input=$('#studentDrawerSearch'),box=$('#studentDrawerSearchResults');
+  if(!input||!box||!studentDrawerState.period||!notebookData)return;
+  const q=normalizeText(input.value),raw=String(input.value||'').trim();
+  if(!q){box.innerHTML='';box.classList.add('hidden');return;}
+  const pd=notebookData.periods?.[studentDrawerState.period];
+  if(!pd)return;
+  const matches=pd.students.filter(s=>{
+    const name=normalizeText(studentLabel(s)),num=String(s.list_number??'');
+    return name.includes(q)||(raw&&num.includes(raw));
+  }).slice(0,8);
+  box.innerHTML=matches.length?matches.map(s=>`<button type="button" class="student-search-result" onclick="jumpToStudentView(${s.id})"><b>${s.list_number??'—'}</b><span>${escapeHtml(studentLabel(s))}</span></button>`).join(''):'<div class="student-search-empty">Sin coincidencias</div>';
+  box.classList.remove('hidden');
+}
+window.jumpToStudentView=async function(studentId){
+  const box=$('#studentDrawerSearchResults');if(box)box.classList.add('hidden');
+  if(+studentId===+studentDrawerState.studentId)return;
+  await commitStudentDrawer(0,+studentId);
+};
+const studentDrawerSearch=$('#studentDrawerSearch');
+if(studentDrawerSearch){
+  studentDrawerSearch.addEventListener('input',renderStudentDrawerSearch);
+  studentDrawerSearch.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.currentTarget.value='';renderStudentDrawerSearch();e.currentTarget.blur();}
+    if(e.key==='Enter'){
+      e.preventDefault();const first=$('#studentDrawerSearchResults .student-search-result');if(first)first.click();
+    }
+  });
 }
 
 function closeStudentDrawer(){
