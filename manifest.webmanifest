@@ -1,13 +1,13 @@
 {
-  "name": "MiAula 2.2.0 CETIS",
+  "name": "MiAula 2.2.1 CETIS",
   "short_name": "MiAula",
   "description": "Control docente offline para CETIS: asistencia por horas, actividades, Proyecto o Examen por parcial, rúbricas, equipos, ruleta, cuaderno digital, puntos extra y Excel.",
   "id": "/miaula-mobile/",
   "start_url": "/miaula-mobile/index.html",
   "scope": "/miaula-mobile/",
   "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "background_color": "#08111f",
+  "theme_color": "#08111f",
   "orientation": "any",
   "icons": [
     {
