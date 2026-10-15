@@ -1,6 +1,6 @@
-@import url("./styles-legacy.css?v=2.4.0");
+@import url("./styles-legacy.css?v=2.4.1");
 
-/* ==========================================================================\n   MiAula Slate 2.4.0 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
+/* ==========================================================================\n   MiAula Slate 2.4.1 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
   color-scheme:dark;
   --void:#111827;
@@ -235,3 +235,42 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
 .extra-balance-card{background:var(--surface-2)!important;color:#fff!important;border:1px solid var(--border)!important}.extra-balance-card.bad{background:var(--danger-soft)!important;border-color:rgba(214,95,100,.24)!important}
 .fatal-banner{background:#5f2029!important;color:#fff!important}
 .source-info{color:var(--text-2)!important}.wheel-meta,.result-panel p,.teams-control-panel p{color:var(--text-2)!important}
+
+
+/* 2.4.1 · Seguimiento acumulado de asistencia CETIS */
+.attendance-monitor-panel{overflow:hidden}
+.attendance-monitor-head{align-items:flex-start!important}
+.attendance-monitor-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:4px 0 16px}
+.attendance-monitor-summary>.empty-state{grid-column:1/-1}
+.attendance-monitor-kpi{min-height:96px;padding:14px 15px;border:1px solid var(--border);border-radius:18px;background:var(--surface-2);display:flex;flex-direction:column;justify-content:center}
+.attendance-monitor-kpi span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);font-weight:700}
+.attendance-monitor-kpi strong{display:block;margin-top:5px;color:var(--text);font-size:27px;font-weight:500;letter-spacing:-.03em}
+.attendance-monitor-kpi small{display:block;margin-top:3px;color:var(--text-3);font-size:10px}
+.attendance-monitor-kpi.risk-ok{border-color:rgba(47,143,116,.22);background:rgba(47,143,116,.07)}
+.attendance-monitor-kpi.risk-warning{border-color:rgba(214,168,75,.24);background:rgba(214,168,75,.07)}
+.attendance-monitor-kpi.risk-critical{border-color:rgba(214,95,100,.27);background:rgba(214,95,100,.08)}
+.attendance-monitor-kpi.risk-ok strong{color:#7BC4AE}.attendance-monitor-kpi.risk-warning strong{color:#E7C57F}.attendance-monitor-kpi.risk-critical strong{color:#E28A8E}
+.attendance-monitor-grid th:nth-child(1),.attendance-monitor-grid td:nth-child(1){width:56px;text-align:center}
+.attendance-monitor-grid th:nth-child(2),.attendance-monitor-grid td:nth-child(2){min-width:220px;position:sticky;left:0;z-index:1;background:var(--surface-1)}
+.attendance-monitor-grid thead th:nth-child(2){z-index:3;background:var(--surface-3)}
+.attendance-monitor-grid td{vertical-align:middle}
+.attendance-risk-row.warning td{background:rgba(214,168,75,.025)}
+.attendance-risk-row.critical td{background:rgba(214,95,100,.035)}
+.attendance-risk-row.warning td:nth-child(2){background:#1c2838}.attendance-risk-row.critical td:nth-child(2){background:#222631}
+.absence-hours{font-weight:700;color:#E28A8E}
+.absence-pct{font-weight:800}.absence-pct.ok{color:#7BC4AE}.absence-pct.warning{color:#E7C57F}.absence-pct.critical{color:#E28A8E}
+.attendance-risk-badge{display:inline-flex;align-items:center;min-height:30px;padding:5px 10px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700;white-space:nowrap}
+.attendance-risk-badge.ok{color:#7BC4AE;background:var(--success-soft);border-color:rgba(47,143,116,.24)}
+.attendance-risk-badge.warning{color:#E7C57F;background:var(--warning-soft);border-color:rgba(214,168,75,.25)}
+.attendance-risk-badge.critical{color:#E28A8E;background:var(--danger-soft);border-color:rgba(214,95,100,.27)}
+.attendance-monitor-note{margin:13px 2px 0;color:var(--text-3);font-size:11px;line-height:1.45}.attendance-monitor-note strong{color:var(--text-2)}
+.attendance-history-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px}
+.attendance-history-summary>div{background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:12px}
+.attendance-history-summary span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3)}
+.attendance-history-summary strong{display:block;margin-top:5px;color:var(--text);font-size:22px;font-weight:500}
+.danger-text{color:#E28A8E!important}.warning-text{color:#E7C57F!important}
+.attendance-history-alert{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--border);background:var(--surface-2);font-size:12px}
+.attendance-history-alert span{color:var(--text-2)}.attendance-history-alert.ok strong{color:#7BC4AE}.attendance-history-alert.warning strong{color:#E7C57F}.attendance-history-alert.critical strong{color:#E28A8E}
+.attendance-history-wrap{max-height:48vh;overflow:auto}.attendance-history-status{min-width:160px}
+@media(max-width:1180px){.attendance-monitor-summary{grid-template-columns:repeat(3,1fr)}.attendance-monitor-summary .attendance-monitor-kpi:nth-child(4),.attendance-monitor-summary .attendance-monitor-kpi:nth-child(5){grid-column:auto}}
+@media(max-width:760px){.attendance-monitor-summary{grid-template-columns:repeat(2,1fr)}.attendance-history-summary{grid-template-columns:repeat(2,1fr)}.attendance-monitor-head{flex-direction:column;align-items:stretch!important}.attendance-monitor-head .btn{width:100%}}

@@ -191,6 +191,7 @@ function goView(name){
   }[name]||name;
   updateAppNav();
   if(name==='dashboard') loadSummary();
+  if(name==='attendance') renderAttendanceMonitor();
   if(name==='activities') loadActivities();
   if(name==='notebook') loadNotebook();
   if(name==='grading') loadGrading();
@@ -220,7 +221,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.1',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -535,10 +536,97 @@ $('#saveAttendance').onclick=async()=>{
       const rec={...(old||{}),group_id:gid,student_id:it.student_id,attendance_date:dt,status:it.status,notes:it.notes||'',class_hours:hours,updated_at:new Date().toISOString()};
       if(old) await MiAulaDB.put('attendance',rec); else await MiAulaDB.add('attendance',rec);
     }
-    toast(`Asistencia guardada · ${hours} hora${hours===1?'':'s'} contabilizadas`);await loadSummary();
+    toast(`Asistencia guardada · ${hours} hora${hours===1?'':'s'} contabilizadas`);await loadSummary();await renderAttendanceMonitor();
     if(currentView==='dynamics') await loadDynamicsStudents(true);
   }catch(e){toast(e.message,true);}
 };
+
+
+// -------------------- SEGUIMIENTO ACUMULADO DE ASISTENCIA --------------------
+function absenceRiskMeta(pct){
+  const value=Number.isFinite(+pct)?+pct:0;
+  if(value>=20)return {key:'critical',label:'20% o más',detail:'Límite alcanzado'};
+  if(value>=15)return {key:'warning',label:'Cerca del 20%',detail:'Revisar asistencia'};
+  return {key:'ok',label:'En rango',detail:'Seguimiento normal'};
+}
+function fmtPct(v){return v==null||!Number.isFinite(+v)?'—':`${(+v).toFixed(1)}%`;}
+async function renderAttendanceMonitor(){
+  const summary=$('#attendanceMonitorSummary'),table=$('#attendanceMonitorTable');
+  if(!summary||!table)return;
+  const gid=+($('#attendanceGroup')?.value||0);
+  if(!gid){
+    summary.innerHTML='<div class="empty-state">Selecciona un grupo para ver el seguimiento acumulado.</div>';
+    table.innerHTML='';
+    return;
+  }
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const records=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const byStudent=new Map();
+  for(const r of records){if(!byStudent.has(r.student_id))byStudent.set(r.student_id,[]);byStudent.get(r.student_id).push(r);}
+  const rows=students.map(st=>{
+    const totals=attendanceTotals(byStudent.get(st.id)||[]);
+    const risk=absenceRiskMeta(totals.absencePct);
+    return {student:st,totals,risk};
+  });
+  const critical=rows.filter(r=>(r.totals.absencePct||0)>=20).length;
+  const warning=rows.filter(r=>(r.totals.absencePct||0)>=15&&(r.totals.absencePct||0)<20).length;
+  const classBlocks=new Map();
+  for(const r of records){const k=r.attendance_date;classBlocks.set(k,Math.max(classBlocks.get(k)||0,+r.class_hours||1));}
+  const classHours=[...classBlocks.values()].reduce((a,b)=>a+b,0);
+  const groupAbsence=rows.length?rows.reduce((n,r)=>n+(r.totals.absencePct||0),0)/rows.length:0;
+  summary.innerHTML=`
+    <div class="attendance-monitor-kpi"><span>Horas registradas</span><strong>${classHours||0}</strong><small>del grupo</small></div>
+    <div class="attendance-monitor-kpi risk-ok"><span>En rango</span><strong>${Math.max(0,rows.length-warning-critical)}</strong><small>menos de 15%</small></div>
+    <div class="attendance-monitor-kpi risk-warning"><span>Cerca del límite</span><strong>${warning}</strong><small>15% a 19.9%</small></div>
+    <div class="attendance-monitor-kpi risk-critical"><span>20% o más</span><strong>${critical}</strong><small>requieren atención</small></div>
+    <div class="attendance-monitor-kpi"><span>Promedio de faltas</span><strong>${rows.length?groupAbsence.toFixed(1)+'%':'—'}</strong><small>grupo activo</small></div>`;
+  if(!rows.length){table.innerHTML='<div class="empty-state">Este grupo no tiene alumnos activos.</div>';return;}
+  table.innerHTML=`<div class="table-wrap"><table class="attendance-monitor-grid"><thead><tr><th>No.</th><th>Alumno</th><th>Hrs</th><th>P</th><th>F</th><th>R</th><th>J</th><th>Faltas</th><th>Estado</th><th></th></tr></thead><tbody>${rows.map(({student,totals,risk})=>`<tr class="attendance-risk-row ${risk.key}"><td>${student.list_number??'—'}</td><td><strong>${escapeHtml(studentLabel(student))}</strong></td><td>${totals.total}</td><td>${totals.P}</td><td class="absence-hours">${totals.F}</td><td>${totals.R}</td><td>${totals.J}</td><td><strong class="absence-pct ${risk.key}">${fmtPct(totals.absencePct)}</strong></td><td><span class="attendance-risk-badge ${risk.key}">${risk.label}</span></td><td><button class="btn small subtle" type="button" onclick="openAttendanceHistory(${student.id})">Historial / corregir</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+window.renderAttendanceMonitor=renderAttendanceMonitor;
+
+async function openAttendanceHistory(studentId){
+  const student=await MiAulaDB.get('students',+studentId);if(!student)return;
+  const records=(await MiAulaDB.byIndex('attendance','student_id',+studentId)).sort((a,b)=>String(b.attendance_date).localeCompare(String(a.attendance_date)));
+  const totals=attendanceTotals(records),risk=absenceRiskMeta(totals.absencePct);
+  const rows=records.length?records.map(r=>`<tr><td><strong>${escapeHtml(r.attendance_date)}</strong></td><td>${+r.class_hours||1} h</td><td><select class="attendance-history-status" data-attendance-id="${r.id}">${['P','F','R','J'].map(st=>`<option value="${st}" ${r.status===st?'selected':''}>${st} · ${{P:'Presente',F:'Falta',R:'Retardo',J:'Justificada'}[st]}</option>`).join('')}</select></td><td><button type="button" class="btn small subtle" onclick="openAttendanceDay('${escapeHtml(r.attendance_date)}')">Abrir día</button></td></tr>`).join(''):'<tr><td colspan="4">Sin registros todavía.</td></tr>';
+  openModal(`Asistencia · ${studentLabel(student)}`,`
+    <div class="attendance-history-summary">
+      <div><span>Horas registradas</span><strong>${totals.total}</strong></div>
+      <div><span>Presentes</span><strong>${totals.P}</strong></div>
+      <div><span>Faltas</span><strong class="danger-text">${totals.F}</strong></div>
+      <div><span>% faltas</span><strong class="${risk.key==='critical'?'danger-text':risk.key==='warning'?'warning-text':''}">${fmtPct(totals.absencePct)}</strong></div>
+    </div>
+    <div class="attendance-history-alert ${risk.key}"><strong>${risk.label}</strong><span>${risk.detail}. Los cambios actualizan el registro existente; no borran el historial.</span></div>
+    <div class="table-wrap attendance-history-wrap"><table><thead><tr><th>Fecha</th><th>Horas</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button class="btn primary wide" id="saveAttendanceHistory" type="button" ${records.length?'':'disabled'}>Guardar correcciones</button>`);
+  const save=$('#saveAttendanceHistory');
+  if(save)save.onclick=async()=>{
+    save.disabled=true;
+    try{
+      const controls=$$('.attendance-history-status');
+      for(const sel of controls){
+        const rec=await MiAulaDB.get('attendance',+sel.dataset.attendanceId);if(!rec)continue;
+        if(rec.status!==sel.value){rec.status=sel.value;rec.updated_at=new Date().toISOString();await MiAulaDB.put('attendance',rec);}
+      }
+      closeModal();
+      await renderAttendanceMonitor();
+      if($('#attendanceDate')?.value)await loadAttendance();
+      await loadSummary();
+      toast('Asistencia histórica actualizada sin borrar registros');
+    }catch(e){toast(e.message,true);save.disabled=false;}
+  };
+}
+window.openAttendanceHistory=openAttendanceHistory;
+window.openAttendanceDay=async(date)=>{
+  closeModal();
+  if($('#attendanceDate'))$('#attendanceDate').value=date;
+  await loadAttendance();
+  document.querySelector('#view-attendance .attendance-toolbar')?.scrollIntoView({behavior:'smooth',block:'start'});
+};
+
+$('#refreshAttendanceMonitor')?.addEventListener('click',renderAttendanceMonitor);
+$('#attendanceGroup')?.addEventListener('change',renderAttendanceMonitor);
 
 // -------------------- RULETA Y EQUIPOS --------------------
 $$('#dynamicsTabs button').forEach(btn=>btn.onclick=()=>setDynamicsMode(btn.dataset.mode));
@@ -1611,9 +1699,11 @@ $('#notebookPresentation').onclick=async()=>{
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.classList.contains('notebook-focus')){document.body.classList.remove('notebook-focus');if($('#notebookPresentation'))$('#notebookPresentation').textContent='▣ Presentación';}});
 
 function attendanceTotals(records){
-  const out={P:0,F:0,R:0,J:0,total:0,attended:0};
+  const out={P:0,F:0,R:0,J:0,total:0,attended:0,absencePct:null};
   for(const a of records){const h=+a.class_hours||1;out[a.status]=(out[a.status]||0)+h;out.total+=h;if(a.status!=='F')out.attended+=h;}
-  out.pct=out.total?Math.round(out.attended*1000/out.total)/10:null;return out;
+  out.pct=out.total?Math.round(out.attended*1000/out.total)/10:null;
+  out.absencePct=out.total?Math.round(out.F*1000/out.total)/10:null;
+  return out;
 }
 async function buildWorkbook(gid){
   const g=await MiAulaDB.get('groups',gid);if(!g)throw new Error('Grupo no encontrado');
@@ -1625,19 +1715,22 @@ async function buildWorkbook(gid){
   const periods=periodNumbers(g);const grading={};for(const p of periods)grading[p]=await computeGroupGrading(gid,p);
   const avgFinal=p=>{const v=grading[p].students.filter(x=>x.final_grade!=null).map(x=>x.final_grade);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const groupAttendance=attendanceTotals(attendance.filter(a=>sm.get(a.student_id)?.active!==0));
+  const studentAttendanceStats=students.map(st=>attendanceTotals(attendance.filter(a=>a.student_id===st.id)));
+  const attendanceCriticalCount=studentAttendanceStats.filter(x=>(x.absencePct||0)>=20).length;
+  const attendanceWarningCount=studentAttendanceStats.filter(x=>(x.absencePct||0)>=15&&(x.absencePct||0)<20).length;
   const classBlocks=new Map();for(const a of attendance){const k=a.attendance_date;classBlocks.set(k,Math.max(classBlocks.get(k)||0,+a.class_hours||1));}
   const classHours=[...classBlocks.values()].reduce((a,b)=>a+b,0);
-  const resumen=[['Indicador','Valor'],['Grupo',g.name],['Grado / semestre',g.grade||''],['Disciplina',g.discipline||''],['Ciclo escolar',g.school_year||''],['Parciales configurados',totalPeriods(g)],['Alumnos activos',students.length],['Alumnos dados de baja',inactive.length],['Horas de clase registradas',classHours],['Horas-presente',groupAttendance.P],['Horas-falta',groupAttendance.F],['Horas-retardo',groupAttendance.R],['Horas-justificadas',groupAttendance.J],['Asistencia ponderada por hora %',groupAttendance.pct],['Parcial activo',g.current_period||1],['Parciales cerrados',(g.closed_periods||[]).join(', ')||'Ninguno'],...periods.map(p=>[`Promedio final Parcial ${p}`,avgFinal(p)]),['Generado',new Date().toLocaleString('es-MX')]];
+  const resumen=[['Indicador','Valor'],['Grupo',g.name],['Grado / semestre',g.grade||''],['Disciplina',g.discipline||''],['Ciclo escolar',g.school_year||''],['Parciales configurados',totalPeriods(g)],['Alumnos activos',students.length],['Alumnos dados de baja',inactive.length],['Horas de clase registradas',classHours],['Horas-presente',groupAttendance.P],['Horas-falta',groupAttendance.F],['Horas-retardo',groupAttendance.R],['Horas-justificadas',groupAttendance.J],['Asistencia ponderada por hora %',groupAttendance.pct],['Faltas ponderadas por hora %',groupAttendance.absencePct],['Alumnos con faltas >=20%',attendanceCriticalCount],['Alumnos entre 15% y 19.9%',attendanceWarningCount],['Parcial activo',g.current_period||1],['Parciales cerrados',(g.closed_periods||[]).join(', ')||'Ninguno'],...periods.map(p=>[`Promedio final Parcial ${p}`,avgFinal(p)]),['Generado',new Date().toLocaleString('es-MX')]];
   const esquema=[['Parcial','Componente principal','Trabajos %','Principal %','Valores %','Actitudes %','Total %','Estado']];for(const p of periods){const s=grading[p].scheme;esquema.push([p,principalLabel(s.principal_type||'project'),s.work_pct,s.project_pct,s.values_pct,s.attitudes_pct,+s.work_pct+ +s.project_pct+ +s.values_pct+ +s.attitudes_pct,(g.closed_periods||[]).includes(+p)?'Cerrado':(+g.current_period===+p&&!g.course_closed?'En curso':'Pendiente')]);}
   const trim=[['No.','Código','Alumno','Parcial','Trabajos','Trabajos %','Componente principal','Tipo principal','Principal %','Valores','Valores %','Actitudes','Actitudes %','Final','Estado','Observación']];for(const p of periods){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.principal_avg,principalLabel(sc.principal_type||'project'),sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
-  const conc=[['No.','Código','Alumno','Grado','Asistencia %','Hrs P','Hrs F','Hrs R','Hrs J',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
+  const conc=[['No.','Código','Alumno','Grado','Asistencia %','Faltas %','Alerta asistencia','Hrs P','Hrs F','Hrs R','Hrs J',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
-    const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.P,at.F,at.R,at.J];
+    const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],risk=absenceRiskMeta(at.absencePct),row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.absencePct,risk.label,at.P,at.F,at.R,at.J];
     for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=gr?.score??null,shown=v!=null?v:(String(gr?.status||'').toUpperCase()==='NP'?'NP':'');row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
     row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,...periods.map(p=>grading[p].students.find(x=>x.id===s.id)?.final_grade??null));conc.push(row);
   }
-  const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Total hrs','Asistencia %']];
-  for(const s of students){const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa);asist.push([s.list_number,studentLabel(s),...dates.map(d=>{const a=attKey.get(`${s.id}:${d}`);return a?`${a.status} ×${a.class_hours||1}`:'';}),at.P,at.F,at.R,at.J,at.total,at.pct]);}
+  const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Total hrs','Asistencia %','Faltas %','Alerta 20%']];
+  for(const s of students){const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),risk=absenceRiskMeta(at.absencePct);asist.push([s.list_number,studentLabel(s),...dates.map(d=>{const a=attKey.get(`${s.id}:${d}`);return a?`${a.status} ×${a.class_hours||1}`:'';}),at.P,at.F,at.R,at.J,at.total,at.pct,at.absencePct,risk.label]);}
   const hourHeaders=['No.','Alumno'];for(const d of dates){const hrs=classBlocks.get(d)||1;for(let h=1;h<=hrs;h++)hourHeaders.push(`${d} H${h}`);}const asistHoras=[hourHeaders];
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
   const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
@@ -1659,7 +1752,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
