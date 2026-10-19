@@ -8,11 +8,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.4.2 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.4.2">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.4.2">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.4.2">
-  <link rel="stylesheet" href="styles.css?v=2.4.2">
+  <title>MiAula Slate 2.4.3 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.4.3">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.4.3">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.4.3">
+  <link rel="stylesheet" href="styles.css?v=2.4.3">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -37,8 +37,8 @@
 
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.4.2" alt="MiAula">
-    <h1>MiAula Slate 2.4.2</h1>
+    <img src="assets/icon-books-192.png?v=2.4.3" alt="MiAula">
+    <h1>MiAula Slate 2.4.3</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -47,8 +47,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.4.2" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.4.2 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.4.3" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.4.3 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -72,7 +72,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.4.2</span>
+        <span class="version-badge">MiAula Slate · 2.4.3</span>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
       </div>
@@ -212,10 +212,44 @@
 
       <div id="teamsMode" class="dynamics-mode hidden">
         <div class="panel teams-control-panel">
-          <div class="teams-toolbar"><label>Integrantes preferidos<select id="teamSize"><option value="3">3 por equipo</option><option value="2">2 por equipo</option></select></label><button class="btn primary large" id="generateTeams">Crear equipos automáticamente</button><button class="btn subtle" id="copyTeams">Copiar equipos</button></div>
-          <p class="muted-text">MiAula evita dejar a un alumno solo. Si es necesario, combina equipos de 2 y 3 integrantes.</p>
+          <div class="panel-head compact-head"><div><h3>Formar equipos</h3><p>Usa el reparto automático o arma los equipos manualmente para tu proyecto.</p></div></div>
+          <div class="segmented team-build-tabs" id="teamBuildTabs">
+            <button class="active" data-team-mode="auto">Automático</button>
+            <button data-team-mode="manual">Manual</button>
+          </div>
+
+          <div id="autoTeamsPanel" class="team-build-panel">
+            <div class="teams-toolbar"><label>Integrantes preferidos<select id="teamSize"><option value="3">3 por equipo</option><option value="2">2 por equipo</option></select></label><button class="btn primary large" id="generateTeams">Crear equipos automáticamente</button><button class="btn subtle" id="copyTeams">Copiar equipos</button></div>
+            <p class="muted-text">MiAula evita dejar a un alumno solo. Si es necesario, combina equipos de 2 y 3 integrantes.</p>
+          </div>
+
+          <div id="manualTeamsPanel" class="team-build-panel hidden">
+            <div class="manual-team-actions">
+              <button class="btn primary" id="addManualTeam">+ Nuevo equipo</button>
+              <button class="btn subtle" id="saveManualTeams">Guardar equipos para Proyecto</button>
+              <button class="btn subtle" id="copyManualTeams">Copiar equipos</button>
+              <button class="btn danger" id="clearManualTeams">Limpiar formación</button>
+            </div>
+            <div id="manualTeamsStatus" class="manual-teams-status">Selecciona un grupo para comenzar.</div>
+            <p class="muted-text">Los equipos manuales usan todos los alumnos activos del grupo y admiten hasta 3 integrantes. Se guardan por grupo y parcial, y después podrás seleccionarlos directamente al evaluar el Proyecto.</p>
+          </div>
         </div>
-        <div id="teamsResult" class="teams-grid"><div class="empty-state">Selecciona un grupo y crea los equipos.</div></div>
+
+        <div id="autoTeamsResult" class="team-build-result">
+          <div id="teamsResult" class="teams-grid"><div class="empty-state">Selecciona un grupo y crea los equipos.</div></div>
+        </div>
+
+        <div id="manualTeamsResult" class="team-build-result hidden">
+          <div class="manual-team-layout">
+            <div class="panel manual-unassigned-panel">
+              <div class="panel-head compact-head"><div><h3>Alumnos sin equipo</h3><p>Toca un equipo y después toca alumnos para agregarlos.</p></div><span id="unassignedCount" class="count-pill">0</span></div>
+              <div id="manualUnassignedStudents" class="manual-student-pool"><div class="empty-state">Selecciona un grupo.</div></div>
+            </div>
+            <div class="manual-team-main">
+              <div id="manualTeamsGrid" class="manual-teams-grid"><div class="empty-state">Crea tu primer equipo.</div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -343,6 +377,7 @@
           <div class="form-grid eval-top">
             <label class="span-2">Instrumento<select id="evalInstrument"></select></label>
             <label class="span-2">Nombre del proyecto<input id="evalTitle" placeholder="Ej. Proyecto Arduino"></label>
+            <label class="span-2">Equipo guardado<select id="evalSavedTeam"><option value="">Seleccionar equipo manual…</option></select></label>
             <label>Equipo<input id="evalTeam" placeholder="Opcional"></label>
             <label>Fecha<input id="evalDate" type="date"></label>
           </div>
@@ -390,7 +425,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.4.2 · CETIS</h3><p>Edición Slate con pase de lista seguro, historial separado y control de alumnos pendientes con Secretaría.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.4.3 · CETIS</h3><p>Edición Slate con control de asistencia y formación manual de equipos enlazada a la evaluación de Proyecto.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -419,8 +454,8 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.4.2"></script>
-<script src="xlsx-lite.js?v=2.4.2"></script>
-<script src="app.js?v=2.4.2"></script>
+<script src="db.js?v=2.4.3"></script>
+<script src="xlsx-lite.js?v=2.4.3"></script>
+<script src="app.js?v=2.4.3"></script>
 </body>
 </html>

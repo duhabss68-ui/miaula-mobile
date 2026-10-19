@@ -33,6 +33,16 @@ const dynamics={
   ratingBusy:false
 };
 
+const manualTeamState={
+  mode:'auto',
+  groupId:null,
+  period:null,
+  students:[],
+  teams:[],
+  selectedTeamId:null,
+  dirty:false
+};
+
 function localDateISO(d=new Date()){
   const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
@@ -221,7 +231,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.2',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.3',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -759,6 +769,12 @@ $('#rouletteGood').onclick=()=>recordRouletteExtra('good');
 $('#rouletteBad').onclick=()=>recordRouletteExtra('bad');
 $('#generateTeams').onclick=generateTeams;
 $('#copyTeams').onclick=copyTeams;
+$$('#teamBuildTabs button').forEach(btn=>btn.onclick=()=>setTeamBuildMode(btn.dataset.teamMode));
+$('#addManualTeam').onclick=addManualTeam;
+$('#saveManualTeams').onclick=saveManualTeams;
+$('#copyManualTeams').onclick=copyManualTeams;
+$('#clearManualTeams').onclick=clearManualTeams;
+$('#evalSavedTeam')?.addEventListener('change',applySavedTeamToEvaluation);
 
 function setDynamicsMode(mode){
   dynamics.mode=mode;
@@ -768,7 +784,12 @@ function setDynamicsMode(mode){
   if(mode!=='roulette'){
     dynamics.used.clear();dynamics.rotation=0;renderUsedStudents();drawWheel();exitRouletteFullscreen();
   }
-  if(mode!=='teams'){dynamics.teams=[];$('#teamsResult').innerHTML='<div class="empty-state">Selecciona un grupo y crea los equipos.</div>';}
+  if(mode!=='teams'){
+    dynamics.teams=[];
+    $('#teamsResult').innerHTML='<div class="empty-state">Selecciona un grupo y crea los equipos.</div>';
+  }else if(manualTeamState.mode==='manual'){
+    loadManualTeamBuilder();
+  }
   updateAppNav();
 }
 
@@ -793,6 +814,7 @@ async function loadDynamicsStudents(reset=true){
   $('#dynamicsSourceInfo').textContent=note;
   if(reset) resetDynamicsSession();
   drawWheel();updateRouletteCounter();
+  if(dynamics.mode==='teams'&&manualTeamState.mode==='manual') await loadManualTeamBuilder();
 }
 
 const WHEEL_PALETTE=[
@@ -960,6 +982,168 @@ function teamSizes(n,preferred){
   if(r===1){if(q>=1)return [...Array(q-1).fill(3),2,2];return[1];}
   return [...Array(q).fill(3),2];
 }
+
+function manualTeamsMetaKey(groupId,period){return `projectTeams:${+groupId}:${String(period)}`;}
+function newManualTeamId(){return `team_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;}
+function setTeamBuildMode(mode){
+  manualTeamState.mode=mode==='manual'?'manual':'auto';
+  $$('#teamBuildTabs button').forEach(b=>b.classList.toggle('active',b.dataset.teamMode===manualTeamState.mode));
+  $('#autoTeamsPanel')?.classList.toggle('hidden',manualTeamState.mode!=='auto');
+  $('#manualTeamsPanel')?.classList.toggle('hidden',manualTeamState.mode!=='manual');
+  $('#autoTeamsResult')?.classList.toggle('hidden',manualTeamState.mode!=='auto');
+  $('#manualTeamsResult')?.classList.toggle('hidden',manualTeamState.mode!=='manual');
+  const presentInput=$('#dynamicsPresentOnly'),presentToggle=presentInput?.closest('label');
+  if(presentToggle)presentToggle.classList.toggle('manual-disabled-note',manualTeamState.mode==='manual');
+  if(presentInput)presentInput.disabled=manualTeamState.mode==='manual';
+  if(manualTeamState.mode==='manual')loadManualTeamBuilder();
+  else loadDynamicsStudents(false);
+}
+
+async function savedProjectTeams(groupId,period){
+  if(!groupId)return null;
+  return MiAulaDB.get('meta',manualTeamsMetaKey(groupId,period));
+}
+
+async function loadManualTeamBuilder(){
+  const gid=+$('#dynamicsGroup').value;
+  if(!gid){
+    manualTeamState.groupId=null;manualTeamState.students=[];manualTeamState.teams=[];manualTeamState.selectedTeamId=null;manualTeamState.dirty=false;
+    renderManualTeams();return;
+  }
+  const g=await getGroupState(gid),period=String(g?.current_period||1);
+  const changedContext=manualTeamState.groupId!==gid||String(manualTeamState.period)!==period;
+  let students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).filter(s=>!isSecretaryPendingStudent(s)).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  manualTeamState.groupId=gid;manualTeamState.period=period;manualTeamState.students=students;
+  if($('#dynamicsSourceInfo'))$('#dynamicsSourceInfo').textContent=`Modo manual · ${students.length} alumnos activos · Pendientes Secretaría excluidos`;
+  if(changedContext||!manualTeamState.dirty){
+    const saved=await savedProjectTeams(gid,period);
+    const validIds=new Set(students.map(s=>+s.id));
+    manualTeamState.teams=((saved?.value?.teams)||[]).map((t,i)=>({
+      id:String(t.id||`saved_${i+1}`),
+      name:String(t.name||`Equipo ${i+1}`),
+      student_ids:[...(t.student_ids||[])].map(Number).filter(id=>validIds.has(id)).slice(0,3)
+    }));
+    manualTeamState.selectedTeamId=manualTeamState.teams[0]?.id||null;
+    manualTeamState.dirty=false;
+  }
+  renderManualTeams();
+}
+
+function manualAssignedIds(){return new Set(manualTeamState.teams.flatMap(t=>t.student_ids.map(Number)));}
+function selectedManualTeam(){return manualTeamState.teams.find(t=>t.id===manualTeamState.selectedTeamId)||null;}
+function manualTeamStatusText(){
+  if(!manualTeamState.groupId)return 'Selecciona un grupo para comenzar.';
+  const assigned=manualAssignedIds().size,total=manualTeamState.students.length;
+  return `Parcial ${manualTeamState.period} · ${manualTeamState.teams.length} equipo${manualTeamState.teams.length===1?'':'s'} · ${assigned}/${total} alumnos asignados${manualTeamState.dirty?' · Cambios sin guardar':' · Guardado/actualizado'}`;
+}
+
+function renderManualTeams(){
+  const status=$('#manualTeamsStatus'),pool=$('#manualUnassignedStudents'),grid=$('#manualTeamsGrid'),count=$('#unassignedCount');
+  if(status)status.textContent=manualTeamStatusText();
+  if(!pool||!grid)return;
+  if(!manualTeamState.groupId){
+    if(count)count.textContent='0';
+    pool.innerHTML='<div class="empty-state">Selecciona un grupo.</div>';
+    grid.innerHTML='<div class="empty-state">Crea tu primer equipo.</div>';return;
+  }
+  const assigned=manualAssignedIds(),unassigned=manualTeamState.students.filter(s=>!assigned.has(+s.id));
+  if(count)count.textContent=String(unassigned.length);
+  const selected=selectedManualTeam();
+  pool.innerHTML=unassigned.length
+    ?unassigned.map(s=>`<button type="button" class="manual-student-chip" data-student-id="${s.id}" ${!selected?'disabled title="Selecciona primero un equipo"':''}><b>${s.list_number??'—'}</b><span>${escapeHtml(studentLabel(s))}</span><small>${selected?'Agregar':'Selecciona equipo'}</small></button>`).join('')
+    :'<div class="empty-state compact">Todos los alumnos activos ya tienen equipo.</div>';
+  pool.querySelectorAll('.manual-student-chip:not(:disabled)').forEach(btn=>btn.onclick=()=>addStudentToManualTeam(+btn.dataset.studentId));
+  grid.innerHTML=manualTeamState.teams.length?manualTeamState.teams.map((t,i)=>{
+    const active=t.id===manualTeamState.selectedTeamId;
+    const members=t.student_ids.map(id=>manualTeamState.students.find(s=>+s.id===+id)).filter(Boolean);
+    return `<article class="manual-team-card${active?' active':''}" data-team-id="${escapeHtml(t.id)}">
+      <div class="manual-team-card-head">
+        <button type="button" class="manual-team-select" data-action="select"><span>Equipo ${i+1}</span><small>${members.length}/3 integrantes</small></button>
+        <button type="button" class="manual-team-delete" data-action="delete" title="Eliminar equipo">×</button>
+      </div>
+      <label class="manual-team-name">Nombre<input data-action="rename" value="${escapeHtml(t.name)}" maxlength="40"></label>
+      <div class="manual-team-members">${members.length?members.map(s=>`<div class="manual-team-member"><b>${s.list_number??'—'}</b><span>${escapeHtml(studentLabel(s))}</span><button type="button" data-action="remove" data-student-id="${s.id}" title="Quitar del equipo">×</button></div>`).join(''):'<div class="manual-team-empty">Selecciona este equipo y agrega alumnos desde la lista.</div>'}</div>
+    </article>`;
+  }).join(''):'<div class="empty-state">Crea tu primer equipo y después agrega alumnos.</div>';
+  grid.querySelectorAll('.manual-team-card').forEach(card=>{
+    const id=card.dataset.teamId;
+    card.querySelector('[data-action="select"]').onclick=()=>{manualTeamState.selectedTeamId=id;renderManualTeams();};
+    card.querySelector('[data-action="delete"]').onclick=()=>deleteManualTeam(id);
+    const input=card.querySelector('[data-action="rename"]');
+    input.addEventListener('pointerdown',()=>{manualTeamState.selectedTeamId=id;card.classList.add('active');});
+    input.addEventListener('change',()=>renameManualTeam(id,input.value));
+    card.querySelectorAll('[data-action="remove"]').forEach(b=>b.onclick=()=>removeStudentFromManualTeam(id,+b.dataset.studentId));
+  });
+}
+
+function addManualTeam(){
+  if(!manualTeamState.groupId){toast('Selecciona un grupo primero.',true);return;}
+  const n=manualTeamState.teams.length+1,id=newManualTeamId();
+  manualTeamState.teams.push({id,name:`Equipo ${n}`,student_ids:[]});manualTeamState.selectedTeamId=id;manualTeamState.dirty=true;renderManualTeams();
+}
+function deleteManualTeam(id){
+  const t=manualTeamState.teams.find(x=>x.id===id);if(!t)return;
+  if(t.student_ids.length&&!confirm(`¿Eliminar ${t.name}? Sus alumnos volverán a quedar sin equipo.`))return;
+  manualTeamState.teams=manualTeamState.teams.filter(x=>x.id!==id);
+  if(manualTeamState.selectedTeamId===id)manualTeamState.selectedTeamId=manualTeamState.teams[0]?.id||null;
+  manualTeamState.dirty=true;renderManualTeams();
+}
+function renameManualTeam(id,value){
+  const t=manualTeamState.teams.find(x=>x.id===id);if(!t)return;
+  t.name=String(value||'').trim()||'Equipo';manualTeamState.dirty=true;renderManualTeams();
+}
+function addStudentToManualTeam(studentId){
+  const t=selectedManualTeam();if(!t){toast('Selecciona primero el equipo.',true);return;}
+  if(t.student_ids.length>=3){toast('Este equipo ya tiene 3 integrantes.',true);return;}
+  if(manualAssignedIds().has(+studentId)){toast('Ese alumno ya está asignado a un equipo.',true);return;}
+  t.student_ids.push(+studentId);manualTeamState.dirty=true;renderManualTeams();
+}
+function removeStudentFromManualTeam(teamId,studentId){
+  const t=manualTeamState.teams.find(x=>x.id===teamId);if(!t)return;
+  t.student_ids=t.student_ids.filter(id=>+id!==+studentId);manualTeamState.selectedTeamId=teamId;manualTeamState.dirty=true;renderManualTeams();
+}
+async function saveManualTeams(){
+  if(!manualTeamState.groupId){toast('Selecciona un grupo primero.',true);return;}
+  const bad=manualTeamState.teams.find(t=>t.student_ids.length>3);if(bad){toast(`${bad.name} supera 3 integrantes.`,true);return;}
+  const payload={version:1,group_id:+manualTeamState.groupId,period:String(manualTeamState.period),teams:manualTeamState.teams.map((t,i)=>({id:t.id,name:String(t.name||`Equipo ${i+1}`),student_ids:t.student_ids.map(Number)})),updated_at:new Date().toISOString()};
+  await MiAulaDB.put('meta',{key:manualTeamsMetaKey(payload.group_id,payload.period),value:payload});
+  manualTeamState.dirty=false;renderManualTeams();
+  if(+$('#evalGroup')?.value===payload.group_id)await loadEvalSavedTeams(payload.group_id,payload.period);
+  const unassigned=manualTeamState.students.length-manualAssignedIds().size;
+  toast(`Equipos guardados para Proyecto${unassigned?` · ${unassigned} alumno${unassigned===1?'':'s'} sin equipo`:''}`);
+}
+async function clearManualTeams(){
+  if(!manualTeamState.groupId)return;
+  if(manualTeamState.teams.length&&!confirm('¿Limpiar la formación manual actual? Los equipos guardados se reemplazarán cuando vuelvas a guardar.'))return;
+  manualTeamState.teams=[];manualTeamState.selectedTeamId=null;manualTeamState.dirty=true;renderManualTeams();
+}
+async function copyManualTeams(){
+  if(!manualTeamState.teams.length){toast('No hay equipos manuales para copiar.',true);return;}
+  const sm=new Map(manualTeamState.students.map(s=>[+s.id,s]));
+  const text=manualTeamState.teams.map(t=>`${t.name}\n${t.student_ids.map(id=>{const s=sm.get(+id);return s?`${s.list_number}. ${studentLabel(s)}`:'';}).filter(Boolean).join('\n')}`).join('\n\n');
+  try{await navigator.clipboard.writeText(text);toast('Equipos manuales copiados');}catch{toast('No se pudo copiar automáticamente.',true);}
+}
+
+async function loadEvalSavedTeams(gid,period){
+  const select=$('#evalSavedTeam');if(!select)return;
+  if(!gid){select.innerHTML='<option value="">Seleccionar equipo manual…</option>';return;}
+  const saved=await savedProjectTeams(gid,period),teams=saved?.value?.teams||[];
+  select.innerHTML='<option value="">Seleccionar equipo manual…</option>'+teams.map(t=>`<option value="${escapeHtml(String(t.id))}">${escapeHtml(t.name)} · ${(t.student_ids||[]).length} integrante${(t.student_ids||[]).length===1?'':'s'}</option>`).join('');
+  select.dataset.teams=JSON.stringify(teams);
+}
+function applySavedTeamToEvaluation(){
+  const select=$('#evalSavedTeam'),id=select?.value;if(!select)return;
+  let teams=[];try{teams=JSON.parse(select.dataset.teams||'[]');}catch{}
+  const team=teams.find(t=>String(t.id)===String(id));
+  $$('#evalStudents input').forEach(x=>x.checked=false);
+  if(!team){$('#evalTeam').value='';return;}
+  const ids=new Set((team.student_ids||[]).map(Number));
+  let selected=0;
+  $$('#evalStudents input').forEach(x=>{x.checked=ids.has(+x.value);if(x.checked)selected++;});
+  $('#evalTeam').value=team.name||'';
+  toast(`${team.name}: ${selected} alumno${selected===1?'':'s'} seleccionado${selected===1?'':'s'}`);
+}
+
 async function generateTeams(){
   await loadDynamicsStudents(false);
   const pool=shuffled(dynamics.students),preferred=+$('#teamSize').value;
@@ -1351,6 +1535,7 @@ async function loadPrincipalWorkspace(){
     $('#projectWorkspace')?.classList.remove('hidden');
     $('#examWorkspace')?.classList.add('hidden');
     if($('#evalStudents')){$('#evalStudents').className='student-picker empty-state';$('#evalStudents').textContent='Selecciona un grupo.';}
+    if($('#evalSavedTeam'))$('#evalSavedTeam').innerHTML='<option value="">Seleccionar equipo manual…</option>';
     if($('#examGradeList'))$('#examGradeList').innerHTML='<div class="empty-state">Selecciona un grupo.</div>';
     if($('#evaluationPeriodBadge'))$('#evaluationPeriodBadge').textContent='Selecciona un grupo';
     return;
@@ -1376,6 +1561,7 @@ async function loadPrincipalWorkspace(){
     await loadExamScores(gid,p);
   }else{
     await loadEvalStudents(gid);
+    await loadEvalSavedTeams(gid,p);
     await loadEvalHistory(gid,p);
   }
   await syncGroupPeriodIndicators(gid);
@@ -1434,6 +1620,8 @@ $('#saveEvaluation').onclick=async()=>{
   }
   toast('Proyecto guardado'+(grade!=null?` · ${grade.toFixed(2)}`:''));
   $$('#evalStudents input').forEach(x=>x.checked=false);
+  if($('#evalSavedTeam'))$('#evalSavedTeam').value='';
+  $('#evalTeam').value='';
   $('#evalNotes').value='';
   await loadEvalHistory(gid,p);
   await loadSummary();
@@ -1880,7 +2068,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.3_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }

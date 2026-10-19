@@ -1,6 +1,6 @@
-@import url("./styles-legacy.css?v=2.4.2");
+@import url("./styles-legacy.css?v=2.4.3");
 
-/* ==========================================================================\n   MiAula Slate 2.4.2 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
+/* ==========================================================================\n   MiAula Slate 2.4.3 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
   color-scheme:dark;
   --void:#111827;
@@ -303,3 +303,27 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
 .attendance-history-summary{grid-template-columns:repeat(5,1fr)!important}
 @media(max-width:1180px){.attendance-stats{grid-template-columns:repeat(4,1fr)!important}.attendance-monitor-summary{grid-template-columns:repeat(3,1fr)!important}.attendance-history-summary{grid-template-columns:repeat(3,1fr)!important}}
 @media(max-width:820px){.attendance-page-head{flex-direction:column}.attendance-page-head .btn{width:100%}.attendance-stats{grid-template-columns:repeat(2,1fr)!important}.attendance-row-actions{grid-column:2;justify-content:flex-start}.secretary-pending-grid{grid-template-columns:1fr}.attendance-history-summary{grid-template-columns:repeat(2,1fr)!important}}
+
+/* 2.4.3 · Equipos manuales persistentes para Proyecto */
+.compact-head{margin-bottom:10px!important}.compact-head h3{margin:0}.compact-head p{margin:3px 0 0}
+.team-build-tabs{width:max-content;min-width:300px;margin-bottom:15px}
+.team-build-panel.hidden,.team-build-result.hidden{display:none!important}
+.manual-team-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:2px}
+.manual-teams-status{margin-top:12px;padding:10px 13px;border:1px solid var(--border);border-radius:13px;background:var(--surface-2);color:var(--text-2);font-size:12px;font-weight:700}
+.manual-disabled-note{opacity:.58}.manual-disabled-note:after{content:' · Solo aplica al modo automático';font-size:10px;color:var(--text-3)}
+.manual-team-layout{display:grid;grid-template-columns:minmax(300px,.72fr) minmax(520px,1.55fr);gap:14px;align-items:start}
+.manual-unassigned-panel{margin-bottom:0!important;position:sticky;top:122px;max-height:calc(100vh - 170px);overflow:hidden}
+.manual-student-pool{display:grid;gap:7px;max-height:calc(100vh - 285px);overflow:auto;padding-right:3px;-webkit-overflow-scrolling:touch}
+.count-pill{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:34px;padding:0 10px;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:13px;font-weight:900;border:1px solid rgba(79,124,172,.22)}
+.manual-student-chip{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:52px;padding:7px 9px;border:1px solid var(--border);border-radius:13px;background:var(--surface-2);color:var(--text-1);text-align:left;cursor:pointer;transition:background .16s,border-color .16s,transform .12s}
+.manual-student-chip b{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:rgba(79,124,172,.16);color:#AFC8DF;font-size:12px}.manual-student-chip span{font-weight:750;white-space:normal;line-height:1.2}.manual-student-chip small{color:var(--primary);font-size:10px;font-weight:850}.manual-student-chip:active{transform:scale(.985);background:var(--surface-3)}.manual-student-chip:disabled{cursor:default;opacity:.58}.manual-student-chip:disabled small{color:var(--text-3)}
+.manual-teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}
+.manual-team-card{border:1px solid var(--border);border-radius:20px;background:var(--surface-1);overflow:hidden;transition:border-color .17s,background .17s,transform .14s;min-width:0}.manual-team-card.active{border-color:rgba(79,124,172,.72);box-shadow:0 0 0 2px rgba(79,124,172,.10) inset;background:#1B2737}
+.manual-team-card-head{display:grid;grid-template-columns:1fr 42px;gap:6px;align-items:stretch;padding:8px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.manual-team-select{border:0;background:transparent;color:var(--text-1);text-align:left;padding:5px 7px;border-radius:10px;cursor:pointer}.manual-team-select span{display:block;font-weight:850;font-size:14px}.manual-team-select small{display:block;color:var(--text-2);margin-top:2px;font-size:10px}.manual-team-delete{border:1px solid rgba(214,95,100,.18);background:rgba(214,95,100,.08);color:#E98A8E;border-radius:11px;font-size:20px;cursor:pointer}
+.manual-team-name{margin:10px 12px 7px!important;font-size:10px!important;color:var(--text-2)!important}.manual-team-name input{margin-top:5px;min-height:40px!important;background:var(--surface-2)!important;font-weight:750}
+.manual-team-members{display:grid;gap:7px;padding:5px 12px 13px}.manual-team-member{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;gap:8px;min-height:45px;padding:5px 6px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:rgba(255,255,255,.025)}.manual-team-member b{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:rgba(79,124,172,.14);color:#B5CBE0;font-size:11px}.manual-team-member span{font-size:12px;font-weight:750;white-space:normal;line-height:1.15}.manual-team-member button{width:30px;height:30px;border:0;border-radius:9px;background:rgba(214,95,100,.08);color:#E98A8E;font-size:17px;cursor:pointer}.manual-team-empty{min-height:72px;display:grid;place-items:center;text-align:center;padding:12px;color:var(--text-3);font-size:11px;border:1px dashed var(--border);border-radius:12px}
+.empty-state.compact{padding:18px}
+#evalSavedTeam{font-weight:750}
+@media(max-width:1050px){.manual-team-layout{grid-template-columns:300px 1fr}.manual-teams-grid{grid-template-columns:1fr}.manual-unassigned-panel{top:112px}}
+@media(max-width:760px){.manual-team-layout{grid-template-columns:1fr}.manual-unassigned-panel{position:relative;top:auto;max-height:none}.manual-student-pool{max-height:320px}.manual-team-actions .btn{flex:1 1 45%}.team-build-tabs{width:100%;min-width:0}}
