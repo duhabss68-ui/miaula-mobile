@@ -8,11 +8,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.4.4 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.4.4">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.4.4">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.4.4">
-  <link rel="stylesheet" href="styles.css?v=2.4.4">
+  <title>MiAula Slate 2.4.5 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.4.5">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.4.5">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.4.5">
+  <link rel="stylesheet" href="styles.css?v=2.4.5">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -37,8 +37,8 @@
 
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.4.4" alt="MiAula">
-    <h1>MiAula Slate 2.4.4</h1>
+    <img src="assets/icon-books-192.png?v=2.4.5" alt="MiAula">
+    <h1>MiAula Slate 2.4.5</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -47,8 +47,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.4.4" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.4.4 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.4.5" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.4.5 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -72,7 +72,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.4.4</span>
+        <span class="version-badge">MiAula Slate · 2.4.5</span>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
       </div>
@@ -212,13 +212,13 @@
 
       <div id="teamsMode" class="dynamics-mode hidden">
         <div class="panel teams-control-panel">
-          <div class="teams-toolbar"><label>Integrantes preferidos<select id="teamSize"><option value="3">3 por equipo</option><option value="2">2 por equipo</option></select></label><button class="btn primary large" id="manualTeams">Crear equipos manualmente</button><button class="btn subtle large" id="generateTeams">Crear automáticamente</button><button class="btn subtle" id="openTeamNotebook">Libreta por equipos</button><button class="btn subtle" id="copyTeams">Copiar equipos</button><button class="btn danger" id="clearTeams">Limpiar equipos</button></div>
+          <div class="teams-toolbar"><label>Integrantes preferidos<select id="teamSize"><option value="3">3 por equipo</option><option value="2">2 por equipo</option></select></label><button class="btn primary large" id="manualTeams">Crear equipos</button><button class="btn subtle large" id="generateTeams">Crear automáticamente</button><button class="btn subtle" id="openTeamNotebook">Libreta por equipos</button><button class="btn subtle" id="copyTeams">Copiar equipos</button><button class="btn danger" id="clearTeams">Limpiar equipos</button></div>
           <div class="team-saved-status"><strong id="teamsSavedInfo">Sin equipos guardados</strong><span>Los equipos permanecen guardados hasta que tú los limpies. Las calificaciones no se borran.</span></div>
           <p class="muted-text"><strong>Equipos usa siempre la lista completa del grupo.</strong> La asistencia del día no limita quién puede integrarse. Solo se excluyen alumnos dados de baja o pendientes de confirmación con Secretaría.</p>
           <div id="manualTeamsPanel" class="manual-teams-panel hidden">
             <div class="manual-teams-head">
-              <div><span class="eyebrow">Asignación manual</span><h3>Armar equipos con todos los alumnos del grupo</h3><p>Asigna cada alumno al equipo que tú quieras. Un alumno puede formar parte del equipo aunque hoy no haya asistido.</p></div>
-              <div class="manual-team-actions"><button type="button" class="btn small subtle" id="addManualTeam">+ Equipo</button><button type="button" class="btn small subtle" id="removeManualTeam">− Equipo</button><button type="button" class="btn small" id="cancelManualTeams">Cancelar</button><button type="button" class="btn small primary" id="saveManualTeams">Guardar equipos</button></div>
+              <div><span class="eyebrow">Equipos del grupo</span><h3>Selecciona alumnos y arma cada equipo</h3><p>Crea un equipo y toca alumnos de la lista. Al agregarlos desaparecen de “Disponibles”. Un equipo completo cambia de color para identificarlo de inmediato.</p></div>
+              <div class="manual-team-actions"><button type="button" class="btn small primary" id="addManualTeam">+ Crear equipo</button><button type="button" class="btn small subtle" id="removeManualTeam">Quitar último</button><button type="button" class="btn small" id="cancelManualTeams">Cancelar</button><button type="button" class="btn small primary" id="saveManualTeams">Guardar equipos</button></div>
             </div>
             <div id="manualTeamSummary" class="manual-team-summary"></div>
             <div id="manualTeamRoster" class="manual-team-roster"></div>
@@ -413,7 +413,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.4.4 · CETIS</h3><p>Edición Slate con equipos persistentes, creación manual y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.4.5 · CETIS</h3><p>Edición Slate con equipos persistentes, creación manual y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -442,8 +442,8 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.4.4"></script>
-<script src="xlsx-lite.js?v=2.4.4"></script>
-<script src="app.js?v=2.4.4"></script>
+<script src="db.js?v=2.4.5"></script>
+<script src="xlsx-lite.js?v=2.4.5"></script>
+<script src="app.js?v=2.4.5"></script>
 </body>
 </html>
