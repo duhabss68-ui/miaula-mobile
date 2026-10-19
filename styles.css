@@ -342,3 +342,25 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
 .saved-team-card.saved-forming .team-index{background:rgba(214,168,75,.14);border-color:rgba(214,168,75,.26);color:#E6C985}
 .team-saved-status strong{transition:color .18s ease}
 .manual-team-summary .manual-summary-main:after{content:'Guardado automático';margin-left:8px;padding:4px 7px;border-radius:999px;background:rgba(79,124,172,.12);border:1px solid rgba(79,124,172,.20);color:#A9C2DA;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+
+/* 2.4.7 · Calificación por equipos flexible + integrantes protagonistas */
+.team-notebook-top{display:block!important}
+.team-notebook-title{width:100%!important;min-width:0!important;padding:2px 2px 0}
+.team-notebook-title>span.eyebrow{display:block;margin-bottom:5px}
+.team-notebook-title>strong{font-size:30px!important;line-height:1.08!important;font-weight:760!important;letter-spacing:-.025em!important;color:#F5F7FA!important}
+#notebookTeamMembers{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;width:100%!important;max-width:none!important;margin-top:14px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-height:92px}
+.team-member-display{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:center;gap:11px;min-width:0;min-height:76px;padding:12px 14px;border-radius:18px;background:linear-gradient(180deg,rgba(79,124,172,.14),rgba(32,43,60,.92));border:1px solid rgba(169,194,218,.22);color:#F5F7FA}
+.team-member-display b{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:rgba(79,124,172,.22);border:1px solid rgba(169,194,218,.18);color:#DCE8F5;font-size:14px;font-weight:850}
+.team-member-display strong{min-width:0;color:#F5F7FA!important;font-size:21px!important;line-height:1.2!important;font-weight:720!important;letter-spacing:-.01em;white-space:normal;overflow-wrap:anywhere}
+.team-member-display.empty{grid-template-columns:1fr;color:var(--text-2)}
+.team-notebook-nav{display:flex!important;justify-content:flex-end!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}
+.team-notebook-nav select{min-width:190px!important;width:auto!important;max-width:280px}
+.team-grade-strip{margin-top:12px!important}
+@media(max-width:980px){
+  #notebookTeamMembers{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));min-height:78px}
+  .team-member-display{min-height:66px;padding:10px 12px}.team-member-display strong{font-size:18px!important}
+  .team-notebook-title>strong{font-size:26px!important}
+}
+@media(max-width:680px){
+  #notebookTeamMembers{grid-template-columns:1fr}.team-notebook-nav{justify-content:flex-start!important}.team-notebook-nav select{width:100%!important;max-width:none!important}
+}

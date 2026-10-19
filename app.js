@@ -224,7 +224,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.6',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.7',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -965,7 +965,10 @@ async function spinWheel(){
 }
 
 function teamsMetaKey(gid){return `savedTeams:${+gid}`;}
-function isUsableTeam(team){const n=Array.isArray(team?.member_ids)?team.member_ids.length:Array.isArray(team?.members)?team.members.length:0;return team?.complete!==false&&n>=2;}
+function teamMemberCount(team){return Array.isArray(team?.member_ids)?team.member_ids.length:Array.isArray(team?.members)?team.members.length:0;}
+// Todo equipo con al menos un integrante puede calificarse. “Completo” es solo un estado visual.
+function isUsableTeam(team){return teamMemberCount(team)>=1;}
+function isCompleteTeam(team){return team?.complete!==false&&teamMemberCount(team)>=1;}
 async function readSavedTeams(gid){
   gid=+gid||0;if(!gid)return {record:null,teams:[]};
   const record=await MiAulaDB.get('meta',teamsMetaKey(gid));
@@ -1010,16 +1013,18 @@ function renderSavedTeams(teams,record=null){
     $('#clearTeams')?.setAttribute('disabled','disabled');
     return;
   }
-  const completeCount=teams.filter(isUsableTeam).length,formingCount=teams.length-completeCount;
-  if(completeCount)$('#openTeamNotebook')?.removeAttribute('disabled');else $('#openTeamNotebook')?.setAttribute('disabled','disabled');
+  const completeCount=teams.filter(isCompleteTeam).length,formingCount=teams.filter(t=>isUsableTeam(t)&&!isCompleteTeam(t)).length,gradableCount=teams.filter(isUsableTeam).length;
+  if(gradableCount)$('#openTeamNotebook')?.removeAttribute('disabled');else $('#openTeamNotebook')?.setAttribute('disabled','disabled');
   $('#clearTeams')?.removeAttribute('disabled');
   if(info){
     const d=record?.updated_at?new Date(record.updated_at).toLocaleDateString('es-MX'):'';
     info.textContent=`${completeCount} completos${formingCount?` · ${formingCount} en formación`:''}${record?.is_draft?' · borrador guardado':''}${d?` · ${d}`:''}`;
   }
   box.innerHTML=teams.map((t,i)=>{
-    const complete=isUsableTeam(t),rawIndex=Number.isFinite(t.source_index)?t.source_index:i;
-    return `<div class="team-card saved-team-card ${complete?'saved-complete':'saved-forming'}"><div class="team-card-head"><div><h3>${escapeHtml(t.name)} · ${t.members.length}</h3><small>${complete?'Equipo completo':'En formación · guardado'}</small></div><span class="team-index">${rawIndex+1}</span></div><ul>${t.members.map(s=>`<li class="${s.active===0?'inactive-member':''}"><b>${s.list_number??'—'}</b><span>${escapeHtml(studentLabel(s))}</span>${s.active===0?'<small>Baja</small>':''}</li>`).join('')}</ul><div class="team-card-actions">${complete?`<button class="btn small subtle" onclick="openTeamNotebook(${gid},${rawIndex})">Libreta</button><button class="btn small primary" onclick="openTeamProject(${gid},${rawIndex})">Evaluar proyecto</button>`:`<button class="btn small subtle" onclick="openManualTeamBuilder()">Continuar armando</button>`}</div></div>`;
+    const complete=isCompleteTeam(t),usable=isUsableTeam(t),rawIndex=Number.isFinite(t.source_index)?t.source_index:i;
+    const gradeActions=usable?`<button class="btn small subtle" onclick="openTeamNotebook(${gid},${rawIndex})">Libreta</button><button class="btn small primary" onclick="openTeamProject(${gid},${rawIndex})">Evaluar proyecto</button>`:'';
+    const continueAction=!complete?`<button class="btn small" onclick="openManualTeamBuilder()">Continuar armando</button>`:'';
+    return `<div class="team-card saved-team-card ${complete?'saved-complete':'saved-forming'}"><div class="team-card-head"><div><h3>${escapeHtml(t.name)} · ${t.members.length}</h3><small>${complete?'Equipo completo':'En formación · guardado · ya se puede calificar'}</small></div><span class="team-index">${rawIndex+1}</span></div><ul>${t.members.map(s=>`<li class="${s.active===0?'inactive-member':''}"><b>${s.list_number??'—'}</b><span>${escapeHtml(studentLabel(s))}</span>${s.active===0?'<small>Baja</small>':''}</li>`).join('')}</ul><div class="team-card-actions">${gradeActions}${continueAction}</div></div>`;
   }).join('');
 }
 async function loadSavedTeamsForDynamics(forcedGid=null){
@@ -1267,12 +1272,12 @@ async function generateTeams(){
 async function copyTeams(){
   if(!dynamics.teams.length)await loadSavedTeamsForDynamics();
   if(!dynamics.teams.length){toast('Primero crea los equipos.',true);return;}
-  const text=dynamics.teams.map(t=>`${t.name}${isUsableTeam(t)?'':' (EN FORMACIÓN)'}\n${t.members.map(s=>`${s.list_number}. ${studentLabel(s)}`).join('\n')}`).join('\n\n');
+  const text=dynamics.teams.map(t=>`${t.name}${isCompleteTeam(t)?'':' (EN FORMACIÓN)'}\n${t.members.map(s=>`${s.list_number}. ${studentLabel(s)}`).join('\n')}`).join('\n\n');
   try{await navigator.clipboard.writeText(text);toast('Equipos copiados');}catch{toast('No se pudo copiar automáticamente.',true);}
 }
 window.openTeamNotebook=async function(gid,index=0){
   gid=+gid||0;if(!gid){toast('Selecciona un grupo.',true);return;}
-  const {teams}=await readSavedTeams(gid),usable=teams.filter(isUsableTeam);if(!usable.length){toast('Todavía no hay equipos completos para abrir en la libreta.',true);return;}
+  const {teams}=await readSavedTeams(gid),usable=teams.filter(isUsableTeam);if(!usable.length){toast('Todavía no hay equipos con integrantes para abrir en la libreta.',true);return;}
   const selectedRaw=teams.find(t=>t.source_index===+index),selectedIndex=Math.max(0,usable.findIndex(t=>t===selectedRaw));
   notebookTeamState={groupId:gid,active:true,selectedIndex:selectedIndex<0?0:selectedIndex,teams:usable};
   if($('#notebookGroup'))$('#notebookGroup').value=String(gid);
@@ -1283,7 +1288,7 @@ window.openTeamProject=async function(gid,index=0){
   gid=+gid||0;if(!gid)return;
   const g=await getGroupState(gid),p=String(g?.current_period||1),scheme=await getScheme(gid,p);
   if((scheme.principal_type||'project')!=='project'){toast('Este parcial está configurado como Examen. La evaluación por equipo con instrumento está disponible en modo Proyecto.',true);return;}
-  const {teams}=await readSavedTeams(gid),usable=teams.filter(isUsableTeam);if(!usable.length){toast('Todavía no hay equipos completos para evaluar.',true);return;}
+  const {teams}=await readSavedTeams(gid),usable=teams.filter(isUsableTeam);if(!usable.length){toast('Todavía no hay equipos con integrantes para evaluar.',true);return;}
   const selectedRaw=teams.find(t=>t.source_index===+index),selectedIndex=Math.max(0,usable.findIndex(t=>t===selectedRaw));
   pendingProjectTeam={gid,index:selectedIndex<0?0:selectedIndex};
   if($('#evalGroup'))$('#evalGroup').value=String(gid);
@@ -1909,8 +1914,11 @@ function renderNotebookTeamControls(){
       activitySel.innerHTML=acts.length?'<option value="">Seleccionar actividad…</option>'+acts.map(a=>`<option value="${a.id}">${escapeHtml(a.title)} · /${fmtNum(a.max_score,1)}</option>`).join(''):'<option value="">Sin actividades</option>';
     }
   }
-  const names=team?.members.filter(m=>m.active!==0&&!isSecretaryPendingStudent(m)).map(studentLabel).join(' · ')||'';
-  if($('#notebookTeamMembers'))$('#notebookTeamMembers').textContent=names;
+  const eligibleMembers=team?.members.filter(m=>m.active!==0&&!isSecretaryPendingStudent(m))||[];
+  const membersBox=$('#notebookTeamMembers');
+  if(membersBox){
+    membersBox.innerHTML=eligibleMembers.length?eligibleMembers.map(m=>`<span class="team-member-display"><b>${escapeHtml(String(m.list_number??'—'))}</b><strong>${escapeHtml(studentLabel(m))}</strong></span>`).join(''):'<span class="team-member-display empty"><strong>Sin integrantes activos</strong></span>';
+  }
 }
 async function setNotebookTeamIndex(index){
   if(!notebookTeamState.teams.length)return;
@@ -2293,7 +2301,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.6_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.7_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
