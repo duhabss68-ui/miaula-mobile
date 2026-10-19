@@ -1,6 +1,6 @@
-@import url("./styles-legacy.css?v=2.4.5");
+@import url("./styles-legacy.css?v=2.4.6");
 
-/* ==========================================================================\n   MiAula Slate 2.4.5 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
+/* ==========================================================================\n   MiAula Slate 2.4.6 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
   color-scheme:dark;
   --void:#111827;
@@ -333,3 +333,12 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
 .manual-team-members{display:grid;gap:6px;padding:10px}.manual-member-chip{display:grid;grid-template-columns:31px minmax(0,1fr) 24px;gap:7px;align-items:center;min-height:43px;padding:5px 7px;border:1px solid var(--border);border-radius:12px;background:rgba(17,24,39,.54);color:var(--text);text-align:left;cursor:pointer}.manual-member-chip:hover{border-color:rgba(214,95,100,.28);background:rgba(214,95,100,.08)}.manual-member-chip b{display:grid;place-items:center;width:29px;height:29px;border-radius:8px;background:var(--surface-3);color:#A9C2DA;font-size:10px}.manual-member-chip span{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.manual-member-chip i{font-style:normal;color:#D9888C;font-size:18px;text-align:center}.manual-team-empty{padding:18px 8px;text-align:center;color:var(--text-3);font-size:11px}
 @media(max-width:1080px){.manual-builder-layout{grid-template-columns:1fr}.manual-available-list{max-height:310px}.manual-team-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.manual-team-cards{grid-template-columns:1fr}.manual-builder-title{align-items:flex-start;flex-direction:column}.manual-builder-title>small{text-align:left}}
+
+
+/* 2.4.6 · Equipos como borrador persistente */
+.saved-team-card.saved-complete{border-color:rgba(47,143,116,.38)!important;background:linear-gradient(180deg,rgba(47,143,116,.10),var(--surface-1))!important}
+.saved-team-card.saved-forming{border-color:rgba(214,168,75,.34)!important;background:linear-gradient(180deg,rgba(214,168,75,.10),var(--surface-1))!important}
+.saved-team-card.saved-complete .team-index{background:rgba(47,143,116,.15);border-color:rgba(47,143,116,.26);color:#8ED5C0}
+.saved-team-card.saved-forming .team-index{background:rgba(214,168,75,.14);border-color:rgba(214,168,75,.26);color:#E6C985}
+.team-saved-status strong{transition:color .18s ease}
+.manual-team-summary .manual-summary-main:after{content:'Guardado automático';margin-left:8px;padding:4px 7px;border-radius:999px;background:rgba(79,124,172,.12);border:1px solid rgba(79,124,172,.20);color:#A9C2DA;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
