@@ -22,6 +22,7 @@ let studentDrawerState={period:null,studentId:null};
 let lastStudentQuickScore=null;
 let notebookTeamState={groupId:null,active:false,selectedIndex:0,teams:[]};
 let pendingProjectTeam=null;
+let manualTeamBuilder={open:false,gid:null,students:[],teamCount:0,assignments:new Map()};
 
 const dynamics={
   mode:'roulette',
@@ -222,7 +223,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.3.1',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.4',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -751,14 +752,20 @@ $('#attendanceHistoryGroup')?.addEventListener('change',async()=>{syncContextFro
 
 // -------------------- RULETA Y EQUIPOS --------------------
 $$('#dynamicsTabs button').forEach(btn=>btn.onclick=()=>setDynamicsMode(btn.dataset.mode));
-$('#dynamicsGroup').onchange=()=>loadDynamicsStudents(true);
-$('#dynamicsPresentOnly').onchange=()=>loadDynamicsStudents(true);
+$('#dynamicsGroup').onchange=()=>{closeManualTeamBuilder();loadDynamicsStudents(true);};
+$('#dynamicsPresentOnly').onchange=()=>{if(dynamics.mode==='roulette')loadDynamicsStudents(true);};
 $('#resetWheel').onclick=()=>{resetDynamicsSession();updateRouletteCounter();toast('Ruleta reiniciada');};
 $('#spinWheel').onclick=spinWheel;
 $('#fullscreenWheel').onclick=toggleRouletteFullscreen;
 $('#rouletteGood').onclick=()=>recordRouletteExtra('good');
 $('#rouletteBad').onclick=()=>recordRouletteExtra('bad');
 $('#generateTeams').onclick=generateTeams;
+$('#manualTeams')?.addEventListener('click',openManualTeamBuilder);
+$('#addManualTeam')?.addEventListener('click',addManualTeam);
+$('#removeManualTeam')?.addEventListener('click',removeManualTeam);
+$('#cancelManualTeams')?.addEventListener('click',closeManualTeamBuilder);
+$('#saveManualTeams')?.addEventListener('click',saveManualTeams);
+$('#manualTeamRoster')?.addEventListener('change',handleManualTeamAssignment);
 $('#copyTeams').onclick=copyTeams;
 $('#clearTeams')?.addEventListener('click',clearSavedTeams);
 $('#openTeamNotebook')?.addEventListener('click',()=>openTeamNotebook(+$('#dynamicsGroup').value,0));
@@ -768,10 +775,14 @@ function setDynamicsMode(mode){
   $$('#dynamicsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
   $('#rouletteMode').classList.toggle('hidden',mode!=='roulette');
   $('#teamsMode').classList.toggle('hidden',mode!=='teams');
+  $('#presentOnlyWrap')?.classList.toggle('hidden',mode==='teams');
   if(mode!=='roulette'){
     dynamics.used.clear();dynamics.rotation=0;renderUsedStudents();drawWheel();exitRouletteFullscreen();
   }
-  if(mode==='teams') loadSavedTeamsForDynamics();
+  if(mode==='teams'){
+    loadDynamicsStudents(false);
+    loadSavedTeamsForDynamics();
+  }
   updateAppNav();
 }
 
@@ -782,7 +793,7 @@ async function loadDynamicsStudents(reset=true){
   const secretaryPendingCount=students.filter(isSecretaryPendingStudent).length;
   students=students.filter(s=>!isSecretaryPendingStudent(s));
   let note=`${students.length} alumnos activos${secretaryPendingCount?` · ${secretaryPendingCount} pendiente${secretaryPendingCount===1?'':'s'} Secretaría excluido${secretaryPendingCount===1?'':'s'}`:''}`;
-  if($('#dynamicsPresentOnly').checked){
+  if(dynamics.mode==='roulette' && $('#dynamicsPresentOnly').checked){
     const attendance=await MiAulaDB.byIndex('attendance','group_date',[gid,today]);
     if(attendance.length){
       const presentIds=new Set(attendance.filter(a=>!['F','S'].includes(a.status)).map(a=>a.student_id));
@@ -791,6 +802,8 @@ async function loadDynamicsStudents(reset=true){
     }else{
       note=`No hay asistencia guardada hoy · se usarán los ${students.length} alumnos activos`;
     }
+  }else if(dynamics.mode==='teams'){
+    note=`${students.length} alumnos del grupo · equipos independientes de la asistencia`;
   }
   dynamics.students=students;
   $('#dynamicsSourceInfo').textContent=note;
@@ -1002,6 +1015,107 @@ async function clearSavedTeams(){
   toast('Equipos limpiados · calificaciones conservadas');
 }
 
+async function teamRosterStudents(gid){
+  return (await MiAulaDB.groupStudents(+gid,{includeInactive:false}))
+    .filter(s=>!isSecretaryPendingStudent(s))
+    .sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+}
+function closeManualTeamBuilder(){
+  manualTeamBuilder={open:false,gid:null,students:[],teamCount:0,assignments:new Map()};
+  $('#manualTeamsPanel')?.classList.add('hidden');
+}
+async function openManualTeamBuilder(){
+  const gid=+$('#dynamicsGroup')?.value||0;
+  if(!gid){toast('Selecciona un grupo antes de armar equipos.',true);return;}
+  const students=await teamRosterStudents(gid);
+  if(students.length<2){toast('Este grupo no tiene suficientes alumnos activos para formar equipos.',true);return;}
+  const preferred=+$('#teamSize')?.value||3;
+  const defaultCount=Math.max(1,teamSizes(students.length,preferred).length);
+  const saved=await readSavedTeams(gid);
+  const assignments=new Map();
+  let teamCount=Math.max(defaultCount,saved.teams.length||0);
+  if(saved.teams.length){
+    saved.teams.forEach((t,teamIndex)=>t.members.forEach(st=>{
+      if(students.some(s=>+s.id===+st.id))assignments.set(+st.id,teamIndex);
+    }));
+  }
+  manualTeamBuilder={open:true,gid,students,teamCount,assignments};
+  $('#manualTeamsPanel')?.classList.remove('hidden');
+  renderManualTeamBuilder();
+  $('#manualTeamsPanel')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function manualTeamMembers(teamIndex){
+  return manualTeamBuilder.students.filter(s=>manualTeamBuilder.assignments.get(+s.id)===teamIndex);
+}
+function updateManualTeamSummary(){
+  const box=$('#manualTeamSummary');if(!box)return;
+  const teams=Array.from({length:manualTeamBuilder.teamCount},(_,i)=>manualTeamMembers(i));
+  const assigned=manualTeamBuilder.assignments.size,unassigned=manualTeamBuilder.students.length-assigned;
+  box.innerHTML=`<div class="manual-summary-main"><strong>${assigned}/${manualTeamBuilder.students.length} asignados</strong><span>${unassigned?`${unassigned} sin equipo`:'Todos asignados'}</span></div>`+
+    teams.map((members,i)=>`<div class="manual-team-pill ${members.length===1||members.length>3?'invalid':''}"><b>Equipo ${i+1}</b><span>${members.length}/3</span></div>`).join('');
+}
+function renderManualTeamBuilder(){
+  const box=$('#manualTeamRoster');if(!box||!manualTeamBuilder.open)return;
+  const teamOptions=Array.from({length:manualTeamBuilder.teamCount},(_,i)=>`<option value="${i}">Equipo ${i+1}</option>`).join('');
+  box.innerHTML=manualTeamBuilder.students.map(st=>{
+    const assigned=manualTeamBuilder.assignments.get(+st.id);
+    return `<div class="manual-student-row"><div class="manual-student-ident"><b>${st.list_number??'—'}</b><span>${escapeHtml(studentLabel(st))}</span></div><select class="manual-team-select" data-student="${st.id}" aria-label="Equipo de ${escapeHtml(studentLabel(st))}"><option value="">Sin equipo</option>${teamOptions}</select></div>`;
+  }).join('');
+  $$('.manual-team-select').forEach(sel=>{
+    const value=manualTeamBuilder.assignments.get(+sel.dataset.student);
+    sel.value=Number.isInteger(value)?String(value):'';
+  });
+  updateManualTeamSummary();
+}
+function handleManualTeamAssignment(e){
+  const sel=e.target.closest?.('.manual-team-select');if(!sel)return;
+  const sid=+sel.dataset.student,next=sel.value===''?null:+sel.value;
+  const prior=manualTeamBuilder.assignments.has(sid)?manualTeamBuilder.assignments.get(sid):null;
+  if(next!=null){
+    const otherCount=manualTeamMembers(next).filter(s=>+s.id!==sid).length;
+    if(otherCount>=3){
+      toast(`Equipo ${next+1} ya tiene 3 integrantes.`,true);
+      sel.value=prior==null?'':String(prior);return;
+    }
+    manualTeamBuilder.assignments.set(sid,next);
+  }else manualTeamBuilder.assignments.delete(sid);
+  updateManualTeamSummary();
+}
+function addManualTeam(){
+  if(!manualTeamBuilder.open)return;
+  manualTeamBuilder.teamCount+=1;renderManualTeamBuilder();
+}
+function removeManualTeam(){
+  if(!manualTeamBuilder.open||manualTeamBuilder.teamCount<=1)return;
+  const last=manualTeamBuilder.teamCount-1,members=manualTeamMembers(last);
+  if(members.length&&!confirm(`Equipo ${last+1} tiene ${members.length} alumno(s). ¿Quitar el equipo y dejarlos sin asignar?`))return;
+  members.forEach(s=>manualTeamBuilder.assignments.delete(+s.id));
+  manualTeamBuilder.teamCount-=1;renderManualTeamBuilder();
+}
+async function saveManualTeams(){
+  if(!manualTeamBuilder.open)return;
+  const {gid,students,teamCount,assignments}=manualTeamBuilder;
+  const unassigned=students.filter(s=>!assignments.has(+s.id));
+  if(unassigned.length){toast(`Faltan ${unassigned.length} alumno(s) por asignar a un equipo.`,true);return;}
+  const teams=[];
+  for(let i=0;i<teamCount;i++){
+    const members=students.filter(s=>assignments.get(+s.id)===i);
+    if(!members.length)continue;
+    if(members.length<2){toast(`Equipo ${i+1} tiene solo 1 integrante. Asigna al menos 2.`,true);return;}
+    if(members.length>3){toast(`Equipo ${i+1} tiene más de 3 integrantes.`,true);return;}
+    teams.push({name:`Equipo ${teams.length+1}`,members});
+  }
+  if(!teams.length){toast('No hay equipos para guardar.',true);return;}
+  const saved=await readSavedTeams(gid);
+  if(saved.teams.length&&!confirm('Ya existen equipos guardados para este grupo. ¿Reemplazarlos por esta distribución manual?'))return;
+  try{
+    const record=await saveTeamsRecord(gid,teams,{creation_mode:'manual',present_only:false,preferred_size:+$('#teamSize')?.value||3});
+    dynamics.teams=teams;dynamics.teamGroupId=gid;renderSavedTeams(teams,record);
+    closeManualTeamBuilder();
+    toast(`${teams.length} equipos manuales guardados`);
+  }catch(e){console.error(e);toast(`No se pudieron guardar los equipos: ${e?.message||'error desconocido'}`,true);}
+}
+
 function shuffled(arr){
   const out=[...arr];
   for(let i=out.length-1;i>0;i--){const j=randomInt(i+1);[out[i],out[j]]=[out[j],out[i]];}
@@ -1024,27 +1138,9 @@ async function getTeamCandidateStudents(gid){
   const allActive=(await MiAulaDB.groupStudents(gid,{includeInactive:false}))
     .filter(s=>!isSecretaryPendingStudent(s))
     .sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  const presentOnly=!!$('#dynamicsPresentOnly')?.checked;
-  if(!presentOnly)return {students:allActive,presentOnly:false,usedFallback:false};
-
-  const attendance=await MiAulaDB.byIndex('attendance','group_date',[gid,today]);
-  const presentIds=new Set(attendance.filter(a=>!['F','S'].includes(a.status)).map(a=>+a.student_id));
-  const present=allActive.filter(s=>presentIds.has(+s.id));
-  if(present.length>=2)return {students:present,presentOnly:true,usedFallback:false};
-
-  if(allActive.length>=2){
-    const reason=!attendance.length
-      ?'Todavía no hay asistencia guardada hoy.'
-      :`Solo hay ${present.length} alumno${present.length===1?'':'s'} marcado${present.length===1?'':'s'} como presente/retardo/justificada hoy.`;
-    const useAll=confirm(`${reason}
-
-¿Crear los equipos usando TODO EL GRUPO ACTIVO?
-
-Esto no modifica la asistencia.`);
-    if(useAll)return {students:allActive,presentOnly:false,usedFallback:true};
-  }
-  return {students:present,presentOnly:true,usedFallback:false};
+  return {students:allActive,presentOnly:false,usedFallback:false};
 }
+
 async function generateTeams(){
   const btn=$('#generateTeams'),gid=+$('#dynamicsGroup')?.value||0,preferred=+$('#teamSize')?.value||3;
   if(!gid){toast('Selecciona un grupo antes de crear los equipos.',true);return;}
@@ -1054,7 +1150,7 @@ async function generateTeams(){
     const pool=shuffled(source.students);
     dynamics.students=source.students;
     if(pool.length<2){
-      toast('No hay al menos 2 alumnos disponibles. Revisa “Solo alumnos presentes hoy” o la asistencia del día.',true);
+      toast('No hay al menos 2 alumnos activos disponibles en este grupo.',true);
       return;
     }
     const saved=await readSavedTeams(gid);
@@ -1067,8 +1163,7 @@ async function generateTeams(){
     const record=await saveTeamsRecord(gid,teams,{preferred_size:preferred,present_only:source.presentOnly,used_full_group_fallback:source.usedFallback});
     dynamics.teams=teams;dynamics.teamGroupId=gid;
     renderSavedTeams(teams,record);
-    const info=source.usedFallback?' · se utilizó todo el grupo activo':'';
-    toast(`${teams.length} equipos creados y guardados${info}`);
+    toast(`${teams.length} equipos creados y guardados · lista completa del grupo`);
   }catch(e){
     console.error('Error al crear equipos',e);
     toast(`No se pudieron crear los equipos: ${e?.message||'error desconocido'}`,true);
@@ -2103,7 +2198,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.3.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.4_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
