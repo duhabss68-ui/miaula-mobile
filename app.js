@@ -222,7 +222,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.3',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.3.1',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1018,16 +1018,63 @@ function teamSizes(n,preferred){
   if(r===1){if(q>=1)return [...Array(q-1).fill(3),2,2];return[1];}
   return [...Array(q).fill(3),2];
 }
+async function getTeamCandidateStudents(gid){
+  gid=+gid||0;
+  if(!gid)return {students:[],presentOnly:false,usedFallback:false};
+  const allActive=(await MiAulaDB.groupStudents(gid,{includeInactive:false}))
+    .filter(s=>!isSecretaryPendingStudent(s))
+    .sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const presentOnly=!!$('#dynamicsPresentOnly')?.checked;
+  if(!presentOnly)return {students:allActive,presentOnly:false,usedFallback:false};
+
+  const attendance=await MiAulaDB.byIndex('attendance','group_date',[gid,today]);
+  const presentIds=new Set(attendance.filter(a=>!['F','S'].includes(a.status)).map(a=>+a.student_id));
+  const present=allActive.filter(s=>presentIds.has(+s.id));
+  if(present.length>=2)return {students:present,presentOnly:true,usedFallback:false};
+
+  if(allActive.length>=2){
+    const reason=!attendance.length
+      ?'Todavía no hay asistencia guardada hoy.'
+      :`Solo hay ${present.length} alumno${present.length===1?'':'s'} marcado${present.length===1?'':'s'} como presente/retardo/justificada hoy.`;
+    const useAll=confirm(`${reason}
+
+¿Crear los equipos usando TODO EL GRUPO ACTIVO?
+
+Esto no modifica la asistencia.`);
+    if(useAll)return {students:allActive,presentOnly:false,usedFallback:true};
+  }
+  return {students:present,presentOnly:true,usedFallback:false};
+}
 async function generateTeams(){
-  await loadDynamicsStudents(false);
-  const gid=+$('#dynamicsGroup').value,pool=shuffled(dynamics.students),preferred=+$('#teamSize').value;
-  if(pool.length<2){toast('Se necesitan al menos 2 alumnos disponibles.',true);return;}
-  if((await readSavedTeams(gid)).teams.length&&!confirm('Este grupo ya tiene equipos guardados. ¿Crear nuevos equipos y reemplazar la distribución actual?'))return;
-  const sizes=teamSizes(pool.length,preferred);let pos=0;
-  dynamics.teams=sizes.map((size,i)=>({name:`Equipo ${i+1}`,members:pool.slice(pos,pos+=size)}));
-  const record=await saveTeamsRecord(gid,dynamics.teams,{preferred_size:preferred,present_only:!!$('#dynamicsPresentOnly')?.checked});
-  dynamics.teamGroupId=gid;renderSavedTeams(dynamics.teams,record);
-  toast(`${dynamics.teams.length} equipos creados y guardados`);
+  const btn=$('#generateTeams'),gid=+$('#dynamicsGroup')?.value||0,preferred=+$('#teamSize')?.value||3;
+  if(!gid){toast('Selecciona un grupo antes de crear los equipos.',true);return;}
+  if(btn){btn.disabled=true;btn.textContent='Creando equipos…';}
+  try{
+    const source=await getTeamCandidateStudents(gid);
+    const pool=shuffled(source.students);
+    dynamics.students=source.students;
+    if(pool.length<2){
+      toast('No hay al menos 2 alumnos disponibles. Revisa “Solo alumnos presentes hoy” o la asistencia del día.',true);
+      return;
+    }
+    const saved=await readSavedTeams(gid);
+    if(saved.teams.length&&!confirm('Este grupo ya tiene equipos guardados. ¿Crear nuevos equipos y reemplazar la distribución actual?'))return;
+    const sizes=teamSizes(pool.length,preferred);
+    if(!sizes.length||sizes.some(n=>n<2))throw new Error('No fue posible distribuir el grupo sin dejar alumnos solos.');
+    let pos=0;
+    const teams=sizes.map((size,i)=>({name:`Equipo ${i+1}`,members:pool.slice(pos,pos+=size)}));
+    if(teams.some(t=>t.members.length<2))throw new Error('La distribución generó un equipo incompleto.');
+    const record=await saveTeamsRecord(gid,teams,{preferred_size:preferred,present_only:source.presentOnly,used_full_group_fallback:source.usedFallback});
+    dynamics.teams=teams;dynamics.teamGroupId=gid;
+    renderSavedTeams(teams,record);
+    const info=source.usedFallback?' · se utilizó todo el grupo activo':'';
+    toast(`${teams.length} equipos creados y guardados${info}`);
+  }catch(e){
+    console.error('Error al crear equipos',e);
+    toast(`No se pudieron crear los equipos: ${e?.message||'error desconocido'}`,true);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Crear equipos automáticamente';}
+  }
 }
 async function copyTeams(){
   if(!dynamics.teams.length)await loadSavedTeamsForDynamics();
@@ -2056,7 +2103,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.3_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.3.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
