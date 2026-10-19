@@ -327,3 +327,8 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
 #evalSavedTeam{font-weight:750}
 @media(max-width:1050px){.manual-team-layout{grid-template-columns:300px 1fr}.manual-teams-grid{grid-template-columns:1fr}.manual-unassigned-panel{top:112px}}
 @media(max-width:760px){.manual-team-layout{grid-template-columns:1fr}.manual-unassigned-panel{position:relative;top:auto;max-height:none}.manual-student-pool{max-height:320px}.manual-team-actions .btn{flex:1 1 45%}.team-build-tabs{width:100%;min-width:0}}
+
+
+/* 2.4.4 · Evaluación de Proyecto por equipos guardados */
+.team-eval-status{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:13px 15px;border:1px solid rgba(79,124,172,.35);border-radius:16px;background:rgba(79,124,172,.10)}
+.team-eval-status>div{display:flex;align-items:center;justify-content:space-between;gap:14px}.team-eval-status strong{color:var(--text);font-size:15px}.team-eval-status span,.team-eval-status small{color:var(--muted);font-size:12px}.team-grade-preview{margin:12px 0 14px;padding:15px 17px;border-radius:18px;background:linear-gradient(180deg,rgba(47,143,116,.14),rgba(47,143,116,.08));border:1px solid rgba(47,143,116,.34);display:grid;grid-template-columns:1fr auto;grid-template-areas:'label score' 'help score';align-items:center;gap:4px 16px}.team-grade-preview>span{grid-area:label;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.team-grade-preview>strong{grid-area:score;font-size:30px;line-height:1;color:#7dd9bc}.team-grade-preview>small{grid-area:help;color:var(--text);font-size:12px;line-height:1.4}.team-grade-preview.hidden,.team-eval-status.hidden{display:none!important}

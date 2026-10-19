@@ -231,7 +231,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.3',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.4',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1131,16 +1131,28 @@ async function loadEvalSavedTeams(gid,period){
   select.innerHTML='<option value="">Seleccionar equipo manual…</option>'+teams.map(t=>`<option value="${escapeHtml(String(t.id))}">${escapeHtml(t.name)} · ${(t.student_ids||[]).length} integrante${(t.student_ids||[]).length===1?'':'s'}</option>`).join('');
   select.dataset.teams=JSON.stringify(teams);
 }
-function applySavedTeamToEvaluation(){
-  const select=$('#evalSavedTeam'),id=select?.value;if(!select)return;
+function selectedSavedEvaluationTeam(){
+  const select=$('#evalSavedTeam'),id=select?.value;if(!select||!id)return null;
   let teams=[];try{teams=JSON.parse(select.dataset.teams||'[]');}catch{}
-  const team=teams.find(t=>String(t.id)===String(id));
+  return teams.find(t=>String(t.id)===String(id))||null;
+}
+function renderEvalTeamStatus(team,selected=0){
+  const box=$('#evalTeamStatus');if(!box)return;
+  if(!team){box.classList.add('hidden');box.innerHTML='';return;}
+  const total=(team.student_ids||[]).length;
+  box.classList.remove('hidden');
+  box.innerHTML=`<div><strong>${escapeHtml(team.name||'Equipo')}</strong><span>${selected} de ${total} integrante${total===1?'':'s'} listos para evaluar</span></div><small>La calificación obtenida con la lista de cotejo se guardará en cada integrante y se reflejará en Proyecto del Cuaderno.</small>`;
+}
+function applySavedTeamToEvaluation(){
+  const team=selectedSavedEvaluationTeam();
   $$('#evalStudents input').forEach(x=>x.checked=false);
-  if(!team){$('#evalTeam').value='';return;}
+  if(!team){$('#evalTeam').value='';renderEvalTeamStatus(null);updateTeamGradePreview();return;}
   const ids=new Set((team.student_ids||[]).map(Number));
   let selected=0;
   $$('#evalStudents input').forEach(x=>{x.checked=ids.has(+x.value);if(x.checked)selected++;});
   $('#evalTeam').value=team.name||'';
+  renderEvalTeamStatus(team,selected);
+  updateTeamGradePreview();
   toast(`${team.name}: ${selected} alumno${selected===1?'':'s'} seleccionado${selected===1?'':'s'}`);
 }
 
@@ -1580,16 +1592,39 @@ async function loadEvalStudents(gid=+$('#evalGroup').value){
 
 function renderEvalCriteria(){
   const inst=instruments.find(i=>i.id===+$('#evalInstrument').value);
-  if(!inst){$('#evalCriteria').className='empty-state';$('#evalCriteria').textContent='Selecciona un instrumento.';return;}
+  if(!inst){$('#evalCriteria').className='empty-state';$('#evalCriteria').textContent='Selecciona un instrumento.';updateTeamGradePreview();return;}
   $('#evalCriteria').className='';
   $('#evalCriteria').innerHTML=inst.criteria.map(c=>inst.instrument_type==='rubric'
     ?`<div class="criterion-eval" data-cid="${c.id}" data-type="rubric"><strong>${escapeHtml(c.name)}</strong><div class="level-buttons">${Array.from({length:c.max},(_,k)=>k+1).map(v=>`<button type="button" data-value="${v}" onclick="pickLevel(this)">${v}</button>`).join('')}</div></div>`
     :`<div class="criterion-eval" data-cid="${c.id}" data-type="checklist"><strong>${escapeHtml(c.name)}</strong><div class="level-buttons"><button type="button" data-value="0" onclick="pickLevel(this)">No</button><button type="button" data-value="1" onclick="pickLevel(this)">Sí</button></div></div>`
   ).join('');
+  updateTeamGradePreview();
+}
+function currentEvaluationScore(){
+  const inst=instruments.find(i=>i.id===+$('#evalInstrument').value);
+  if(!inst)return {complete:false,raw:0,max:0,grade:null};
+  let raw=0,max=0,complete=true;
+  $$('#evalCriteria .criterion-eval').forEach(c=>{
+    const b=c.querySelector('button.active');if(!b){complete=false;return;}
+    const val=c.dataset.type==='checklist'?(b.dataset.value==='1'?1:0):+b.dataset.value;
+    raw+=val;const crit=inst.criteria.find(x=>String(x.id)===String(c.dataset.cid));
+    max+=inst.instrument_type==='checklist'?1:+crit.max;
+  });
+  const forceTeamChecklist=!!selectedSavedEvaluationTeam()&&inst.instrument_type==='checklist';
+  const grade=(inst.convert_to_grade||forceTeamChecklist)&&max?Math.round(raw/max*1000)/100:null;
+  return {complete,raw,max,grade,forceTeamChecklist};
+}
+function updateTeamGradePreview(){
+  const box=$('#evalTeamGradePreview');if(!box)return;
+  const team=selectedSavedEvaluationTeam(),inst=instruments.find(i=>i.id===+$('#evalInstrument').value);
+  if(!team||!inst||inst.instrument_type!=='checklist'){box.classList.add('hidden');box.innerHTML='';return;}
+  const score=currentEvaluationScore();box.classList.remove('hidden');
+  if(!score.complete){box.innerHTML=`<span>Calificación del equipo</span><strong>—</strong><small>Marca Sí o No en todos los criterios. La lista se convertirá a escala 0–10 para el Proyecto.</small>`;return;}
+  box.innerHTML=`<span>Calificación del equipo</span><strong>${score.grade!=null?score.grade.toFixed(2):'—'}</strong><small>${score.raw} de ${score.max} criterios cumplidos · se aplicará a ${(team.student_ids||[]).length} integrante${(team.student_ids||[]).length===1?'':'s'}.</small>`;
 }
 window.pickLevel=el=>{
   el.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
-  el.classList.add('active');
+  el.classList.add('active');updateTeamGradePreview();
 };
 
 $('#saveEvaluation').onclick=async()=>{
@@ -1606,11 +1641,13 @@ $('#saveEvaluation').onclick=async()=>{
     if(!b){incomplete=true;return;}
     const val=c.dataset.type==='checklist'?(b.dataset.value==='1'?1:0):+b.dataset.value;
     details[c.dataset.cid]=val;raw+=val;
-    const crit=inst.criteria.find(x=>x.id===c.dataset.cid);
+    const crit=inst.criteria.find(x=>String(x.id)===String(c.dataset.cid));
     max+=inst.instrument_type==='checklist'?1:+crit.max;
   });
   if(incomplete){toast('Evalúa todos los criterios',true);return;}
-  const grade=inst.convert_to_grade&&max?Math.round(raw/max*1000)/100:null;
+  const savedTeam=selectedSavedEvaluationTeam();
+  const forceTeamChecklist=!!savedTeam&&inst.instrument_type==='checklist';
+  const grade=(inst.convert_to_grade||forceTeamChecklist)&&max?Math.round(raw/max*1000)/100:null;
   for(const sid of ids){
     await MiAulaDB.add('evaluations',{
       group_id:gid,instrument_id:iid,title,student_id:sid,team_name:$('#evalTeam').value.trim(),
@@ -1618,10 +1655,11 @@ $('#saveEvaluation').onclick=async()=>{
       evaluation_date:$('#evalDate').value,period:p,created_at:new Date().toISOString()
     });
   }
-  toast('Proyecto guardado'+(grade!=null?` · ${grade.toFixed(2)}`:''));
+  const teamLabel=savedTeam?.name||$('#evalTeam').value.trim();
+  toast(teamLabel?`${teamLabel} evaluado · ${ids.length} integrante${ids.length===1?'':'s'}${grade!=null?` · ${grade.toFixed(2)}`:''}`:'Proyecto guardado'+(grade!=null?` · ${grade.toFixed(2)}`:''));
   $$('#evalStudents input').forEach(x=>x.checked=false);
   if($('#evalSavedTeam'))$('#evalSavedTeam').value='';
-  $('#evalTeam').value='';
+  $('#evalTeam').value='';renderEvalTeamStatus(null);updateTeamGradePreview();
   $('#evalNotes').value='';
   await loadEvalHistory(gid,p);
   await loadSummary();
@@ -2068,7 +2106,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.3_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.4_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
