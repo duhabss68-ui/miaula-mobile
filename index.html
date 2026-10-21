@@ -8,11 +8,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.4.8 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.4.8">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.4.8">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.4.8">
-  <link rel="stylesheet" href="styles.css?v=2.4.8">
+  <title>MiAula Slate 2.4.9 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.4.9">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.4.9">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.4.9">
+  <link rel="stylesheet" href="styles.css?v=2.4.9">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -37,8 +37,8 @@
 
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.4.8" alt="MiAula">
-    <h1>MiAula Slate 2.4.8</h1>
+    <img src="assets/icon-books-192.png?v=2.4.9" alt="MiAula">
+    <h1>MiAula Slate 2.4.9</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -47,8 +47,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.4.8" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.4.8 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.4.9" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.4.9 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -72,7 +72,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.4.8</span>
+        <span class="version-badge">MiAula Slate · 2.4.9</span>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
       </div>
@@ -251,28 +251,32 @@
 
     <section id="view-notebook" class="view">
       <div class="notebook-header panel">
-        <div>
-          <span class="eyebrow">Libreta digital del grupo</span>
+        <div class="notebook-title-copy">
+          <span class="eyebrow">Libreta digital</span>
           <h2>Cuaderno de calificaciones</h2>
-          <p>Visualiza actividades, corrige calificaciones y revisa el resultado del parcial en una sola pantalla.</p>
+          <p>Captura y consulta como una hoja de cálculo. El encabezado y los datos del alumno permanecen visibles.</p>
         </div>
-        <div class="notebook-header-actions">
-          <label>Grupo<select id="notebookGroup"></select></label>
-          <label>Vista<select id="notebookPeriod"></select></label>
+        <div class="notebook-header-actions notebook-primary-actions">
           <button class="btn vivid-action" id="notebookPresentation"><svg class="ui-icon" aria-hidden="true"><use href="#i-screen"></use></svg><span>Presentación</span></button>
           <button class="btn primary" id="notebookExcel"><svg class="ui-icon" aria-hidden="true"><use href="#i-excel"></use></svg><span>Generar Excel</span></button>
         </div>
       </div>
-      <div class="notebook-filter-bar">
-        <label class="notebook-search"><svg class="ui-icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="notebookSearch" type="search" placeholder="Buscar alumno…" autocomplete="off"></label>
-        <select id="notebookFilter" aria-label="Filtrar cuaderno"><option value="all">Todos los alumnos</option><option value="pending">Con pendientes</option><option value="np">Con NP</option><option value="low">Con calificación menor a 6</option></select>
-        <button class="btn student-view-btn" id="notebookStudentView"><svg class="ui-icon" aria-hidden="true"><use href="#i-groups"></use></svg><span>Vista alumno</span></button>
-        <button class="btn student-view-btn" id="notebookTeamView"><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg><span>Libreta por equipos</span></button>
-        <div class="notebook-density" role="group" aria-label="Densidad del cuaderno">
-          <button type="button" id="notebookDensityCompact" class="density-btn active" aria-pressed="true">Compacta</button>
-          <button type="button" id="notebookDensityComfort" class="density-btn" aria-pressed="false">Cómoda</button>
+      <div class="notebook-workbar" aria-label="Controles del cuaderno">
+        <div class="notebook-workbar-main">
+          <label class="notebook-field"><span>Grupo</span><select id="notebookGroup"></select></label>
+          <label class="notebook-field notebook-period-field"><span>Parcial</span><select id="notebookPeriod"></select></label>
+          <label class="notebook-search"><svg class="ui-icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="notebookSearch" type="search" placeholder="Buscar alumno…" autocomplete="off"></label>
+          <select id="notebookFilter" aria-label="Filtrar cuaderno"><option value="all">Todos los alumnos</option><option value="pending">Con pendientes</option><option value="np">Con NP</option><option value="low">Con calificación menor a 6</option></select>
         </div>
-        <span id="notebookFilterCount" class="filter-count"></span>
+        <div class="notebook-workbar-actions">
+          <button class="btn student-view-btn" id="notebookStudentView"><svg class="ui-icon" aria-hidden="true"><use href="#i-groups"></use></svg><span>Por alumno</span></button>
+          <button class="btn student-view-btn" id="notebookTeamView"><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg><span>Por equipos</span></button>
+          <div class="notebook-density" role="group" aria-label="Densidad del cuaderno">
+            <button type="button" id="notebookDensityCompact" class="density-btn active" aria-pressed="true">Compacta</button>
+            <button type="button" id="notebookDensityComfort" class="density-btn" aria-pressed="false">Cómoda</button>
+          </div>
+          <span id="notebookFilterCount" class="filter-count"></span>
+        </div>
       </div>
       <div id="notebookTeamToolbar" class="team-notebook-toolbar hidden">
         <div class="team-notebook-top">
@@ -417,7 +421,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.4.8 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.4.9 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -429,7 +433,7 @@
   <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg></span><b>Ruleta</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg></span><b>Equipos</b></button>
   <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><b>Respaldo</b></button>
-  <button class="app-tab" data-app-view="more"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-data"></use></svg></span><b>Datos</b></button>
+  <button class="app-tab" data-app-view="more"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-data"></use></svg></span><b>Más</b></button>
 </nav>
 
 <div id="undoBar" class="undo-bar hidden"><span id="undoMessage">Cambio guardado</span><button type="button" id="undoNotebook">Deshacer</button></div>
@@ -446,8 +450,8 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.4.8"></script>
-<script src="xlsx-lite.js?v=2.4.8"></script>
-<script src="app.js?v=2.4.8"></script>
+<script src="db.js?v=2.4.9"></script>
+<script src="xlsx-lite.js?v=2.4.9"></script>
+<script src="app.js?v=2.4.9"></script>
 </body>
 </html>

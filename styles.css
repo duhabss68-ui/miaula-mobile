@@ -1,4 +1,4 @@
-@import url("./styles-legacy.css?v=2.4.6");
+@import url("./styles-legacy.css?v=2.4.9");
 
 /* ==========================================================================\n   MiAula Slate 2.4.6 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
@@ -365,7 +365,7 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
   #notebookTeamMembers{grid-template-columns:1fr}.team-notebook-nav{justify-content:flex-start!important}.team-notebook-nav select{width:100%!important;max-width:none!important}
 }
 
-/* 2.4.8 · Cuaderno tipo hoja de cálculo */
+/* 2.4.9 · Cuaderno tipo hoja de cálculo */
 #view-notebook{--sheet-num:42px;--sheet-student:176px;--sheet-extra:80px;--sheet-act:86px;--sheet-summary:74px}
 .notebook-density{display:inline-flex;align-items:center;padding:3px;border:1px solid var(--border);border-radius:12px;background:var(--surface-1);min-height:42px}
 .density-btn{min-height:34px;padding:0 11px;border:0;border-radius:9px;background:transparent;color:var(--text-3);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
@@ -411,3 +411,48 @@ body.notebook-focus #view-notebook{--sheet-num:42px;--sheet-student:178px;--shee
 body.notebook-focus .notebook-top-scroll{position:sticky;top:0;z-index:18}
 @media(max-width:900px){#view-notebook{--sheet-num:40px;--sheet-student:158px;--sheet-extra:76px;--sheet-act:82px;--sheet-summary:70px}.notebook-density{order:6}.notebook-filter-bar{gap:7px!important}}
 @media(orientation:portrait){#view-notebook{--sheet-num:40px;--sheet-student:150px;--sheet-extra:74px;--sheet-act:80px;--sheet-summary:68px}}
+
+/* 2.4.9 · Navegación simplificada + encabezados inmóviles del Cuaderno */
+body.notebook-view-active .context-action{display:none!important}
+body.notebook-view-active .context-bar{grid-template-columns:minmax(290px,1fr) minmax(150px,.45fr) 1fr!important;padding-block:8px!important}
+body.notebook-view-active .context-spacer{display:block!important}
+
+.notebook-header{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:20px!important;margin-bottom:10px!important;padding:13px 16px!important}
+.notebook-title-copy{min-width:0}.notebook-header h2{font-size:24px!important;margin:2px 0 3px!important}.notebook-header p{font-size:12px!important;margin:0!important;max-width:740px}.notebook-primary-actions{display:flex!important;align-items:center!important;gap:8px!important;flex:0 0 auto}
+
+.notebook-workbar{position:sticky;top:82px;z-index:31;margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:16px;background:rgba(24,34,48,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 10px 26px rgba(5,12,24,.20)}
+.notebook-workbar-main{display:grid;grid-template-columns:minmax(220px,1.15fr) minmax(150px,.65fr) minmax(240px,1.35fr) minmax(180px,.8fr);gap:8px;align-items:end}
+.notebook-workbar-actions{display:flex;align-items:center;gap:7px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);flex-wrap:wrap}
+.notebook-field{margin:0!important;display:grid!important;gap:4px!important}.notebook-field>span{font-size:9px!important;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);font-weight:750}.notebook-field select{min-height:38px!important;height:38px!important;padding-block:5px!important}
+.notebook-workbar .notebook-search{min-height:38px!important;margin:0!important}.notebook-workbar .notebook-search input{min-height:36px!important;height:36px!important}
+.notebook-workbar>div>select,#notebookFilter{min-height:38px!important;height:38px!important}
+.notebook-workbar-actions .btn{min-height:36px!important;padding:7px 11px!important}.notebook-workbar .notebook-density{min-height:36px!important}.notebook-workbar .density-btn{min-height:30px!important}
+.notebook-workbar .filter-count{margin-left:auto;white-space:nowrap;color:var(--text-2)!important;font-size:11px;font-weight:700}
+
+/* El resumen deja de competir con la tabla y se comporta como una pequeña barra de estado. */
+.notebook-summary{display:flex!important;gap:7px!important;flex-wrap:wrap!important;margin:0 0 8px!important}
+.notebook-summary.hidden{display:none!important}.notebook-summary>div{min-width:120px!important;flex:0 1 auto!important;padding:7px 10px!important;border-radius:10px!important;background:var(--surface-1)!important}.notebook-summary span{font-size:8.5px!important}.notebook-summary strong{font-size:13px!important;margin-top:1px!important}
+
+/* Hoja de cálculo: el cuerpo es el que se desplaza verticalmente. El encabezado no se mueve. */
+.notebook-period-block{overflow:visible!important}
+.notebook-table-wrap{position:relative!important;overflow:auto!important;max-height:calc(100vh - 350px)!important;min-height:330px!important;border-radius:0 0 12px 12px!important;scrollbar-gutter:stable both-edges}
+.notebook-table{position:relative!important}
+.notebook-table thead{position:relative!important;z-index:40!important}
+.notebook-table thead th{position:sticky!important;top:0!important;z-index:42!important;box-shadow:0 1px 0 var(--border-strong),0 8px 14px rgba(5,12,24,.18)!important}
+.notebook-table thead th.sticky-col,.notebook-table thead th.sticky-col-2,.notebook-table thead th.sticky-col-3{z-index:54!important;background:#293548!important}
+.notebook-table tbody .sticky-col,.notebook-table tbody .sticky-col-2,.notebook-table tbody .sticky-col-3{z-index:18!important}
+.notebook-table .sticky-col{left:0!important}.notebook-table .sticky-col-2{left:var(--sheet-num)!important}.notebook-table .sticky-col-3{left:calc(var(--sheet-num) + var(--sheet-student))!important}
+.notebook-table tbody .sticky-col-3{box-shadow:1px 0 0 var(--border-strong),8px 0 14px rgba(5,12,24,.10)!important}
+.notebook-table thead .sticky-col-3{box-shadow:1px 1px 0 var(--border-strong),8px 4px 14px rgba(5,12,24,.16)!important}
+.notebook-top-scroll{position:sticky;top:0;z-index:28!important}
+
+/* Presentación: máximo espacio de lectura, manteniendo encabezados fijos. */
+body.notebook-focus .notebook-table-wrap{max-height:calc(100vh - 155px)!important;min-height:calc(100vh - 170px)!important}
+body.notebook-focus .notebook-table thead th{top:0!important}
+
+@media(max-width:1180px){
+  .notebook-workbar{top:76px}.notebook-workbar-main{grid-template-columns:1fr .65fr 1.2fr .8fr}.notebook-header p{display:none}.notebook-table-wrap{max-height:calc(100vh - 330px)!important}
+}
+@media(max-width:900px){
+  .notebook-workbar{position:relative;top:auto}.notebook-workbar-main{grid-template-columns:1fr 1fr}.notebook-search{grid-column:1/-1}.notebook-workbar-main #notebookFilter{grid-column:1/-1}.notebook-workbar .filter-count{margin-left:0}.notebook-table-wrap{max-height:62vh!important;min-height:340px!important}
+}
