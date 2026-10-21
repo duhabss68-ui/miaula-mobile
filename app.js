@@ -224,7 +224,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.7',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.4.8',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1989,6 +1989,30 @@ function notebookExtraCell(s,pd){
   const ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0};
   return `<td class="sticky-col-3 notebook-extra-cell"><button type="button" class="extra-cell-button" onclick="openExtraModal('${pd.period}',${s.id})" aria-label="Puntos extra de ${escapeHtml(studentLabel(s))}"><span class="extra-good">+${ex.goodAvailable||0}</span><span class="extra-bad">${formatBadExtras(ex.bad)}</span><small>Editar</small></button></td>`;
 }
+const NOTEBOOK_DENSITY_KEY='miaula:notebookDensity';
+function applyNotebookDensity(mode){
+  const comfortable=mode==='comfortable',view=$('#view-notebook');
+  view?.classList.toggle('notebook-comfort',comfortable);
+  $('#notebookDensityCompact')?.classList.toggle('active',!comfortable);
+  $('#notebookDensityComfort')?.classList.toggle('active',comfortable);
+  $('#notebookDensityCompact')?.setAttribute('aria-pressed',String(!comfortable));
+  $('#notebookDensityComfort')?.setAttribute('aria-pressed',String(comfortable));
+  try{localStorage.setItem(NOTEBOOK_DENSITY_KEY,comfortable?'comfortable':'compact');}catch{}
+  requestAnimationFrame(setupNotebookScrollSync);
+}
+function setupNotebookScrollSync(){
+  $$('#notebookTable .notebook-period-block').forEach(block=>{
+    const top=block.querySelector('.notebook-top-scroll'),rail=top?.firstElementChild,wrap=block.querySelector('.notebook-table-wrap'),table=wrap?.querySelector('.notebook-table');
+    if(!top||!rail||!wrap||!table)return;
+    rail.style.width=`${Math.max(table.scrollWidth,wrap.clientWidth)}px`;
+    top.classList.toggle('hidden-scroll',table.scrollWidth<=wrap.clientWidth+2);
+    if(top.dataset.synced==='1')return;
+    top.dataset.synced='1';let syncing=false;
+    top.addEventListener('scroll',()=>{if(syncing)return;syncing=true;wrap.scrollLeft=top.scrollLeft;requestAnimationFrame(()=>syncing=false);},{passive:true});
+    wrap.addEventListener('scroll',()=>{if(syncing)return;syncing=true;top.scrollLeft=wrap.scrollLeft;requestAnimationFrame(()=>syncing=false);},{passive:true});
+  });
+}
+
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
   const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · /${fmtNum(a.max_score,1)}</small></th>`).join('');
@@ -2002,7 +2026,7 @@ function renderNotebookPeriod(pd){
   }).join('');
   const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
   const colspan=Math.max(pd.activities.length,1)+8;
-  return `<div class="notebook-period-block" data-period-block="${pd.period}"><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><span class="period-badge">Trabajos ${pd.scheme.work_pct}% · ${principal} ${pd.scheme.project_pct}% · Valores ${pd.scheme.values_pct}% · Actitudes ${pd.scheme.attitudes_pct}%</span></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
+  return `<div class="notebook-period-block" data-period-block="${pd.period}"><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><span class="period-badge">Trabajos ${pd.scheme.work_pct}% · ${principal} ${pd.scheme.project_pct}% · Valores ${pd.scheme.values_pct}% · Actitudes ${pd.scheme.attitudes_pct}%</span></div><div class="notebook-top-scroll" aria-label="Desplazamiento horizontal del cuaderno"><div></div></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
 }
 function renderNotebook(){
   if(!notebookData)return;
@@ -2012,6 +2036,7 @@ function renderNotebook(){
   $('#notebookSummary').innerHTML=`<div><span>Grupo</span><strong>${escapeHtml(notebookData.group.name)}</strong></div><div><span>Alumnos</span><strong>${students}</strong></div><div><span>Actividades visibles</span><strong>${totalActs}</strong></div><div><span>Vista</span><strong>${notebookData.selected==='all'?'Todos':`Parcial ${notebookData.selected}`}</strong></div>`;
   $('#notebookTable').className='';
   $('#notebookTable').innerHTML=pds.map(renderNotebookPeriod).join('');
+  setupNotebookScrollSync();
   $$('#notebookTable .notebook-score-input').forEach(inp=>{
     inp.addEventListener('focus',()=>{inp.dataset.focusValue=inp.value;});
     inp.addEventListener('input',()=>{
@@ -2209,6 +2234,10 @@ $('#notebookReload').onclick=()=>loadNotebook();
 $('#notebookSave').onclick=()=>saveNotebookChanges();
 $('#notebookSearch').oninput=applyNotebookFilters;
 $('#notebookFilter').onchange=applyNotebookFilters;
+$('#notebookDensityCompact')?.addEventListener('click',()=>applyNotebookDensity('compact'));
+$('#notebookDensityComfort')?.addEventListener('click',()=>applyNotebookDensity('comfortable'));
+try{applyNotebookDensity(localStorage.getItem(NOTEBOOK_DENSITY_KEY)==='comfortable'?'comfortable':'compact');}catch{applyNotebookDensity('compact');}
+window.addEventListener('resize',()=>requestAnimationFrame(setupNotebookScrollSync),{passive:true});
 $('#notebookStudentView').onclick=()=>openFirstVisibleStudent();
 $('#notebookTeamView')?.addEventListener('click',async()=>{
   if(!notebookTeamState.teams.length){toast('Primero crea los equipos desde Herramientas → Equipos.',true);return;}
@@ -2301,7 +2330,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.7_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.4.8_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }

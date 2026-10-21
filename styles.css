@@ -364,3 +364,50 @@ body.roulette-focus{background:#111827!important}body.roulette-focus .main{backg
 @media(max-width:680px){
   #notebookTeamMembers{grid-template-columns:1fr}.team-notebook-nav{justify-content:flex-start!important}.team-notebook-nav select{width:100%!important;max-width:none!important}
 }
+
+/* 2.4.8 · Cuaderno tipo hoja de cálculo */
+#view-notebook{--sheet-num:42px;--sheet-student:176px;--sheet-extra:80px;--sheet-act:86px;--sheet-summary:74px}
+.notebook-density{display:inline-flex;align-items:center;padding:3px;border:1px solid var(--border);border-radius:12px;background:var(--surface-1);min-height:42px}
+.density-btn{min-height:34px;padding:0 11px;border:0;border-radius:9px;background:transparent;color:var(--text-3);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.density-btn.active{background:var(--primary);color:#fff;box-shadow:none}.density-btn:active{transform:scale(.98)}
+.notebook-period-block{border-radius:14px!important;overflow:hidden!important}
+.notebook-period-title{padding:10px 12px!important;min-height:54px!important}
+.notebook-period-title h3{font-size:18px!important}.notebook-period-title p{font-size:11px!important}
+.notebook-top-scroll{height:16px;overflow-x:auto;overflow-y:hidden;background:var(--surface-2);border-bottom:1px solid var(--border);scrollbar-width:thin;scrollbar-color:#607086 #202B3C}
+.notebook-top-scroll>div{height:1px}.notebook-top-scroll.hidden-scroll{display:none}
+.notebook-top-scroll::-webkit-scrollbar{height:11px}.notebook-top-scroll::-webkit-scrollbar-track{background:#202B3C}.notebook-top-scroll::-webkit-scrollbar-thumb{background:#607086;border-radius:99px;border:2px solid #202B3C}
+.notebook-table-wrap{overflow:auto!important;max-width:100%;scrollbar-width:thin;scrollbar-color:#607086 #202B3C;overscroll-behavior:contain}
+.notebook-table-wrap::-webkit-scrollbar{height:12px;width:10px}.notebook-table-wrap::-webkit-scrollbar-track{background:#202B3C}.notebook-table-wrap::-webkit-scrollbar-thumb{background:#607086;border-radius:99px;border:2px solid #202B3C}
+.notebook-table{border-collapse:separate!important;border-spacing:0!important;font-size:11.5px!important;line-height:1.15!important}
+.notebook-table th,.notebook-table td{padding:4px 4px!important;min-width:var(--sheet-summary)!important;height:42px!important;border-right:1px solid rgba(255,255,255,.055)!important;border-bottom:1px solid rgba(255,255,255,.055)!important}
+.notebook-table thead th{height:66px!important;padding:6px 5px!important;font-size:10px!important;letter-spacing:.015em!important;vertical-align:middle!important}
+.notebook-table .notebook-num{min-width:var(--sheet-num)!important;max-width:var(--sheet-num)!important;width:var(--sheet-num)!important}
+.notebook-table .sticky-col{left:0!important}
+.notebook-table .notebook-student{min-width:var(--sheet-student)!important;max-width:var(--sheet-student)!important;width:var(--sheet-student)!important}
+.notebook-table .sticky-col-2{left:var(--sheet-num)!important}
+.notebook-table .notebook-extra-head,.notebook-table .notebook-extra-cell{min-width:var(--sheet-extra)!important;max-width:var(--sheet-extra)!important;width:var(--sheet-extra)!important}
+.notebook-table .sticky-col-3{left:calc(var(--sheet-num) + var(--sheet-student))!important}
+.notebook-table .activity-head,.notebook-table .notebook-grade-cell{min-width:var(--sheet-act)!important;max-width:var(--sheet-act)!important;width:var(--sheet-act)!important}
+.notebook-table .activity-head>span{display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.1!important;max-height:24px;font-weight:750}
+.notebook-table .activity-head small{font-size:8.5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px!important}
+.notebook-table .activity-head .activity-daily-max{font-size:9px!important;margin-top:2px!important;white-space:nowrap!important}
+.student-name-button{width:100%;min-height:34px!important;padding:3px 5px!important;text-align:left!important;border-radius:7px!important}
+.student-name-button strong{display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:11.5px!important;line-height:1.12!important}
+#view-notebook:not(.notebook-comfort) .student-name-button small{display:none!important}
+.notebook-score-input{width:50px!important;min-width:50px!important;min-height:32px!important;height:32px!important;padding:3px 4px!important;border-radius:7px!important;font-size:12.5px!important;font-variant-numeric:tabular-nums}
+.extra-cell-button{min-height:32px!important;width:70px!important;padding:3px 4px!important;border-radius:8px!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:0 3px!important;align-items:center!important}
+.extra-cell-button small{grid-column:1/-1;font-size:8px!important;margin-top:0!important}
+.summary-cell{min-width:var(--sheet-summary)!important;max-width:var(--sheet-summary)!important;width:var(--sheet-summary)!important;font-variant-numeric:tabular-nums}
+.notebook-table tbody tr:hover td{box-shadow:inset 0 1px rgba(126,160,196,.10),inset 0 -1px rgba(126,160,196,.10)}
+.notebook-table tbody tr:hover .notebook-student{box-shadow:inset 3px 0 0 var(--primary)!important}
+.notebook-table thead .sticky-col,.notebook-table thead .sticky-col-2,.notebook-table thead .sticky-col-3{z-index:12!important}
+.notebook-table tbody .sticky-col,.notebook-table tbody .sticky-col-2,.notebook-table tbody .sticky-col-3{z-index:7!important}
+.notebook-comfort{--sheet-num:48px;--sheet-student:210px;--sheet-extra:94px;--sheet-act:118px;--sheet-summary:88px}
+.notebook-comfort .notebook-table th,.notebook-comfort .notebook-table td{height:48px!important;padding:6px!important}
+.notebook-comfort .notebook-table thead th{height:78px!important;font-size:10.5px!important}
+.notebook-comfort .notebook-score-input{width:62px!important;min-width:62px!important;min-height:36px!important;height:36px!important}
+.notebook-comfort .student-name-button small{display:block!important;font-size:8.5px!important;margin-top:2px!important}
+body.notebook-focus #view-notebook{--sheet-num:42px;--sheet-student:178px;--sheet-extra:80px;--sheet-act:86px;--sheet-summary:74px}
+body.notebook-focus .notebook-top-scroll{position:sticky;top:0;z-index:18}
+@media(max-width:900px){#view-notebook{--sheet-num:40px;--sheet-student:158px;--sheet-extra:76px;--sheet-act:82px;--sheet-summary:70px}.notebook-density{order:6}.notebook-filter-bar{gap:7px!important}}
+@media(orientation:portrait){#view-notebook{--sheet-num:40px;--sheet-student:150px;--sheet-extra:74px;--sheet-act:80px;--sheet-summary:68px}}
