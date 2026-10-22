@@ -53,6 +53,9 @@ function normalizeText(s){
 function fmtNum(v,d=2){
   return v==null||Number.isNaN(+v)?'—':Number(v).toFixed(d).replace(/\.00$/,'');
 }
+function fmtShort(v,d=1){
+  const t=fmtNum(v,d);return t.includes('.')?t.replace(/\.?0+$/,''):t;
+}
 function parseISODateLocal(value){
   const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!m)return null;
@@ -79,7 +82,8 @@ function activityAvailableMax(activity,referenceDate=new Date()){
 }
 function activityMaxIndicator(activity){
   const available=activityAvailableMax(activity);
-  return `<small class="activity-daily-max${available<=0?' zero':''}" title="Indicador según días hábiles transcurridos; no limita la calificación que captures.">Máx. ${fmtNum(available,1)}</small>`;
+  const level=available<=0?' zero':available<=3?' low':available<=6?' mid':' ok';
+  return `<small class="activity-daily-max${level}" title="Indicador según días hábiles transcurridos; no limita la calificación que captures.">Máx. ${fmtShort(available,1)}</small>`;
 }
 function toast(msg,error=false){
   const t=$('#toast');
@@ -167,7 +171,7 @@ function resetDynamicsSession(){
   dynamics.spinning=false;
   const canvas=$('#rouletteCanvas');
   if(canvas){canvas.style.transition='none';canvas.style.transform='rotate(0deg)';setTimeout(()=>canvas.style.transition='',0);}
-  if($('#rouletteNumber')) $('#rouletteNumber').textContent='—';
+  if($('#rouletteNumber')) $('#rouletteNumber').textContent='';
   if($('#rouletteName')) $('#rouletteName').textContent='Gira la ruleta';
   dynamics.lastWinner=null;
   dynamics.winnerRated=false;
@@ -225,7 +229,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.4.9',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.6.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1988,7 +1992,7 @@ function notebookComponentInput(field,s,pd,value){
 }
 function notebookExtraCell(s,pd){
   const ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0};
-  return `<td class="sticky-col-3 notebook-extra-cell"><button type="button" class="extra-cell-button" onclick="openExtraModal('${pd.period}',${s.id})" aria-label="Puntos extra de ${escapeHtml(studentLabel(s))}"><span class="extra-good">+${ex.goodAvailable||0}</span><span class="extra-bad">${formatBadExtras(ex.bad)}</span><small>Editar</small></button></td>`;
+  return `<td class="sticky-col-3 notebook-extra-cell"><button type="button" class="extra-cell-button" onclick="openExtraModal('${pd.period}',${s.id})" aria-label="Puntos extra de ${escapeHtml(studentLabel(s))}"><span class="extra-good${ex.goodAvailable?'':' is-zero'}">+${ex.goodAvailable||0}</span><span class="extra-bad${ex.bad?'':' is-zero'}">${formatBadExtras(ex.bad)}</span><span class="extra-none${ex.goodAvailable||ex.bad?' is-zero':''}">—</span><small>Editar</small></button></td>`;
 }
 const NOTEBOOK_DENSITY_KEY='miaula:notebookDensity';
 function applyNotebookDensity(mode){
@@ -2001,7 +2005,19 @@ function applyNotebookDensity(mode){
   try{localStorage.setItem(NOTEBOOK_DENSITY_KEY,comfortable?'comfortable':'compact');}catch{}
   requestAnimationFrame(setupNotebookScrollSync);
 }
+// 2.5.0: ajusta la altura de la tabla al espacio libre para que solo la tabla tenga scroll vertical.
+function fitNotebookTable(){
+  const view=$('#view-notebook');if(!view||!view.classList.contains('active'))return;
+  const wrap=view.querySelector('.notebook-period-block .notebook-table-wrap');
+  if(!wrap){view.style.removeProperty('--nb-fit');return;}
+  const nav=$('#bottomAppNav'),navVisible=nav&&getComputedStyle(nav).display!=='none';
+  const reserve=(navVisible?nav.offsetHeight+18:0)+14;
+  const top=wrap.getBoundingClientRect().top+window.scrollY;
+  view.style.setProperty('--nb-fit',`${Math.max(300,Math.floor(window.innerHeight-top-reserve))}px`);
+}
+document.addEventListener('fullscreenchange',()=>setTimeout(fitNotebookTable,120));
 function setupNotebookScrollSync(){
+  fitNotebookTable();
   $$('#notebookTable .notebook-period-block').forEach(block=>{
     const top=block.querySelector('.notebook-top-scroll'),rail=top?.firstElementChild,wrap=block.querySelector('.notebook-table-wrap'),table=wrap?.querySelector('.notebook-table');
     if(!top||!rail||!wrap||!table)return;
@@ -2016,7 +2032,7 @@ function setupNotebookScrollSync(){
 
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
-  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · /${fmtNum(a.max_score,1)}</small></th>`).join('');
+  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · /${fmtShort(a.max_score,1)}</small></th>`).join('');
   const body=pd.students.map(s=>{
     const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
     const principalCell=principalType==='exam'
@@ -2261,11 +2277,12 @@ $('#notebookExcel').onclick=async()=>{
 };
 $('#notebookPresentation').onclick=async()=>{
   const on=!document.body.classList.contains('notebook-focus');document.body.classList.toggle('notebook-focus',on);
-  $('#notebookPresentation').textContent=on?'✕ Salir de presentación':'▣ Presentación';
+  $('#notebookPresentation').innerHTML=`<svg class="ui-icon" aria-hidden="true"><use href="#i-screen"></use></svg><span>${on?'Salir de presentación':'Presentación'}</span>`;
+  requestAnimationFrame(fitNotebookTable);
   if(on && document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();}catch{}}
   if(!on && document.fullscreenElement){try{await document.exitFullscreen();}catch{}}
 };
-document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.classList.contains('notebook-focus')){document.body.classList.remove('notebook-focus');if($('#notebookPresentation'))$('#notebookPresentation').textContent='▣ Presentación';}});
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.classList.contains('notebook-focus')){document.body.classList.remove('notebook-focus');if($('#notebookPresentation'))$('#notebookPresentation').innerHTML='<svg class="ui-icon" aria-hidden="true"><use href="#i-screen"></use></svg><span>Presentación</span>';}});
 
 function attendanceTotals(records){
   const out={P:0,F:0,R:0,J:0,S:0,total:0,attended:0,absencePct:null};
@@ -2331,7 +2348,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.4.9_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.6.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
@@ -2641,3 +2658,21 @@ updateAppNav();
 window.addEventListener('error',e=>{console.error(e.error||e.message);const b=$('#fatalBanner');b.textContent='Error de interfaz: '+(e.message||'desconocido');b.classList.remove('hidden');});
 
 init();
+
+// 2.6.0: modo claro / oscuro. Es solo una preferencia de interfaz (localStorage).
+const THEME_KEY='miaula:theme';
+function applyTheme(theme){
+  const light=theme==='light';
+  if(light)document.documentElement.setAttribute('data-theme','light');else document.documentElement.removeAttribute('data-theme');
+  const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',light?'#EDF1F5':'#111827');
+  const btn=$('#themeToggle');
+  if(btn){const label=light?'Cambiar a modo oscuro':'Cambiar a modo claro';btn.setAttribute('aria-label',label);btn.title=label;btn.innerHTML=`<svg class="ui-icon" aria-hidden="true"><use href="#${light?'i-moon':'i-sun'}"></use></svg>`;}
+  if(typeof drawWheel==='function'){try{drawWheel();}catch{}}
+}
+function currentTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';}
+applyTheme(currentTheme());
+$('#themeToggle')?.addEventListener('click',()=>{
+  const next=currentTheme()==='light'?'dark':'light';
+  applyTheme(next);
+  try{localStorage.setItem(THEME_KEY,next);}catch{}
+});
