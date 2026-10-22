@@ -9,11 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.8.0 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.8.0">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.8.0">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.8.0">
-  <link rel="stylesheet" href="styles.css?v=2.8.0">
+  <title>MiAula Slate 2.9.0 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.9.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.9.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.9.0">
+  <link rel="stylesheet" href="styles.css?v=2.9.0">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -44,8 +44,8 @@
 <div id="splash" class="splash" aria-hidden="true"><div class="splash-inner"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff" opacity=".96"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".72"/><path d="m36.5 33.2 3.6 3.6 6.4-7" fill="none" stroke="#2F5B88" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Mi<strong>Aula</strong></b></div></div>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.8.0" alt="MiAula">
-    <h1>MiAula Slate 2.8.0</h1>
+    <img src="assets/icon-books-192.png?v=2.9.0" alt="MiAula">
+    <h1>MiAula Slate 2.9.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -54,8 +54,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.8.0" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.8.0 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.9.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.9.0 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -86,7 +86,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.8.0</span>
+        <span class="version-badge">MiAula Slate · 2.9.0</span>
         <button class="btn icon-btn theme-toggle" id="themeToggle" type="button" aria-label="Cambiar a modo claro" title="Cambiar a modo claro"><svg class="ui-icon" aria-hidden="true"><use href="#i-sun"></use></svg></button>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
@@ -388,7 +388,18 @@
       <div id="closedPrincipalNotice" class="notice-card hidden"></div>
 
       <div class="grid-2">
-        <div class="panel"><div class="panel-head"><div><h3>Banco de instrumentos</h3><p>Tu compendio de rúbricas y listas de cotejo permanece entre parciales.</p></div></div>
+        <div class="panel project-bank-panel"><div class="panel-head"><div><h3>Banco de rúbricas</h3><p>Elige con qué vas a evaluar el proyecto. Tus rúbricas se quedan guardadas para los siguientes parciales.</p></div></div>
+          <div class="bank-actions" role="group" aria-label="Opciones del banco de rúbricas">
+            <button type="button" class="bank-action" id="bankPick"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><span><b>Elegir una ya hecha</b><small>Del banco de MiAula o de las tuyas</small></span></button>
+            <button type="button" class="bank-action" id="bankModify"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-activity"></use></svg></span><span><b>Modificar una</b><small>Cambia criterios, pesos o niveles</small></span></button>
+            <button type="button" class="bank-action" id="bankCreate"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-plus"></use></svg></span><span><b>Crear una nueva</b><small>Rúbrica o lista de cotejo</small></span></button>
+            <button type="button" class="bank-action" id="bankUpload"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><span><b>Subir un archivo</b><small>La que te compartió otro docente</small></span></button>
+          </div>
+          <div id="projectBankSelected" class="bank-selected"></div>
+          <div class="bank-mine-head"><h4>Mis rúbricas</h4><small id="projectBankCount"></small></div>
+          <div id="projectMyRubrics" class="bank-mini-list"></div>
+          <details class="legacy-instruments"><summary>Instrumentos del formato anterior</summary>
+          <p class="muted-text">Aquí siguen tus rúbricas y listas de cotejo de versiones anteriores, con sus evaluaciones. También puedes crear una en ese formato.</p>
           <form id="instrumentForm">
             <label>Nombre<input id="instrumentName" placeholder="Ej. Rúbrica de proyecto" required></label>
             <label>Tipo<select id="instrumentType"><option value="rubric">Rúbrica</option><option value="checklist">Lista de cotejo</option></select></label>
@@ -397,19 +408,20 @@
             <button class="btn primary wide" type="submit">Guardar en banco</button>
           </form>
           <div id="instrumentCards" class="stack instruments-stack"></div>
+          </details>
         </div>
 
         <div id="projectWorkspace" class="panel">
-          <div class="panel-head"><div><h3>Evaluar proyecto</h3><p>Usa una rúbrica o lista de cotejo del banco.</p></div></div>
+          <div class="panel-head"><div><h3>Evaluar proyecto</h3><p>1) Elige la rúbrica · 2) Escribe el nombre del proyecto · 3) Marca a los alumnos (o elige un equipo guardado) · 4) Toca el nivel de cada criterio · 5) Guardar.</p></div></div>
           <div class="form-grid eval-top">
-            <label class="span-2">Instrumento<select id="evalInstrument"></select></label>
+            <label class="span-2">Rúbrica o lista de cotejo<select id="evalInstrument"></select></label>
             <label class="span-2">Nombre del proyecto<input id="evalTitle" placeholder="Ej. Proyecto Arduino"></label>
             <label class="span-2">Equipo guardado<select id="evalSavedTeam"><option value="">Seleccionar equipo guardado…</option></select></label>
             <label>Equipo<input id="evalTeam" placeholder="Opcional"></label>
             <label>Fecha<input id="evalDate" type="date"></label>
           </div>
           <h4>Alumnos activos</h4><div id="evalStudents" class="student-picker empty-state">Selecciona un grupo.</div>
-          <h4>Instrumento</h4><div id="evalCriteria" class="empty-state">Selecciona un instrumento.</div>
+          <h4>Evaluación</h4><div id="evalCriteria" class="empty-state">Elige una rúbrica en el banco.</div>
           <label>Observaciones<textarea id="evalNotes" rows="3"></textarea></label>
           <button id="saveEvaluation" class="btn primary wide">Guardar proyecto</button>
         </div>
@@ -453,7 +465,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.8.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.9.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -516,9 +528,9 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.8.0"></script>
-<script src="xlsx-lite.js?v=2.8.0"></script>
-<script src="rubricas.js?v=2.8.0"></script>
-<script src="app.js?v=2.8.0"></script>
+<script src="db.js?v=2.9.0"></script>
+<script src="xlsx-lite.js?v=2.9.0"></script>
+<script src="rubricas.js?v=2.9.0"></script>
+<script src="app.js?v=2.9.0"></script>
 </body>
 </html>

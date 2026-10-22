@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.8.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.9.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1669,7 +1669,7 @@ $('#instrumentForm').onsubmit=async e=>{
 async function loadInstruments(){
   instruments=(await MiAulaDB.all('instruments')).filter(i=>i.format!==MiAulaRubricas.FORMAT).sort((a,b)=>b.id-a.id);
   $('#instrumentCards').innerHTML=instruments.length?instruments.map(i=>`<div class="instrument-card"><div><strong>${escapeHtml(i.name)}</strong><br><small>${i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo'} · ${i.criteria.length} criterios · ${i.convert_to_grade?'0–10':'Evidencia'}</small></div><button class="btn small danger" onclick="deleteInstrument(${i.id})">Eliminar</button></div>`).join(''):'<div class="empty-state">Crea tu primera rúbrica o lista de cotejo.</div>';
-  $('#evalInstrument').innerHTML='<option value="">Seleccionar…</option>'+instruments.map(i=>`<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('');
+  if(typeof populateEvalInstrumentSelect==='function')await populateEvalInstrumentSelect();
 }
 window.deleteInstrument=async id=>{
   const used=await MiAulaDB.byIndex('evaluations','instrument_id',id);
@@ -1679,7 +1679,7 @@ window.deleteInstrument=async id=>{
 };
 
 $('#evalGroup').onchange=loadPrincipalWorkspace;
-$('#evalInstrument').onchange=renderEvalCriteria;
+$('#evalInstrument').onchange=()=>{renderEvalCriteria();try{localStorage.setItem('miaula:projectRubric',$('#evalInstrument').value);}catch{}if(typeof refreshProjectBankSelected==='function')refreshProjectBankSelected();};
 
 
 async function populateProjectTeamSelector(gid){
@@ -1753,8 +1753,12 @@ async function loadEvalStudents(gid=+$('#evalGroup').value){
   $('#evalStudents').innerHTML=s.map(x=>`<label class="student-pick"><input type="checkbox" value="${x.id}"><span><strong>${x.list_number??'—'}</strong> · ${escapeHtml(studentLabel(x))}</span></label>`).join('');
 }
 
+let evalCriteriaRenderedRef=null;
 function renderEvalCriteria(){
-  const inst=instruments.find(i=>i.id===+$('#evalInstrument').value);
+  const evalRef=String($('#evalInstrument').value||'');
+  evalCriteriaRenderedRef=evalRef;
+  if(evalRef&&!evalRef.startsWith('legacy:')){renderProjectRubricCriteria(evalRef);return;}
+  const inst=instruments.find(i=>i.id===+evalRef.replace('legacy:',''));
   if(!inst){$('#evalCriteria').className='empty-state';$('#evalCriteria').textContent='Selecciona un instrumento.';return;}
   $('#evalCriteria').className='';
   $('#evalCriteria').innerHTML=inst.criteria.map(c=>inst.instrument_type==='rubric'
@@ -1772,7 +1776,9 @@ $('#saveEvaluation').onclick=async()=>{
   if(!gid){toast('Selecciona un grupo',true);return;}
   const g=await getGroupState(gid),p=String(g.current_period||1),scheme=await getScheme(gid,p);
   if((scheme.principal_type||'project')!=='project'){toast('Este parcial está configurado como Examen.',true);return;}
-  const iid=+$('#evalInstrument').value,title=$('#evalTitle').value.trim(),ids=$$('#evalStudents input:checked').map(x=>+x.value),inst=instruments.find(i=>i.id===iid);
+  const evalRef=String($('#evalInstrument').value||'');
+  if(evalRef&&!evalRef.startsWith('legacy:')){await saveProjectRubricEvaluation(gid,p,scheme,evalRef);return;}
+  const iid=+evalRef.replace('legacy:',''),title=$('#evalTitle').value.trim(),ids=$$('#evalStudents input:checked').map(x=>+x.value),inst=instruments.find(i=>i.id===iid);
   if(!iid||!title||!ids.length){toast('Selecciona instrumento, título y al menos un alumno',true);return;}
   if(!scheme.mode_locked){scheme.principal_type='project';scheme.mode_locked=true;scheme.updated_at=new Date().toISOString();await MiAulaDB.put('gradingSchemes',scheme);}
   const details={};let raw=0,max=0,incomplete=false;
@@ -1807,7 +1813,7 @@ async function loadEvalHistory(gid=+$('#evalGroup').value,period=null){
   const evals=(await MiAulaDB.byIndex('evaluations','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
   const students=await MiAulaDB.groupStudents(gid,{includeInactive:true}),sm=new Map(students.map(s=>[s.id,s])),im=new Map(instruments.map(i=>[i.id,i]));
   $('#evalHistory').innerHTML=evals.length
-    ?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Alumno</th><th>Proyecto</th><th>Instrumento</th><th>Calif.</th><th></th></tr></thead><tbody>${evals.slice(0,100).map(e=>`<tr><td>${e.evaluation_date||''}</td><td>${escapeHtml(studentLabel(sm.get(e.student_id)||{}))}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(im.get(e.instrument_id)?.name||'')}</td><td><strong>${e.grade??''}</strong></td><td><button class="btn small danger" onclick="deleteEvaluation(${e.id})">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`
+    ?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Alumno</th><th>Proyecto</th><th>Instrumento</th><th>Calif.</th><th></th></tr></thead><tbody>${evals.slice(0,100).map(e=>`<tr><td>${e.evaluation_date||''}</td><td>${escapeHtml(studentLabel(sm.get(e.student_id)||{}))}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(im.get(e.instrument_id)?.name||e.rubric?.name||'')}</td><td><strong>${e.grade??''}</strong></td><td><button class="btn small danger" onclick="deleteEvaluation(${e.id})">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`
     :`<div class="empty-state">No hay proyectos evaluados en el Parcial ${p}.</div>`;
 }
 window.deleteEvaluation=async id=>{
@@ -2098,7 +2104,7 @@ window.openExtraModal=async function(period,studentId){
   if(!pd)pd=await buildNotebookPeriodData(gid,p);
   const student=pd.students.find(x=>+x.id===+studentId)||await MiAulaDB.get('students',+studentId);if(!student)return;
   const rows=await getStudentExtraRows(gid,+studentId,p),ex=extraSummary(rows);
-  const usable=pd.activities.filter(a=>!['proyecto','examen'].includes(String(a.activity_type||'').trim().toLowerCase())).map(a=>{
+  const usable=pd.activities.filter(a=>!isRubricActivity(a)&&!['proyecto','examen'].includes(String(a.activity_type||'').trim().toLowerCase())).map(a=>{
     const rec=pd.grades.get(`${a.id}:${studentId}`),score=rec?.score;
     const max=+a.max_score||10,room=score==null?0:Math.floor(Math.max(0,max-(+score||0)));
     const disabled=score==null||room<1;
@@ -2152,6 +2158,7 @@ window.applyExtraToActivity=async function(period,studentId){
   const ex=await getStudentExtraSummary(gid,studentId,String(period));
   if(points>ex.goodAvailable){toast(`Solo hay +${ex.goodAvailable} punto(s) disponibles.`,true);return;}
   const activity=await MiAulaDB.get('activities',activityId);if(!activity){toast('Actividad no encontrada.',true);return;}
+  if(isRubricActivity(activity)){toast('Los puntos extra solo se aplican a actividades que se califican con número. En una rúbrica la nota sale de los niveles.',true);return;}
   const grade=await MiAulaDB.firstByIndex('grades','unique_key',[activityId,+studentId]);
   if(!grade||grade.score==null){toast('Primero captura una calificación numérica en esa actividad.',true);return;}
   const max=+activity.max_score||10,room=Math.floor(Math.max(0,max-(+grade.score||0)));
@@ -2342,7 +2349,7 @@ async function buildWorkbook(gid){
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
   const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
   const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;const dv=isRubricActivity(a)?rubricGradeScore(a,gr):gr.score;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,exportGradeValue(a,gr),a.max_score,dv==null?null:Math.round(+dv*1000/+a.max_score)/100,gr.notes||'']);}
-  const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||'',i?.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
+  const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||e.rubric?.name||'',(e.rubric?e.rubric.kind==='rubrica':i?.instrument_type==='rubric')?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
   const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of periods)for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Parcial ${p}`,'Valores y Actitudes',s.notes]);
   const bajas=[['Último No.','Código','Apellido paterno','Apellido materno','Nombre(s)','Nombre completo','Fecha de baja','Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.','Asistencia %']];for(const s of inactive){const at=attendanceTotals(attendance.filter(a=>a.student_id===s.id));bajas.push([s.former_list_number??s.list_number,s.student_code,s.paternal_last_name||'',s.maternal_last_name||'',s.given_names||'',studentLabel(s),s.withdrawn_at?new Date(s.withdrawn_at).toLocaleDateString('es-MX'):'',at.P,at.F,at.R,at.J,at.S,at.pct]);}
   const instrumentBank=[['Instrumento','Tipo','Convierte a 0-10','Criterios']];for(const i of insts){instrumentBank.push([i.name,i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',i.convert_to_grade?'Sí':'No',(i.criteria||[]).map(c=>c.name).join(' · ')]);}
@@ -2363,7 +2370,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.8.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.9.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -3063,6 +3070,7 @@ async function populateActivityRubricSelect(){
     +(mine.length?`<optgroup label="Mis rúbricas">${mine.map(m=>opt('mine:'+m.id,`${m.name} (${m.kind==='cotejo'?'lista de cotejo':'rúbrica'})`)).join('')}</optgroup>`:'')
     +`<optgroup label="Banco de MiAula">${RB.BANK.map(b=>opt('bank:'+b.id,`${b.name} (${b.kind==='cotejo'?'lista de cotejo':'rúbrica'})`)).join('')}</optgroup>`;
   if([...sel.options].some(o=>o.value===prev))sel.value=prev;
+  if(typeof populateEvalInstrumentSelect==='function')populateEvalInstrumentSelect();
 }
 function syncGradingModeUI(){
   const rubric=document.querySelector('#activityForm input[name="grading_mode"]:checked')?.value==='rubric';
@@ -3288,9 +3296,11 @@ async function saveRubricEditor(){
   const norm=RB.normalizeRubric(d);if(!norm.ok){errBox.textContent=norm.error;return;}
   if(st.mode==='template'){
     const now=new Date().toISOString();
+    let savedId=st.id;
     if(st.id){const old=await MiAulaDB.get('instruments',st.id);await MiAulaDB.put('instruments',{...(old||{}),...norm.rubric,id:st.id,format:RB.FORMAT,updated_at:now});}
-    else await MiAulaDB.add('instruments',{...norm.rubric,format:RB.FORMAT,created_at:now});
+    else savedId=await MiAulaDB.add('instruments',{...norm.rubric,format:RB.FORMAT,created_at:now});
     closeRubricEditor();await populateActivityRubricSelect();await renderRubricLibrary();toast('Rúbrica guardada');
+    document.dispatchEvent(new CustomEvent('miaula:rubric-saved',{detail:{id:savedId}}));
     return;
   }
   // Rúbrica de una actividad
@@ -3564,3 +3574,126 @@ window.openTeamGrading=async function(aid){
     });
   };
 };
+
+// ==========================================================================
+// 2.9.0 · Banco de rúbricas en Proyecto
+// Elegir una ya hecha, modificar, crear o subir. Las evaluaciones nuevas guardan
+// una COPIA de la rúbrica y su nota (0–10); las del formato anterior no cambian.
+// ==========================================================================
+let projectEvalSelection={},projectEvalRef='';
+function isLegacyRef(ref){return String(ref||'').startsWith('legacy:');}
+async function projectRubricFromRef(ref){
+  if(!ref||isLegacyRef(ref))return null;
+  const t=await rubricTemplateFromRef(ref),n=RB.normalizeRubric(t);
+  return n.ok?n.rubric:null;
+}
+async function populateEvalInstrumentSelect(){
+  const sel=$('#evalInstrument');if(!sel)return;
+  let prev=sel.value;if(!prev){try{prev=localStorage.getItem('miaula:projectRubric')||'';}catch{}}
+  const mine=await loadRubricTemplates();
+  const opt=(v,t)=>`<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`;
+  sel.innerHTML='<option value="">Elige una rúbrica…</option>'
+    +(mine.length?`<optgroup label="Mis rúbricas">${mine.map(m=>opt('mine:'+m.id,`${m.name} (${m.kind==='cotejo'?'lista de cotejo':'rúbrica'})`)).join('')}</optgroup>`:'')
+    +`<optgroup label="Banco de MiAula">${RB.BANK.map(b=>opt('bank:'+b.id,`${b.name} (${b.kind==='cotejo'?'lista de cotejo':'rúbrica'})`)).join('')}</optgroup>`
+    +(instruments.length?`<optgroup label="Formato anterior">${instruments.map(i=>opt('legacy:'+i.id,`${i.name} (formato anterior)`)).join('')}</optgroup>`:'');
+  if([...sel.options].some(o=>o.value===prev))sel.value=prev;else sel.value='';
+  if(sel.value!==evalCriteriaRenderedRef)renderEvalCriteria();
+  refreshProjectBank();
+}
+async function refreshProjectBank(){
+  const list=$('#projectMyRubrics');if(!list)return;
+  const mine=await loadRubricTemplates(),cur=$('#evalInstrument')?.value||'';
+  if($('#projectBankCount'))$('#projectBankCount').textContent=mine.length?`${mine.length} guardada${mine.length===1?'':'s'}`:'';
+  list.innerHTML=mine.length?mine.map(m=>{const n=RB.normalizeRubric(m),ok=n.ok;return `<div class="bank-mini ${cur==='mine:'+m.id?'current':''}"><span><b>${escapeHtml(m.name||'Sin nombre')}</b><small>${ok?escapeHtml(rubricSummary(n.rubric)):'Dañada'}</small></span><button type="button" class="btn small primary" ${ok?'':'disabled'} onclick="selectProjectRubric('mine:${m.id}')">Usar</button><button type="button" class="btn small subtle" onclick="editRubricTemplate(${m.id})">Modificar</button></div>`;}).join(''):'<div class="bank-empty">Aún no tienes rúbricas propias. Usa <b>Elegir una ya hecha</b> o <b>Crear una nueva</b>.</div>';
+  refreshProjectBankSelected();
+}
+async function refreshProjectBankSelected(){
+  const box=$('#projectBankSelected');if(!box)return;
+  const ref=$('#evalInstrument')?.value||'';
+  if(!ref){box.innerHTML='<div class="bank-selected-empty">Aún no eliges con qué evaluar. Toca <b>Elegir una ya hecha</b>.</div>';return;}
+  if(isLegacyRef(ref)){const i=instruments.find(x=>x.id===+ref.slice(7));box.innerHTML=`<div class="bank-selected-card"><span class="rubric-kind">Formato anterior</span><b>${escapeHtml(i?.name||'')}</b><small>${i?i.criteria.length:0} criterios</small></div>`;return;}
+  const r=await projectRubricFromRef(ref);
+  if(!r){box.innerHTML='<div class="bank-selected-empty">La rúbrica elegida está dañada. Elige otra.</div>';return;}
+  const mine=ref.startsWith('mine:');
+  box.innerHTML=`<div class="bank-selected-card"><span class="rubric-kind ${r.kind}">${mine?'Mi rúbrica':'Banco de MiAula'} · ${r.kind==='cotejo'?'Lista de cotejo':'Rúbrica'}</span><b>${escapeHtml(r.name)}</b><small>${escapeHtml(rubricSummary(r))}</small><div class="bank-selected-actions"><button type="button" class="btn small subtle" onclick="viewRubricRef('${escapeHtml(ref)}')">Ver</button><button type="button" class="btn small subtle" onclick="${mine?`editRubricTemplate(${+ref.slice(5)})`:`copyBankRubric('${escapeHtml(ref.slice(5))}')`}">${mine?'Modificar':'Hacer una copia y modificar'}</button><button type="button" class="btn small subtle" onclick="printRubricRef('${escapeHtml(ref)}')">Imprimir</button></div></div>`;
+}
+window.selectProjectRubric=async ref=>{
+  closeModal();
+  const sel=$('#evalInstrument');if(!sel)return;
+  if(![...sel.options].some(o=>o.value===ref))await populateEvalInstrumentSelect();
+  sel.value=ref;try{localStorage.setItem('miaula:projectRubric',ref);}catch{}
+  renderEvalCriteria();refreshProjectBank();
+  $('#projectWorkspace')?.scrollIntoView({behavior:'smooth',block:'start'});
+  toast('Rúbrica lista. Escribe el nombre del proyecto y marca a los alumnos.');
+};
+function openProjectBankPicker(mode){
+  const pick=mode==='pick';
+  loadRubricTemplates().then(mine=>{
+    const row=(ref,r,actions)=>`<div class="picker-row"><span><b>${escapeHtml(r.name)}</b><small>${escapeHtml(rubricSummary(r))} · ${r.criteria.slice(0,3).map(c=>escapeHtml(c.n)).join(' · ')}${r.criteria.length>3?' · …':''}</small></span><div class="picker-actions"><button type="button" class="btn small subtle" onclick="viewRubricRef('${escapeHtml(ref)}')">Ver</button>${actions}</div></div>`;
+    const mineRows=mine.map(m=>{const n=RB.normalizeRubric(m);if(!n.ok)return '';return row('mine:'+m.id,n.rubric,pick?`<button type="button" class="btn small primary" onclick="selectProjectRubric('mine:${m.id}')">Usar esta</button>`:`<button type="button" class="btn small primary" onclick="closeModal();editRubricTemplate(${m.id})">Modificar</button>`);}).join('');
+    const bankRows=RB.BANK.map(b=>row('bank:'+b.id,b,pick?`<button type="button" class="btn small primary" onclick="selectProjectRubric('bank:${b.id}')">Usar esta</button>`:`<button type="button" class="btn small primary" onclick="closeModal();copyBankRubric('${b.id}')">Hacer una copia y modificar</button>`)).join('');
+    const legacyRows=instruments.map(i=>`<div class="picker-row"><span><b>${escapeHtml(i.name)}</b><small>Formato anterior · ${i.criteria.length} criterios</small></span><div class="picker-actions">${pick?`<button type="button" class="btn small primary" onclick="selectProjectRubric('legacy:${i.id}')">Usar esta</button>`:`<button type="button" class="btn small primary" onclick="closeModal();convertLegacyInstrument(${i.id})">Convertir y modificar</button>`}</div></div>`).join('');
+    openModal(pick?'Elegir una rúbrica ya hecha':'Modificar una rúbrica',`<p class="modal-help">${pick?'Toca <b>Usar esta</b> para evaluar el proyecto con ella. Con <b>Ver</b> la revisas completa antes.':'Tus rúbricas se modifican directamente. Las del banco de MiAula se copian primero a «Mis rúbricas» para que puedas cambiarlas sin perder la original. Los proyectos ya evaluados no cambian.'}</p>
+      <section class="picker-section"><h4>Mis rúbricas <small>${mine.length}</small></h4>${mineRows||'<p class="muted-text">Aún no tienes rúbricas propias.</p>'}</section>
+      <section class="picker-section"><h4>Banco de MiAula <small>${RB.BANK.length}</small></h4>${bankRows}</section>
+      ${instruments.length?`<section class="picker-section"><h4>Formato anterior <small>${instruments.length}</small></h4>${legacyRows}</section>`:''}`);
+    $('#modal .modal-card')?.classList.add('wide');
+  });
+}
+$('#bankPick')?.addEventListener('click',()=>openProjectBankPicker('pick'));
+$('#bankModify')?.addEventListener('click',()=>openProjectBankPicker('modify'));
+$('#bankCreate')?.addEventListener('click',()=>{
+  openModal('Crear una nueva',`<p class="modal-help">¿Qué quieres crear?</p><div class="create-choice"><button type="button" class="bank-action" onclick="closeModal();newRubricTemplate('rubrica')"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><span><b>Rúbrica</b><small>Niveles (Destacado, Satisfactorio…) con descripción en cada criterio</small></span></button><button type="button" class="bank-action" onclick="closeModal();newRubricTemplate('cotejo')"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-attendance"></use></svg></span><span><b>Lista de cotejo</b><small>Cada criterio se marca Sí o No</small></span></button></div>`);
+});
+$('#bankUpload')?.addEventListener('click',()=>openRubricImport());
+document.addEventListener('miaula:rubric-saved',async e=>{
+  if(currentView!=='evaluation')return;
+  await populateEvalInstrumentSelect();
+  if(e.detail?.id)await selectProjectRubric('mine:'+e.detail.id);
+});
+
+async function renderProjectRubricCriteria(ref){
+  const box=$('#evalCriteria');if(!box)return;
+  if(ref!==projectEvalRef){projectEvalSelection={};projectEvalRef=ref;}
+  const r=await projectRubricFromRef(ref);
+  if(!r){box.className='empty-state';box.textContent='Esta rúbrica está dañada. Elige otra.';return;}
+  projectEvalSelection=RB.cleanSelection(r,projectEvalSelection);
+  const res=RB.rubricScore(r,projectEvalSelection,10),cot=r.kind==='cotejo',pct=RB.weightPercents(r.criteria);
+  box.className='project-rubric-eval';
+  box.innerHTML=`<div class="pe-head"><div><b>${escapeHtml(r.name)}</b><small>Toca el nivel de cada criterio. Tocar el mismo lo quita.</small></div>${res.complete?`<div class="pe-score ${scoreTone(res.score)}"><small>Nota</small><b>${fmtNum(res.score)}</b></div>`:`<div class="pe-score pending"><small>Faltan</small><b>${res.total-res.done}</b></div>`}</div>
+    <div class="pe-table-wrap"><table class="rb-table pe-table ${cot?'cotejo':''}"><thead><tr><th>Criterio</th>${r.levels.map(l=>`<th>${escapeHtml(l.n)}${cot?'':`<small>${fmtShort(l.p)} pts</small>`}</th>`).join('')}</tr></thead><tbody>
+    ${r.criteria.map((c,i)=>`<tr><th scope="row"><b>${escapeHtml(c.n)}</b><small>${pct[i]}%</small></th>${r.levels.map((l,j)=>{const on=projectEvalSelection[c.id]===j,desc=cot?'':(c.d?.[j]||'');return `<td><button type="button" class="rb-level ${on?'on':''} ${cot&&j===1?'is-no':''}" data-pe-crit="${escapeHtml(c.id)}" data-pe-level="${j}" aria-pressed="${on}" aria-label="${escapeHtml(`${c.n}: ${l.n}${desc?'. '+desc:''}${on?'. Elegido':''}`)}"><b>${escapeHtml(l.n)}</b>${desc?`<span>${escapeHtml(desc)}</span>`:''}</button></td>`;}).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    <div class="pe-actions"><button type="button" class="btn small subtle" data-pe="all-best">Todo en «${escapeHtml(r.levels[0].n)}»</button><button type="button" class="btn small subtle" data-pe="clear">Borrar selección</button></div>`;
+}
+$('#evalCriteria')?.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b||!projectEvalRef||isLegacyRef($('#evalInstrument').value))return;
+  if(b.dataset.peCrit!=null){
+    const c=b.dataset.peCrit,j=+b.dataset.peLevel;
+    if(projectEvalSelection[c]===j)delete projectEvalSelection[c];else projectEvalSelection[c]=j;
+  }else if(b.dataset.pe==='clear')projectEvalSelection={};
+  else if(b.dataset.pe==='all-best'){projectRubricFromRef(projectEvalRef).then(r=>{if(!r)return;projectEvalSelection=Object.fromEntries(r.criteria.map(c=>[c.id,0]));renderProjectRubricCriteria(projectEvalRef);});return;}
+  else return;
+  renderProjectRubricCriteria(projectEvalRef).then(()=>{
+    if(b.dataset.peCrit!=null)document.querySelector(`#evalCriteria .rb-level[data-pe-crit="${CSS.escape(b.dataset.peCrit)}"][data-pe-level="${b.dataset.peLevel}"]`)?.focus({preventScroll:true});
+  });
+});
+async function saveProjectRubricEvaluation(gid,p,scheme,ref){
+  const title=$('#evalTitle').value.trim(),ids=$$('#evalStudents input:checked').map(x=>+x.value);
+  if(!title||!ids.length){toast('Escribe el nombre del proyecto y marca al menos un alumno (o elige un equipo guardado).',true);return;}
+  const template=await rubricTemplateFromRef(ref),snap=RB.snapshotForActivity(template,ref);
+  if(!snap){toast('La rúbrica elegida está dañada. Elige otra.',true);return;}
+  const res=RB.rubricScore(snap,projectEvalSelection,10);
+  if(!res.complete){toast(`Marca el nivel de todos los criterios (faltan ${res.total-res.done}).`,true);return;}
+  if(!scheme.mode_locked){scheme.principal_type='project';scheme.mode_locked=true;scheme.updated_at=new Date().toISOString();await MiAulaDB.put('gradingSchemes',scheme);}
+  const now=new Date().toISOString(),team=$('#evalTeam').value.trim(),notes=$('#evalNotes').value.trim(),date=$('#evalDate').value;
+  for(const sid of ids){
+    await MiAulaDB.add('evaluations',{group_id:gid,instrument_id:null,instrument_ref:ref,rubric:snap,title,student_id:sid,team_name:team,raw_score:res.score,grade:res.score,details:{...projectEvalSelection},notes,evaluation_date:date,period:p,created_at:now});
+  }
+  toast(`Proyecto guardado · ${fmtNum(res.score)} para ${ids.length} alumno${ids.length===1?'':'s'}`);
+  $$('#evalStudents input').forEach(x=>x.checked=false);
+  $('#evalNotes').value='';if($('#evalSavedTeam'))$('#evalSavedTeam').value='';
+  projectEvalSelection={};await renderProjectRubricCriteria(ref);
+  await loadEvalHistory(gid,p);await loadSummary();
+  if(+$('#gradingGroup').value===gid)await loadGrading();
+}

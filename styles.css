@@ -1,4 +1,4 @@
-@import url("./styles-legacy.css?v=2.8.0");
+@import url("./styles-legacy.css?v=2.9.0");
 
 /* ==========================================================================\n   MiAula Slate 2.4.6 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
@@ -1325,3 +1325,87 @@ body.sheet-open .toast{top:14px;bottom:auto!important}
 .rb-level span{display:block;width:100%}
 .rb-table tbody th,.rb-table tbody th b{white-space:normal!important;overflow-wrap:anywhere}
 @media(max-width:1000px){.rb-eval-layout{grid-template-rows:auto 1fr;align-content:start;min-height:0}}
+
+/* ==========================================================================
+   MiAula Slate 2.9.0 · Banco de rúbricas en Proyecto
+   ========================================================================== */
+.project-bank-panel{display:flex;flex-direction:column;gap:12px}
+.bank-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bank-action{display:flex;align-items:center;gap:12px;min-height:72px!important;padding:12px 14px;border-radius:var(--r-card);border:1px solid var(--border);background:var(--surface-2);color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:background .15s,border-color .15s,transform .08s}
+.bank-action:hover{border-color:var(--primary);background:var(--primary-soft)}
+.bank-action:active{transform:scale(.985)}
+.bank-action:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+.bank-action-icon{flex:0 0 auto;display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--primary-soft);color:var(--accent-text)}
+.bank-action-icon .ui-icon{width:22px;height:22px}
+.bank-action b{display:block;font-size:15px;color:var(--text-strong)}
+.bank-action small{display:block;font-size:12px;color:var(--text-3);line-height:1.3;margin-top:2px}
+.bank-selected-card{display:grid;gap:4px;padding:12px 14px;border-radius:var(--r-card);border:2px solid var(--primary);background:var(--primary-soft)}
+.bank-selected-card b{font-size:16px;color:var(--text-strong)}
+.bank-selected-card small{color:var(--text-2);font-size:12.5px}
+.bank-selected-card .rubric-kind{justify-self:start}
+.bank-selected-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.bank-selected-empty,.bank-empty{padding:12px 14px;border-radius:var(--r-card);border:1px dashed var(--border-strong);color:var(--text-2);font-size:13.5px;line-height:1.45}
+.bank-mine-head{display:flex;align-items:baseline;justify-content:space-between;margin-top:4px}
+.bank-mine-head h4{margin:0;font-size:15px;color:var(--text-strong)}
+.bank-mine-head small{color:var(--text-3)}
+.bank-mini-list{display:grid;gap:6px;max-height:260px;overflow:auto}
+.bank-mini{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2)}
+.bank-mini.current{border-color:var(--primary)}
+.bank-mini span{flex:1;min-width:0}
+.bank-mini b{display:block;font-size:13.5px;color:var(--text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bank-mini small{display:block;font-size:11.5px;color:var(--text-3)}
+.bank-mini .btn{min-height:34px!important;padding:4px 10px!important;font-size:12.5px!important}
+.legacy-instruments{border-top:1px solid var(--border);padding-top:10px}
+.legacy-instruments summary{cursor:pointer;font-weight:650;color:var(--text-2);font-size:13.5px;min-height:36px;display:flex;align-items:center}
+.legacy-instruments[open] summary{margin-bottom:8px}
+.picker-section{margin-top:12px}
+.picker-section h4{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:14.5px;color:var(--text-strong)}
+.picker-section h4 small{font-size:11.5px;padding:1px 8px;border-radius:999px;background:var(--surface-3);color:var(--text-2)}
+.picker-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);margin-bottom:6px}
+.picker-row span{flex:1;min-width:0}
+.picker-row b{display:block;color:var(--text-strong);font-size:14px}
+.picker-row small{display:block;color:var(--text-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.picker-actions{display:flex;gap:6px;flex:0 0 auto}
+.picker-actions .btn{min-height:38px!important}
+.modal-card.wide .modal-body,.modal-card.wide #modalBody{max-height:70vh;overflow:auto}
+.create-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.project-rubric-eval{display:grid;gap:10px}
+.pe-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pe-head b{display:block;font-size:15px;color:var(--text-strong)}
+.pe-head small{color:var(--text-3);font-size:12px}
+.pe-score{display:grid;justify-items:center;min-width:92px;padding:6px 12px;border-radius:12px;border:2px solid var(--border-strong);background:var(--surface-1)}
+.pe-score small{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700}
+.pe-score b{font-size:26px;line-height:1.1;color:var(--text-strong)}
+.pe-score.good{border-color:var(--success);background:var(--success-soft)}.pe-score.good b{color:var(--success-text)}
+.pe-score.mid{border-color:var(--warning);background:var(--warning-soft)}.pe-score.mid b{color:var(--warning-text)}
+.pe-score.low{border-color:var(--danger);background:var(--danger-soft)}.pe-score.low b{color:var(--danger-text)}
+.pe-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--r-card)}
+.pe-table thead th:first-child{width:24%}
+.pe-table .rb-level{min-height:54px!important;padding:6px 8px}
+.pe-table .rb-level b{font-size:12.5px}
+.pe-table .rb-level span{font-size:11.5px}
+.pe-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:1000px){.bank-actions,.create-choice{grid-template-columns:1fr}}
+#view-evaluation>.grid-2{grid-template-columns:1fr!important}
+#view-evaluation .bank-actions{grid-template-columns:repeat(4,minmax(0,1fr))}
+#view-evaluation .project-bank-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.8fr);gap:12px 18px;align-items:start}
+#view-evaluation .project-bank-panel>.panel-head,#view-evaluation .project-bank-panel>.bank-actions,#view-evaluation .project-bank-panel>.legacy-instruments{grid-column:1/-1}
+#view-evaluation .project-bank-panel>#projectBankSelected{grid-column:1;grid-row:3/5}
+#view-evaluation .project-bank-panel>.bank-mine-head{grid-column:2;margin:0}
+#view-evaluation .project-bank-panel>#projectMyRubrics{grid-column:2;max-height:190px}
+#view-evaluation #projectWorkspace .eval-top{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+#view-evaluation #projectWorkspace .eval-top .span-2{grid-column:span 2!important}
+#evalStudents.student-picker{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;max-height:none}
+#evalStudents .student-pick{min-height:46px!important;padding:8px 12px!important;display:flex!important;align-items:center;gap:10px;border-radius:12px!important}
+#evalStudents .student-pick input{min-height:0!important;width:20px;height:20px}
+#evalStudents .student-pick:has(input:checked){border-color:var(--primary)!important;background:var(--primary-soft)!important}
+#view-evaluation .pe-table .rb-level{min-height:58px!important}
+#view-evaluation .pe-table .rb-level b{font-size:13.5px}
+#view-evaluation .pe-table .rb-level span{font-size:12px}
+@media(max-width:1000px){
+  #view-evaluation .bank-actions{grid-template-columns:1fr 1fr}
+  #view-evaluation .project-bank-panel{grid-template-columns:1fr}
+  #view-evaluation .project-bank-panel>*{grid-column:1!important;grid-row:auto!important}
+  #view-evaluation #projectWorkspace .eval-top{grid-template-columns:1fr 1fr!important}
+}
+@media(max-width:699px){#view-evaluation .bank-actions{grid-template-columns:1fr}}
