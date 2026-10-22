@@ -16,6 +16,7 @@ let notebookData=null;
 const notebookEdits={grades:new Map(),components:new Map()};
 let notebookAutoSaveTimer=null;
 let lastNotebookEdit=null;
+let notebookAutoSavePending=false;
 let undoHideTimer=null;
 let classMode=false;
 let studentDrawerState={period:null,studentId:null};
@@ -185,7 +186,7 @@ function resetDynamicsSession(){
 
 function goView(name){
   if(currentView==='dynamics' && name!=='dynamics'){ resetDynamicsSession(); exitRouletteFullscreen(); }
-  if(currentView==='notebook' && name!=='notebook') closeStudentDrawer();
+  if(currentView==='notebook' && name!=='notebook'){ closeStudentDrawer(); window.MiAulaKeypad?.close(); }
   currentView=name;
   document.body.classList.toggle('notebook-view-active',name==='notebook');
   const mainMenuBtn=$('#mainMenuBtn');
@@ -229,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.6.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.7.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -238,7 +239,7 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.addEventListener('controllerchange',()=>{
     if(swControllerChanged)return;
     swControllerChanged=true;
-    toast('MiAula se actualizó. La nueva versión quedará activa al volver a abrir la app.');
+    if(typeof showUpdateBanner==='function')showUpdateBanner();else toast('MiAula se actualizó. La nueva versión quedará activa al volver a abrir la app.');
   });
 }
 
@@ -552,6 +553,7 @@ function renderAttendance(){
 window.setStatus=(i,st,el)=>{
   if(attendanceData[i]?.secretary_pending){toast('Primero resuelve el estado pendiente con Secretaría',true);return;}
   attendanceData[i].status=st;
+  try{navigator.vibrate?.(10);}catch{}
   el.parentElement.querySelectorAll('button.status-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   const note=el.closest('.attendance-row-actions')?.querySelector('.secretary-correction-note');if(note)note.remove();
@@ -883,7 +885,7 @@ function drawWheel(){
     const style=wheelStyle(i,used);
     ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a1,a2);ctx.closePath();ctx.fillStyle=style.fill;ctx.fill();ctx.strokeStyle='rgba(255,255,255,.82)';ctx.lineWidth=2.5;ctx.stroke();
     const mid=a1+step/2,tx=cx+Math.cos(mid)*r*.72,ty=cy+Math.sin(mid)*r*.72;
-    ctx.fillStyle=style.text;ctx.font=`950 ${students.length>42?17:students.length>30?20:students.length>20?24:30}px Segoe UI,Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(s.list_number??i+1),tx,ty);
+    ctx.fillStyle=style.text;ctx.font=`950 ${students.length>42?17:students.length>30?20:students.length>20?24:30}px Segoe UI,Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(used?String(s.list_number??i+1):'?',tx,ty);
   });
   ctx.beginPath();ctx.arc(cx,cy,r*.19,0,Math.PI*2);ctx.fillStyle='#ffffff';ctx.fill();
 }
@@ -959,6 +961,7 @@ async function spinWheel(){
   dynamics.winnerRated=false;
   $('#rouletteNumber').textContent=chosen.list_number??index+1;
   $('#rouletteName').textContent=studentLabel(chosen);
+  if(typeof launchConfetti==='function')launchConfetti();
   await refreshWinnerExtraStatus();
   const result=$('#rouletteResultPanel');
   if(result){result.classList.remove('winner-pop');void result.offsetWidth;result.classList.add('winner-pop');setTimeout(()=>result.classList.remove('winner-pop'),900);}
@@ -2011,7 +2014,8 @@ function fitNotebookTable(){
   const wrap=view.querySelector('.notebook-period-block .notebook-table-wrap');
   if(!wrap){view.style.removeProperty('--nb-fit');return;}
   const nav=$('#bottomAppNav'),navVisible=nav&&getComputedStyle(nav).display!=='none';
-  const reserve=(navVisible?nav.offsetHeight+18:0)+14;
+  const kp=$('#gradeKeypad'),kpVisible=kp&&!kp.classList.contains('hidden');
+  const reserve=Math.max(navVisible?nav.offsetHeight+18:0,kpVisible?kp.offsetHeight+16:0)+14;
   const top=wrap.getBoundingClientRect().top+window.scrollY;
   view.style.setProperty('--nb-fit',`${Math.max(300,Math.floor(window.innerHeight-top-reserve))}px`);
 }
@@ -2075,6 +2079,7 @@ function renderNotebook(){
     });
   });
   applyNotebookFilters();
+  window.MiAulaKeypad?.prepare();
 }
 window.openExtraModal=async function(period,studentId){
   if(!notebookData?.group?.id)return;
@@ -2348,8 +2353,10 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.6.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.7.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
+    try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
+    if(typeof renderBackupReminder==='function')renderBackupReminder();
   }catch(e){console.error(e);toast('No se pudo generar el respaldo: '+e.message,true);}
 }
 $('#backupBtn').onclick=downloadMiAulaBackup;
@@ -2469,6 +2476,7 @@ async function renderClassSnapshot(forcedGid=null){
   const att=await MiAulaDB.byIndex('attendance','group_date',[gid,today]);
   const attendanceText=att.length?`✓ Tomada · ${att.length} alumnos`:'Pendiente';
   box.innerHTML=`<div class="snapshot-head"><div><span class="eyebrow">Clase activa</span><h3>${escapeHtml(g.name)} · Parcial ${p}</h3><p>${escapeHtml(g.discipline||'')}</p></div><button class="btn primary" onclick="openNotebook(${gid})">Abrir cuaderno</button></div><div class="snapshot-grid"><div><span>Alumnos</span><strong>${students.length}</strong></div><div><span>Asistencia hoy</span><strong class="${att.length?'ok':'warn'}">${attendanceText}</strong></div><div><span>Actividades</span><strong>${activities.length}</strong></div><div><span>Con pendientes</span><strong class="${pendingStudents?'warn':'ok'}">${pendingStudents}</strong></div></div>`;
+  if(typeof renderAttentionPanel==='function')renderAttentionPanel(gid).catch(e=>console.error(e));
 }
 
 function toggleClassMode(force=null){
@@ -2506,7 +2514,9 @@ function applyNotebookFilters(){
 function scheduleNotebookAutoSave(){
   setSaveState('changed','Cambios sin guardar');
   clearTimeout(notebookAutoSaveTimer);
+  notebookAutoSavePending=true;
   notebookAutoSaveTimer=setTimeout(async()=>{
+    notebookAutoSavePending=false;
     const ok=await saveNotebookChanges({silent:true,noReload:true,skipSummary:true});
     if(ok&&lastNotebookEdit)showUndoBar('Cambio guardado automáticamente');
   },900);
@@ -2676,3 +2686,286 @@ $('#themeToggle')?.addEventListener('click',()=>{
   applyTheme(next);
   try{localStorage.setItem(THEME_KEY,next);}catch{}
 });
+
+// ==========================================================================
+// 2.7.0 · Teclado de calificaciones, confeti, alertas, recordatorio de respaldo,
+// aviso de actualización, guardado seguro al salir y reportes imprimibles.
+// ==========================================================================
+
+// ---------- Guardado seguro: si la app se cierra antes del autoguardado ----------
+async function flushNotebookAutoSave(){
+  if(!notebookAutoSavePending)return;
+  clearTimeout(notebookAutoSaveTimer);notebookAutoSavePending=false;
+  try{await saveNotebookChanges({silent:true,noReload:true,skipSummary:true});}catch(e){console.error(e);}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushNotebookAutoSave();});
+window.addEventListener('pagehide',()=>{flushNotebookAutoSave();});
+
+// ---------- Aviso de actualización ----------
+function showUpdateBanner(){$('#updateBanner')?.classList.remove('hidden');}
+$('#updateNow')?.addEventListener('click',async()=>{
+  const btn=$('#updateNow');if(btn){btn.disabled=true;btn.textContent='Actualizando…';}
+  await flushNotebookAutoSave();
+  location.reload();
+});
+
+// ---------- Pantalla de inicio ----------
+setTimeout(()=>$('#splash')?.classList.add('done'),650);
+setTimeout(()=>$('#splash')?.remove(),1400);
+
+// ---------- Recordatorio de respaldo ----------
+function lastBackupInfo(){
+  let iso=null;try{iso=localStorage.getItem('miaula:lastBackupAt');}catch{}
+  if(!iso)return {state:'never',days:null,text:'Aún no has descargado un respaldo en esta tablet.'};
+  const d=new Date(iso),days=Math.floor((Date.now()-d.getTime())/86400000);
+  const when=days<=0?'hoy':days===1?'ayer':`hace ${days} días`;
+  const date=d.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+  return {state:days>7?'late':'ok',days,text:`Último respaldo: ${when} (${date}).`};
+}
+function renderBackupReminder(){
+  const info=lastBackupInfo();
+  const box=$('#backupReminder');
+  if(box){
+    const title=info.state==='ok'?'Respaldo al día':info.state==='late'?'Conviene respaldar':'Sin respaldo';
+    box.className=`panel backup-reminder ${info.state}`;
+    box.innerHTML=`<div class="backup-reminder-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></div><div class="backup-reminder-copy"><strong>${title}</strong><small>${escapeHtml(info.text)}</small></div><button type="button" class="btn ${info.state==='ok'?'subtle':'primary'}" id="backupReminderBtn">Respaldar ahora</button>`;
+    $('#backupReminderBtn').onclick=downloadMiAulaBackup;
+  }
+  const admin=$('#backupLastInfo');if(admin){admin.textContent=info.text;admin.className=`backup-last-info ${info.state}`;}
+}
+renderBackupReminder();
+
+// ---------- Inicio: requiere atención ----------
+async function renderAttentionPanel(gid){
+  const box=$('#attentionPanel');if(!box)return;
+  gid=+gid;if(!gid){box.innerHTML='<div class="attention-empty">Selecciona un grupo para ver lo que requiere atención.</div>';return;}
+  const g=await getGroupState(gid);if(!g)return;
+  const p=String(g.current_period||1);
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const records=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const byStudent=new Map();for(const r of records){if(!byStudent.has(r.student_id))byStudent.set(r.student_id,[]);byStudent.get(r.student_id).push(r);}
+  const risk=students.filter(s=>!isSecretaryPendingStudent(s)).map(s=>({s,t:attendanceTotals(byStudent.get(s.id)||[])})).filter(x=>(x.t.absencePct||0)>=15).sort((a,b)=>(b.t.absencePct||0)-(a.t.absencePct||0));
+  const pendingSec=students.filter(isSecretaryPendingStudent);
+  const activities=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>String(b.activity_date||'').localeCompare(String(a.activity_date||'')));
+  const gradeLists=await Promise.all(activities.map(a=>MiAulaDB.byIndex('grades','activity_id',a.id)));
+  const eligible=students.filter(s=>!isSecretaryPendingStudent(s));
+  const missing=activities.map((a,i)=>{const done=new Set(gradeLists[i].filter(r=>r.score!=null||String(r.status||'').toUpperCase()==='NP').map(r=>r.student_id));return {a,count:eligible.filter(s=>!done.has(s.id)).length};}).filter(x=>x.count>0);
+  const items=[];
+  for(const {s,t} of risk.slice(0,5)){
+    const crit=(t.absencePct||0)>=20;
+    items.push(`<button type="button" class="attention-item ${crit?'critical':'warning'}" onclick="goView('attendanceHistory')"><b>${s.list_number??'—'}</b><span>${escapeHtml(studentLabel(s))}</span><em>${fmtPct(t.absencePct)} faltas · ${crit?'20% o más':'cerca del límite'}</em></button>`);
+  }
+  if(risk.length>5)items.push(`<button type="button" class="attention-item more" onclick="goView('attendanceHistory')"><span>+${risk.length-5} alumnos más con 15% o más de faltas</span></button>`);
+  if(pendingSec.length)items.push(`<button type="button" class="attention-item warning" onclick="goView('attendanceHistory')"><b>${pendingSec.length}</b><span>Pendiente${pendingSec.length>1?'s':''} con Secretaría</span><em>Por confirmar</em></button>`);
+  for(const {a,count} of missing.slice(0,3))items.push(`<button type="button" class="attention-item info" onclick="openNotebook(${gid})"><b>${count}</b><span>${escapeHtml(a.title)}</span><em>sin calificar</em></button>`);
+  if(missing.length>3)items.push(`<button type="button" class="attention-item more" onclick="openNotebook(${gid})"><span>+${missing.length-3} actividades más con calificaciones pendientes</span></button>`);
+  box.innerHTML=`<div class="attention-head"><svg class="ui-icon" aria-hidden="true"><use href="#i-alert"></use></svg><strong>Requiere atención</strong><small>${escapeHtml(g.name)} · Parcial ${p}</small></div>${items.length?`<div class="attention-list">${items.join('')}</div>`:'<div class="attention-ok">✓ Todo en orden: sin alumnos en riesgo por faltas, sin pendientes con Secretaría y sin calificaciones pendientes.</div>'}`;
+}
+
+// ---------- Confeti al revelar el alumno de la ruleta ----------
+function launchConfetti(){
+  try{if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;}catch{}
+  const canvas=document.createElement('canvas');canvas.className='confetti-canvas';document.body.appendChild(canvas);
+  const dpr=Math.min(window.devicePixelRatio||1,2),W=innerWidth,H=innerHeight;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  const colors=['#FF3B30','#FF9500','#FFD60A','#30D158','#00C7BE','#0A84FF','#5E5CE6','#BF5AF2','#FF2D55'];
+  const target=$('#rouletteName')?.getBoundingClientRect();
+  const ox=target?target.left+target.width/2:W/2,oy=target?target.top+target.height/2:H/3;
+  const parts=[];
+  for(let i=0;i<170;i++){
+    const ang=-Math.PI/2+(Math.random()-.5)*Math.PI*1.25,sp=7+Math.random()*10;
+    parts.push({x:ox+(Math.random()-.5)*60,y:oy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,w:6+Math.random()*7,h:4+Math.random()*5,r:Math.random()*6.28,vr:(Math.random()-.5)*.35,c:colors[i%colors.length],shape:Math.random()<.3?'circle':'rect'});
+  }
+  const start=performance.now(),dur=2600;
+  function frame(now){
+    const t=now-start;ctx.clearRect(0,0,W,H);
+    const fade=t>dur-700?Math.max(0,(dur-t)/700):1;
+    for(const p of parts){
+      p.vy+=.32;p.vx*=.985;p.vy*=.985;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;
+      ctx.save();ctx.globalAlpha=fade;ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.c;
+      if(p.shape==='circle'){ctx.beginPath();ctx.arc(0,0,p.h/1.6,0,6.28);ctx.fill();}else ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h*Math.abs(Math.cos(p.r*1.7))+1);
+      ctx.restore();
+    }
+    if(t<dur)requestAnimationFrame(frame);else canvas.remove();
+  }
+  requestAnimationFrame(frame);
+  try{navigator.vibrate?.([18,40,18]);}catch{}
+}
+
+// ---------- Teclado de calificaciones del Cuaderno ----------
+window.MiAulaKeypad=(()=>{
+  const KEY='miaula:notebookKeypad';
+  const pad=$('#gradeKeypad'),toggle=$('#notebookKeypadToggle');
+  let current=null,fresh=true;
+  function enabled(){
+    let v=null;try{v=localStorage.getItem(KEY);}catch{}
+    if(v==='on')return true;if(v==='off')return false;
+    try{return window.matchMedia('(pointer: coarse)').matches;}catch{return false;}
+  }
+  function inputs(){return $$('#notebookTable .notebook-score-input');}
+  function prepare(){
+    const on=enabled();
+    inputs().forEach(i=>i.setAttribute('inputmode',on?'none':'decimal'));
+    if(toggle){toggle.setAttribute('aria-pressed',String(on));toggle.classList.toggle('active',on);}
+  }
+  function label(el){
+    const row=el.closest('tr'),name=row?.querySelector('.student-name-button strong')?.textContent||'Alumno',num=row?.querySelector('.notebook-num')?.textContent||'';
+    let col='';
+    if(el.dataset.kind==='grade'){const a=notebookData?.periods?.[el.dataset.period]?.activities?.find(x=>String(x.id)===String(el.dataset.activity));col=a?a.title:'Actividad';}
+    else col={values_score:'Valores',attitudes_score:'Actitudes',exam_score:'Examen'}[el.dataset.field]||'Componente';
+    return {name:`${num?num+'. ':''}${name}`,col};
+  }
+  function sync(){
+    if(!current)return;
+    const l=label(current);
+    $('#kpTargetLabel').textContent=`${l.col} · máx. ${fmtShort(+current.dataset.max||10)}`;
+    $('#kpTargetName').textContent=l.name;
+    $('#kpValue').textContent=current.value||'—';
+    $$('#notebookTable td.kp-active').forEach(td=>td.classList.remove('kp-active'));
+    current.closest('td')?.classList.add('kp-active');
+  }
+  function open(el){
+    if(!pad||document.body.classList.contains('notebook-focus'))return;
+    current=el;fresh=true;
+    const wasHidden=pad.classList.contains('hidden');
+    pad.classList.remove('hidden');document.body.classList.add('keypad-open');sync();
+    document.documentElement.style.setProperty('--kp-h',pad.offsetHeight+'px');
+    if(wasHidden)requestAnimationFrame(()=>{if(typeof fitNotebookTable==='function')fitNotebookTable();setTimeout(()=>el.scrollIntoView({block:'nearest',inline:'nearest'}),30);});
+    else el.scrollIntoView({block:'nearest',inline:'nearest'});
+  }
+  function close(){
+    if(!pad||pad.classList.contains('hidden'))return;
+    pad.classList.add('hidden');document.body.classList.remove('keypad-open');
+    $$('#notebookTable td.kp-active').forEach(td=>td.classList.remove('kp-active'));
+    if(current&&document.activeElement===current)current.blur();
+    current=null;
+    requestAnimationFrame(()=>{if(typeof fitNotebookTable==='function')fitNotebookTable();});
+  }
+  function setValue(v){
+    if(!current)return;
+    current.value=v;current.dispatchEvent(new Event('input',{bubbles:true}));
+    $('#kpValue').textContent=v||'—';
+    try{navigator.vibrate?.(8);}catch{}
+  }
+  function visibleRows(){return [...document.querySelectorAll('#notebookTable tbody tr[data-notebook-row]:not(.notebook-row-hidden)')];}
+  function move(dir){
+    if(!current)return;
+    const row=current.closest('tr');let next=null;
+    if(dir==='left'||dir==='right'){
+      const list=[...row.querySelectorAll('.notebook-score-input')],i=list.indexOf(current);
+      next=list[i+(dir==='right'?1:-1)]||null;
+    }else{
+      const rows=visibleRows(),i=rows.indexOf(row),target=rows[i+(dir==='down'?1:-1)];
+      if(target){
+        const sel=current.dataset.kind==='grade'?`.notebook-score-input[data-activity="${current.dataset.activity}"]`:`.notebook-score-input[data-field="${current.dataset.field}"]`;
+        next=target.querySelector(sel);
+      }
+    }
+    if(next){next.focus({preventScroll:true});open(next);}
+    else if(dir==='down')toast('Última fila de la columna.');
+  }
+  if(pad){
+    pad.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
+    pad.addEventListener('click',e=>{
+      const b=e.target.closest('button');if(!b||!current)return;
+      if(b.dataset.kpQuick!=null){setValue(b.dataset.kpQuick);fresh=true;setTimeout(()=>move('down'),110);return;}
+      if(b.dataset.kpDigit!=null){
+        const d=b.dataset.kpDigit;let v=fresh||String(current.value).toUpperCase()==='NP'?'':String(current.value);
+        if(d==='.'&&v.includes('.'))return;
+        v=(v+d).slice(0,5);if(v==='.')v='0.';fresh=false;setValue(v);return;
+      }
+      if(b.dataset.kpMove){fresh=true;move(b.dataset.kpMove);return;}
+      const act=b.dataset.kp;
+      if(act==='back'){fresh=false;setValue(String(current.value).toUpperCase()==='NP'?'':String(current.value).slice(0,-1));}
+      else if(act==='clear'){fresh=true;setValue('');}
+      else if(act==='close')close();
+      else if(act==='system'){
+        try{localStorage.setItem(KEY,'off');}catch{}
+        const el=current;prepare();close();
+        if(el){el.focus();toast('Usando el teclado del sistema. Puedes volver a activar el Teclado MiAula en la barra del Cuaderno.');}
+      }
+    });
+  }
+  const table=$('#notebookTable');
+  if(table){
+    table.addEventListener('focusin',e=>{const el=e.target.closest?.('.notebook-score-input');if(el&&enabled())open(el);});
+    table.addEventListener('focusout',()=>setTimeout(()=>{if(!document.activeElement?.closest?.('#notebookTable .notebook-score-input'))close();},140));
+  }
+  toggle?.addEventListener('click',()=>{
+    const on=!enabled();try{localStorage.setItem(KEY,on?'on':'off');}catch{}
+    prepare();if(!on)close();
+    toast(on?'Teclado MiAula activado':'Teclado MiAula desactivado: se usará el del sistema');
+  });
+  prepare();
+  return {prepare,close,open,enabled};
+})();
+
+// ---------- Reportes imprimibles / PDF ----------
+function printHTML(title,html){
+  const area=$('#printArea');if(!area)return;
+  area.innerHTML=`<div class="pr-doc">${html}</div>`;
+  const oldTitle=document.title;document.title=title;
+  document.body.classList.add('printing');
+  const done=()=>{document.body.classList.remove('printing');document.title=oldTitle;area.innerHTML='';window.removeEventListener('afterprint',done);};
+  window.addEventListener('afterprint',done);
+  setTimeout(()=>{try{window.print();}catch(e){toast('No se pudo abrir la impresión: '+e.message,true);done();}},60);
+}
+function prHeader(kind,g,extra=''){
+  const date=new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'});
+  return `<header class="pr-head"><div class="pr-brand"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".75"/></svg><div><strong>${escapeHtml(kind)}</strong><span>${escapeHtml(g.name||'')} · ${escapeHtml(g.discipline||'')}${g.school_year?' · Ciclo '+escapeHtml(g.school_year):''}</span></div></div><div class="pr-meta">${extra}<span>Emitido: ${date}</span></div></header>`;
+}
+const prFoot=()=>`<footer class="pr-foot"><span>Generado con MiAula Slate · Control de bitácora</span></footer>`;
+const prScore=v=>v==null?'<span class="pr-muted">Pendiente</span>':fmtNum(v);
+
+async function printStudentReport(){
+  const st=studentDrawerState;if(!st?.studentId||!notebookData?.group?.id){toast('Abre primero la Vista alumno.',true);return;}
+  const gid=+notebookData.group.id,period=String(st.period),sid=+st.studentId;
+  const g=await getGroupState(gid),pd=await buildNotebookPeriodData(gid,period);
+  const s=pd.students.find(x=>+x.id===sid);if(!s){toast('No se encontró el alumno.',true);return;}
+  const gr=pd.gradingMap.get(sid)||{},sc=pd.scheme,principal=principalLabel(sc.principal_type||'project');
+  const att=attendanceTotals((await MiAulaDB.byIndex('attendance','student_id',sid)).filter(r=>+r.group_id===gid));
+  const risk=absenceRiskMeta(att.absencePct),ex=pd.extrasByStudent.get(sid)||{goodAvailable:0,goodUsed:0,bad:0};
+  const rows=pd.activities.map(a=>{const r=pd.grades.get(`${a.id}:${sid}`),v=notebookGradeDisplay(r);return `<tr><td>${a.activity_date?parseISODateLocal(a.activity_date).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}):'—'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activity_type||'')}</td><td class="pr-num">${v===''?'<span class="pr-muted">—</span>':v==='NP'?'<b class="pr-np">NP</b>':escapeHtml(v)} <small>/ ${fmtShort(a.max_score)}</small></td></tr>`;}).join('')||'<tr><td colspan="4" class="pr-muted">Sin actividades registradas en este parcial.</td></tr>';
+  const comps=[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],['Valores',sc.values_pct,gr.values_score],['Actitudes',sc.attitudes_pct,gr.attitudes_score]];
+  const html=`${prHeader(`Boleta de calificaciones · Parcial ${period}`,g)}
+  <section class="pr-student"><div><small>Alumno</small><strong>${escapeHtml(studentLabel(s))}</strong></div><div><small>No. de lista</small><strong>${s.list_number??'—'}</strong></div><div class="pr-final"><small>Calificación del parcial</small><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></section>
+  <h3>Componentes de evaluación</h3>
+  <table class="pr-table"><thead><tr><th>Componente</th><th>Porcentaje</th><th class="pr-num">Calificación</th><th class="pr-num">Aporta</th></tr></thead><tbody>${comps.map(([n,pct,v])=>`<tr><td>${escapeHtml(n)}</td><td>${+pct||0}%</td><td class="pr-num">${+pct>0?prScore(v):'<span class="pr-muted">No aplica</span>'}</td><td class="pr-num">${+pct>0&&v!=null?fmtNum(v*pct/100):'—'}</td></tr>`).join('')}</tbody></table>
+  <h3>Actividades del parcial</h3>
+  <table class="pr-table"><thead><tr><th>Fecha</th><th>Actividad</th><th>Tipo</th><th class="pr-num">Calificación</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="pr-grid">
+    <section><h3>Asistencia (acumulada)</h3><table class="pr-table compact"><tbody><tr><td>Horas computables</td><td class="pr-num">${att.total}</td></tr><tr><td>Presente</td><td class="pr-num">${att.P} h</td></tr><tr><td>Faltas</td><td class="pr-num">${att.F} h</td></tr><tr><td>Retardos</td><td class="pr-num">${att.R} h</td></tr><tr><td>Justificadas</td><td class="pr-num">${att.J} h</td></tr><tr><td><b>Porcentaje de faltas</b></td><td class="pr-num"><b>${fmtPct(att.absencePct)}</b> · ${risk.label}</td></tr></tbody></table></section>
+    <section><h3>Puntos extra (Parcial ${period})</h3><table class="pr-table compact"><tbody><tr><td>Disponibles</td><td class="pr-num">+${ex.goodAvailable||0}</td></tr><tr><td>Usados en actividades</td><td class="pr-num">${ex.goodUsed||0}</td></tr><tr><td>Puntos negativos</td><td class="pr-num">${ex.bad?'-'+ex.bad:'0'}</td></tr></tbody></table></section>
+  </div>
+  <div class="pr-signs"><div><span></span><small>Ing. Niccolás C.M. · Docente</small></div><div><span></span><small>Nombre y firma de enterado (padre, madre o tutor)</small></div></div>
+  ${prFoot()}`;
+  printHTML(`Boleta ${studentLabel(s)} · Parcial ${period}`,html);
+}
+$('#printStudentReport')?.addEventListener('click',()=>printStudentReport().catch(e=>{console.error(e);toast(e.message,true);}));
+
+async function printAttendanceReport(){
+  const gid=attendanceHistoryGroupId();if(!gid){toast('Selecciona un grupo.',true);return;}
+  const g=await getGroupState(gid);
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const records=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const byStudent=new Map();for(const r of records){if(!byStudent.has(r.student_id))byStudent.set(r.student_id,[]);byStudent.get(r.student_id).push(r);}
+  const rows=students.map(s=>({s,t:attendanceTotals(byStudent.get(s.id)||[]),pending:isSecretaryPendingStudent(s)}));
+  const normal=rows.filter(r=>!r.pending),risk=normal.filter(r=>(r.t.absencePct||0)>=15).sort((a,b)=>(b.t.absencePct||0)-(a.t.absencePct||0));
+  const dates=[...new Set(records.map(r=>r.attendance_date))].sort();
+  const range=dates.length?`${parseISODateLocal(dates[0]).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} – ${parseISODateLocal(dates[dates.length-1]).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}`:'Sin registros';
+  const line=({s,t,pending})=>{const m=absenceRiskMeta(t.absencePct);return `<tr class="${pending?'pr-pending':m.key}"><td class="pr-num">${s.list_number??'—'}</td><td>${escapeHtml(studentLabel(s))}</td><td class="pr-num">${t.total}</td><td class="pr-num">${t.P}</td><td class="pr-num">${t.F}</td><td class="pr-num">${t.R}</td><td class="pr-num">${t.J}</td><td class="pr-num"><b>${pending?'—':fmtPct(t.absencePct)}</b></td><td>${pending?'Pendiente Secretaría':m.label}</td></tr>`;};
+  const head='<thead><tr><th class="pr-num">No.</th><th>Alumno</th><th class="pr-num">Horas</th><th class="pr-num">P</th><th class="pr-num">F</th><th class="pr-num">R</th><th class="pr-num">J</th><th class="pr-num">% faltas</th><th>Estado</th></tr></thead>';
+  const html=`${prHeader('Reporte de inasistencias',g,`<span>Periodo: ${range}</span>`)}
+  <section class="pr-kpis"><div><small>Alumnos activos</small><strong>${students.length}</strong></div><div class="critical"><small>20% o más</small><strong>${normal.filter(r=>(r.t.absencePct||0)>=20).length}</strong></div><div class="warning"><small>15% a 19.9%</small><strong>${normal.filter(r=>(r.t.absencePct||0)>=15&&(r.t.absencePct||0)<20).length}</strong></div><div><small>Pendientes Secretaría</small><strong>${rows.filter(r=>r.pending).length}</strong></div></section>
+  <h3>Alumnos que requieren atención (15% o más de faltas)</h3>
+  ${risk.length?`<table class="pr-table">${head}<tbody>${risk.map(line).join('')}</tbody></table>`:'<p class="pr-muted">Ningún alumno alcanza el 15% de faltas.</p>'}
+  ${rows.some(r=>r.pending)?`<h3>Pendientes de confirmar con Secretaría</h3><table class="pr-table">${head}<tbody>${rows.filter(r=>r.pending).map(line).join('')}</tbody></table>`:''}
+  <h3>Lista completa del grupo</h3>
+  <table class="pr-table">${head}<tbody>${rows.map(line).join('')}</tbody></table>
+  <p class="pr-note">Porcentaje = horas de falta / horas computables × 100. Las horas marcadas como Pendiente Secretaría no se incluyen en el cálculo.</p>
+  <div class="pr-signs"><div><span></span><small>Ing. Niccolás C.M. · Docente</small></div><div><span></span><small>Recibido por Secretaría / Control escolar</small></div></div>
+  ${prFoot()}`;
+  printHTML(`Inasistencias ${g.name}`,html);
+}
+$('#printAttendanceReport')?.addEventListener('click',()=>printAttendanceReport().catch(e=>{console.error(e);toast(e.message,true);}));
