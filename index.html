@@ -9,11 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.9.0 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.9.0">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.9.0">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.9.0">
-  <link rel="stylesheet" href="styles.css?v=2.9.0">
+  <title>MiAula Slate 2.9.1 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.9.1">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.9.1">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.9.1">
+  <link rel="stylesheet" href="styles.css?v=2.9.1">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -44,8 +44,8 @@
 <div id="splash" class="splash" aria-hidden="true"><div class="splash-inner"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff" opacity=".96"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".72"/><path d="m36.5 33.2 3.6 3.6 6.4-7" fill="none" stroke="#2F5B88" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Mi<strong>Aula</strong></b></div></div>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.9.0" alt="MiAula">
-    <h1>MiAula Slate 2.9.0</h1>
+    <img src="assets/icon-books-192.png?v=2.9.1" alt="MiAula">
+    <h1>MiAula Slate 2.9.1</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -54,8 +54,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.9.0" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.9.0 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.9.1" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.9.1 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -86,7 +86,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.9.0</span>
+        <span class="version-badge">MiAula Slate · 2.9.1</span>
         <button class="btn icon-btn theme-toggle" id="themeToggle" type="button" aria-label="Cambiar a modo claro" title="Cambiar a modo claro"><svg class="ui-icon" aria-hidden="true"><use href="#i-sun"></use></svg></button>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
@@ -465,7 +465,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.9.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.9.1 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -474,6 +474,7 @@
   <button class="app-tab active" data-app-view="dashboard"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><b>Inicio</b></button>
   <button class="app-tab" data-app-view="attendance"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-attendance"></use></svg></span><b>Asistencia</b></button>
   <button class="app-tab" data-app-view="notebook"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg></span><b>Cuaderno</b></button>
+  <button class="app-tab new-activity-tab" data-app-view="activities" data-focus="new-activity" aria-label="Nueva actividad"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-plus"></use></svg></span><b>Actividad</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg></span><b>Ruleta</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg></span><b>Equipos</b></button>
   <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><b>Respaldo</b></button>
@@ -528,9 +529,9 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.9.0"></script>
-<script src="xlsx-lite.js?v=2.9.0"></script>
-<script src="rubricas.js?v=2.9.0"></script>
-<script src="app.js?v=2.9.0"></script>
+<script src="db.js?v=2.9.1"></script>
+<script src="xlsx-lite.js?v=2.9.1"></script>
+<script src="rubricas.js?v=2.9.1"></script>
+<script src="app.js?v=2.9.1"></script>
 </body>
 </html>

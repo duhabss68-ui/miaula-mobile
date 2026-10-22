@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.9.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.9.1',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -2370,7 +2370,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.9.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.9.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -2424,7 +2424,8 @@ function updateAppNav(){
     let active=false;
     if(v==='dynamics')active=currentView==='dynamics'&&(!mode||mode===dynamics.mode);
     else if(currentView==='attendanceHistory')active=v==='attendance';
-    else if(['groups','activities','grading','evaluation'].includes(currentView))active=v==='more';
+    else if(currentView==='activities')active=v==='activities';
+    else if(['groups','grading','evaluation'].includes(currentView))active=v==='more';
     else active=v===currentView;
     btn.classList.toggle('active',active);
   });
@@ -2433,7 +2434,16 @@ function updateAppNav(){
 $$('.app-tab').forEach(btn=>btn.addEventListener('click',()=>{
   const view=btn.dataset.appView,mode=btn.dataset.mode;
   if(view==='dynamics')openDynamicsMode(mode||'roulette'); else goView(view);
+  if(btn.dataset.focus==='new-activity')focusNewActivityForm();
 }));
+// 2.9.1: acceso directo a «Nueva actividad» desde la barra inferior.
+function focusNewActivityForm(){
+  if(typeof setActivitiesTab==='function')setActivitiesTab('activities');
+  const form=$('#activityForm'),name=form?.querySelector('input[name="title"]');
+  if(!form)return;
+  form.closest('.panel')?.scrollIntoView({behavior:'smooth',block:'start'});
+  setTimeout(()=>name?.focus({preventScroll:true}),350);
+}
 
 async function syncContextIndicators(gid){
   gid=+gid||0;

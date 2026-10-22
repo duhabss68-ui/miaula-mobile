@@ -1,4 +1,4 @@
-@import url("./styles-legacy.css?v=2.9.0");
+@import url("./styles-legacy.css?v=2.9.1");
 
 /* ==========================================================================\n   MiAula Slate 2.4.6 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
@@ -1409,3 +1409,15 @@ body.sheet-open .toast{top:14px;bottom:auto!important}
   #view-evaluation #projectWorkspace .eval-top{grid-template-columns:1fr 1fr!important}
 }
 @media(max-width:699px){#view-evaluation .bank-actions{grid-template-columns:1fr}}
+
+/* 2.9.1 · «Actividad» en la barra inferior (8 accesos; 7 en Modo clase) */
+.bottom-app-nav{grid-template-columns:repeat(8,minmax(0,1fr))!important;width:min(960px,calc(100% - 32px))}
+body.class-mode .bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!important}
+.app-tab.new-activity-tab span{border-radius:9px;background:var(--primary-soft);color:var(--accent-text)!important}
+.app-tab.new-activity-tab.active span{background:transparent;color:#fff!important}
+@media(max-width:699px){
+  .bottom-app-nav{grid-template-columns:repeat(8,minmax(0,1fr))!important;width:calc(100% - 8px)!important;padding:3px!important;gap:1px!important}
+  body.class-mode .bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!important}
+  .app-tab b{font-size:9px!important}
+  .app-tab span{width:22px!important;height:22px!important}
+}
