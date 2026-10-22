@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.7.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.8.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -396,7 +396,7 @@ window.reorganizeStudents=async gid=>{
   await viewStudents(gid);
 };
 
-function openModal(title,html){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');}
+function openModal(title,html){const card=$('#modal .modal-card');if(card)card.className='modal-card';$('#modalBody').onclick=null;$('#modalTitle').textContent=title;$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');}
 function closeModal(){$('#modal').classList.add('hidden');}
 $('#modalClose').onclick=closeModal;
 $('#modal').onclick=e=>{if(e.target===$('#modal'))closeModal();};
@@ -1314,6 +1314,12 @@ $('#activityForm').onsubmit=async e=>{
   if(g.course_closed){toast(`Este grupo ya cerró sus ${totalPeriods(g)} parciales.`,true);return;}
   d.period=String(g.current_period||1);
   d.max_score=+d.max_score;d.weight=+d.weight;d.created_at=new Date().toISOString();
+  const gradingMode=d.grading_mode,rubricRef=d.rubric_ref;delete d.grading_mode;delete d.rubric_ref;
+  if(gradingMode==='rubric'){
+    const snap=await rubricSnapshotFromRef(rubricRef);
+    if(!snap){toast('Elige la rúbrica o lista de cotejo con la que vas a calificar.',true);return;}
+    d.grading_mode='rubric';d.rubric=snap;d.max_score=10;
+  }
   await MiAulaDB.add('activities',d);
   e.target.title.value='';
   await loadActivities();
@@ -1331,12 +1337,13 @@ async function loadActivities(){
   if(g.course_closed){$('#activityCards').innerHTML=`<div class="empty-state">Los ${totalPeriods(g)} parciales están cerrados. El historial permanece en la exportación de Excel.</div>`;return;}
   const arr=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
   $('#activityCards').innerHTML=arr.length
-    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Fecha ${escapeHtml(a.activity_date||'Sin fecha')} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row"><button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small subtle" onclick="editActivityDate(${a.id})">Editar fecha</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
+    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Fecha ${escapeHtml(a.activity_date||'Sin fecha')} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row">${activityCardButtons(a)}<button class="btn small subtle" onclick="editActivityDate(${a.id})">Editar fecha</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
     :`<div class="empty-state">Parcial ${p} limpio. Crea la primera actividad.</div>`;
   await syncGroupPeriodIndicators(gid);
 }
 window.openGrades=async aid=>{
   const activity=await MiAulaDB.get('activities',aid);if(!activity)return;
+  if(isRubricActivity(activity)){await openRubricEvaluator(aid);return;}
   activeActivity=activity;
   const students=(await MiAulaDB.groupStudents(activity.group_id,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
   const existing=await MiAulaDB.byIndex('grades','activity_id',aid),gm=new Map(existing.map(g=>[g.student_id,g]));
@@ -1379,7 +1386,7 @@ window.editActivityDate=async id=>{
   };
 };
 
-window.deleteActivity=async id=>{if(!confirm('¿Eliminar esta actividad y sus calificaciones?'))return;await MiAulaDB.deleteActivity(id);$('#gradePanel').classList.add('hidden');await loadActivities();await loadSummary();toast('Actividad eliminada');};
+window.deleteActivity=async id=>{const delA=await MiAulaDB.get('activities',id),delG=(await MiAulaDB.byIndex('grades','activity_id',id)).filter(g=>g.score!=null||g.status||(g.rubric_levels&&Object.keys(g.rubric_levels).length)).length;if(!confirm(`¿Eliminar definitivamente la actividad «${delA?.title||''}» y sus ${delG} calificaciones${isRubricActivity(delA)?' (incluida su rúbrica)':''}?\n\nEsto no se puede deshacer.`))return;await MiAulaDB.deleteActivity(id);$('#gradePanel').classList.add('hidden');await loadActivities();await loadSummary();toast('Actividad eliminada');};
 
 // -------------------- PARCIAL / ESQUEMA DE EVALUACIÓN --------------------
 async function getScheme(gid,period){
@@ -1438,10 +1445,11 @@ async function computeGroupGrading(gid,period){
   for(const s of students){
     let workTotal=0,workW=0,projectTotal=0,projectW=0,examTotal=0,examW=0;
     for(const g of gByStudent.get(s.id)||[]){
-      if(g.score==null)continue;
       const a=actMap.get(g.activity_id);
+      const gScore=a&&isRubricActivity(a)?rubricGradeScore(a,g):g.score;
+      if(gScore==null)continue;
       if(!a||+a.max_score<=0||+a.weight<=0)continue;
-      const normalized=+g.score*10/+a.max_score,w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
+      const normalized=+gScore*10/+a.max_score,w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
       if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}
       else if(type==='examen'){examTotal+=normalized*w;examW+=w;}
       else{workTotal+=normalized*w;workW+=w;}
@@ -1659,7 +1667,7 @@ $('#instrumentForm').onsubmit=async e=>{
   $('#instrumentName').value='';$('#criteriaRows').innerHTML='';addCriterion();await loadInstruments();toast('Instrumento guardado');
 };
 async function loadInstruments(){
-  instruments=(await MiAulaDB.all('instruments')).sort((a,b)=>b.id-a.id);
+  instruments=(await MiAulaDB.all('instruments')).filter(i=>i.format!==MiAulaRubricas.FORMAT).sort((a,b)=>b.id-a.id);
   $('#instrumentCards').innerHTML=instruments.length?instruments.map(i=>`<div class="instrument-card"><div><strong>${escapeHtml(i.name)}</strong><br><small>${i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo'} · ${i.criteria.length} criterios · ${i.convert_to_grade?'0–10':'Evidencia'}</small></div><button class="btn small danger" onclick="deleteInstrument(${i.id})">Eliminar</button></div>`).join(''):'<div class="empty-state">Crea tu primera rúbrica o lista de cotejo.</div>';
   $('#evalInstrument').innerHTML='<option value="">Seleccionar…</option>'+instruments.map(i=>`<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('');
 }
@@ -1938,6 +1946,7 @@ async function applyGradeToCurrentTeam(){
   const period=notebookData?.selected;if(!period||period==='all'){toast('Selecciona un parcial específico para calificar por equipo.',true);return;}
   const pd=notebookData.periods?.[period],aid=+$('#teamActivitySelect')?.value,activity=pd?.activities.find(a=>+a.id===aid);
   if(!activity){toast('Selecciona una actividad.',true);return;}
+  if(isRubricActivity(activity)){await openRubricEvaluator(activity.id,{mode:'team',teamName:team.name});return;}
   const raw=String($('#teamActivityScore')?.value||'').trim();if(!raw){toast('Escribe una calificación o NP.',true);return;}
   const parsed=notebookParseScore(raw,+activity.max_score||10);if(parsed.invalid){toast(`La calificación debe estar entre 0 y ${activity.max_score}, o usa NP.`,true);return;}
   const activeIds=new Set(pd.students.filter(s=>!isSecretaryPendingStudent(s)).map(s=>+s.id)),ids=team.member_ids.map(Number).filter(id=>activeIds.has(id));
@@ -1986,6 +1995,7 @@ async function loadNotebook(opts={}){
 
 function notebookActivityCell(a,s,pd){
   const rec=pd.grades.get(`${a.id}:${s.id}`);
+  if(isRubricActivity(a))return rubricNotebookCell(a,s,pd,rec);
   const val=notebookGradeDisplay(rec);
   const klass=val==='NP'?' np-value':val!==''?' captured-value':' pending-value';
   return `<td class="notebook-grade-cell${klass}"><input class="notebook-score-input" inputmode="decimal" autocomplete="off" spellcheck="false" data-kind="grade" data-period="${pd.period}" data-student="${s.id}" data-activity="${a.id}" data-max="${a.max_score}" value="${escapeHtml(val)}" placeholder="—" aria-label="${escapeHtml(a.title)} · ${escapeHtml(studentLabel(s))}"></td>`;
@@ -2036,7 +2046,7 @@ function setupNotebookScrollSync(){
 
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
-  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · /${fmtShort(a.max_score,1)}</small></th>`).join('');
+  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${isRubricActivity(a)?(activityRubric(a)?.kind==='cotejo'?'Lista de cotejo':'Rúbrica'):escapeHtml(a.activity_type)} · /${fmtShort(a.max_score,1)}</small>${teamColumnButton(a)}</th>`).join('');
   const body=pd.students.map(s=>{
     const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
     const principalCell=principalType==='exam'
@@ -2164,7 +2174,7 @@ function recalcNotebookRow(period,studentId){
   let workTotal=0,workW=0,projectTotal=0,projectW=0;
   for(const a of pd.activities){
     const el=document.querySelector(`.notebook-score-input[data-kind="grade"][data-period="${period}"][data-student="${studentId}"][data-activity="${a.id}"]`);
-    const parsed=notebookParseScore(el?.value,+a.max_score||10);if(parsed.invalid||parsed.score==null)continue;
+    const parsed=isRubricActivity(a)?{score:rubricGradeScore(a,pd.grades.get(`${a.id}:${studentId}`))}:notebookParseScore(el?.value,+a.max_score||10);if(parsed.invalid||parsed.score==null)continue;
     const normalized=parsed.score*10/(+a.max_score||10),w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
     if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}else if(type!=='examen'){workTotal+=normalized*w;workW+=w;}
   }
@@ -2234,7 +2244,7 @@ async function buildNotebookWorkbook(gid,selection){
     const rows=[headers];
     for(const s of pd.students){
       const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{},ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0,goodEarned:0,goodUsed:0};
-      const scores=pd.activities.map(a=>{const rec=pd.grades.get(`${a.id}:${s.id}`);return rec?.score!=null?rec.score:(String(rec?.status||'').toUpperCase()==='NP'?'NP':'');});
+      const scores=pd.activities.map(a=>exportGradeValue(a,pd.grades.get(`${a.id}:${s.id}`)));
       rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,gr.principal_avg,gr.values_score,gr.attitudes_score,gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
     }
     sheets.push({name:`Libreta P${p}`,rows});
@@ -2323,7 +2333,7 @@ async function buildWorkbook(gid){
   const conc=[['No.','Código','Alumno','Grado','Asistencia %','Faltas %','Alerta asistencia','Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
     const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],risk=absenceRiskMeta(at.absencePct),row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.absencePct,risk.label,at.P,at.F,at.R,at.J,at.S];
-    for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=gr?.score??null,shown=v!=null?v:(String(gr?.status||'').toUpperCase()==='NP'?'NP':'');row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
+    for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=isRubricActivity(a)?rubricGradeScore(a,gr):(gr?.score??null),shown=exportGradeValue(a,gr);row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
     row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,...periods.map(p=>grading[p].students.find(x=>x.id===s.id)?.final_grade??null));conc.push(row);
   }
   const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.','Total hrs computables','Asistencia %','Faltas %','Alerta 20%']];
@@ -2331,7 +2341,7 @@ async function buildWorkbook(gid){
   const hourHeaders=['No.','Alumno'];for(const d of dates){const hrs=classBlocks.get(d)||1;for(let h=1;h<=hrs;h++)hourHeaders.push(`${d} H${h}`);}const asistHoras=[hourHeaders];
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
   const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
-  const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,gr.score!=null?gr.score:(String(gr.status||'').toUpperCase()==='NP'?'NP':''),a.max_score,gr.score==null?null:Math.round(+gr.score*1000/+a.max_score)/100,gr.notes||'']);}
+  const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;const dv=isRubricActivity(a)?rubricGradeScore(a,gr):gr.score;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,exportGradeValue(a,gr),a.max_score,dv==null?null:Math.round(+dv*1000/+a.max_score)/100,gr.notes||'']);}
   const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||'',i?.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
   const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of periods)for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Parcial ${p}`,'Valores y Actitudes',s.notes]);
   const bajas=[['Último No.','Código','Apellido paterno','Apellido materno','Nombre(s)','Nombre completo','Fecha de baja','Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.','Asistencia %']];for(const s of inactive){const at=attendanceTotals(attendance.filter(a=>a.student_id===s.id));bajas.push([s.former_list_number??s.list_number,s.student_code,s.paternal_last_name||'',s.maternal_last_name||'',s.given_names||'',studentLabel(s),s.withdrawn_at?new Date(s.withdrawn_at).toLocaleDateString('es-MX'):'',at.P,at.F,at.R,at.J,at.S,at.pct]);}
@@ -2353,7 +2363,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.7.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.8.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -2577,6 +2587,7 @@ window.openStudentView=async function(period,studentId){
   if(searchInput)searchInput.value='';
   if(searchResults){searchResults.innerHTML='';searchResults.classList.add('hidden');}
   const activities=pd.activities.map((a,i)=>{
+    if(isRubricActivity(a))return rubricDrawerCard(a,pd,studentId);
     const id=`sv-grade-${period}-${studentId}-${a.id}`,val=drawerInputValue('grade',period,studentId,a.id),max=+a.max_score||10;
     return `<div class="student-activity-card"><div class="student-activity-copy"><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · puntaje original ${fmtNum(max,1)}</small></div><div class="student-score-box"><input id="${id}" class="drawer-score-input" data-kind="grade" data-period="${period}" data-student="${studentId}" data-activity="${a.id}" data-max="${max}" value="${escapeHtml(val)}" placeholder="—" inputmode="decimal">${max>=10?quickButtonsHTML(id,max):''}</div></div>`;
   }).join('')||'<div class="empty-state">No hay actividades en este parcial.</div>';
@@ -2926,7 +2937,7 @@ async function printStudentReport(){
   const gr=pd.gradingMap.get(sid)||{},sc=pd.scheme,principal=principalLabel(sc.principal_type||'project');
   const att=attendanceTotals((await MiAulaDB.byIndex('attendance','student_id',sid)).filter(r=>+r.group_id===gid));
   const risk=absenceRiskMeta(att.absencePct),ex=pd.extrasByStudent.get(sid)||{goodAvailable:0,goodUsed:0,bad:0};
-  const rows=pd.activities.map(a=>{const r=pd.grades.get(`${a.id}:${sid}`),v=notebookGradeDisplay(r);return `<tr><td>${a.activity_date?parseISODateLocal(a.activity_date).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}):'—'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activity_type||'')}</td><td class="pr-num">${v===''?'<span class="pr-muted">—</span>':v==='NP'?'<b class="pr-np">NP</b>':escapeHtml(v)} <small>/ ${fmtShort(a.max_score)}</small></td></tr>`;}).join('')||'<tr><td colspan="4" class="pr-muted">Sin actividades registradas en este parcial.</td></tr>';
+  const rows=pd.activities.map(a=>{const r=pd.grades.get(`${a.id}:${sid}`),v=String(exportGradeValue(a,r));return `<tr><td>${a.activity_date?parseISODateLocal(a.activity_date).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}):'—'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activity_type||'')}</td><td class="pr-num">${v===''?'<span class="pr-muted">—</span>':v==='NP'?'<b class="pr-np">NP</b>':escapeHtml(v)} <small>/ ${fmtShort(a.max_score)}</small></td></tr>`;}).join('')||'<tr><td colspan="4" class="pr-muted">Sin actividades registradas en este parcial.</td></tr>';
   const comps=[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],['Valores',sc.values_pct,gr.values_score],['Actitudes',sc.attitudes_pct,gr.attitudes_score]];
   const html=`${prHeader(`Boleta de calificaciones · Parcial ${period}`,g)}
   <section class="pr-student"><div><small>Alumno</small><strong>${escapeHtml(studentLabel(s))}</strong></div><div><small>No. de lista</small><strong>${s.list_number??'—'}</strong></div><div class="pr-final"><small>Calificación del parcial</small><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></section>
@@ -2969,3 +2980,587 @@ async function printAttendanceReport(){
   printHTML(`Inasistencias ${g.name}`,html);
 }
 $('#printAttendanceReport')?.addEventListener('click',()=>printAttendanceReport().catch(e=>{console.error(e);toast(e.message,true);}));
+
+// ==========================================================================
+// 2.8.0 · Rúbricas y listas de cotejo de un clic + calificar por equipos
+// La lógica de cálculo vive en rubricas.js (MiAulaRubricas) y tiene pruebas.
+// Datos: plantillas en el almacén `instruments` (format:'rubrica-v2');
+// la actividad guarda una COPIA en activity.rubric; cada alumno guarda su
+// selección en grades.rubric_levels y la nota calculada en grades.score.
+// ==========================================================================
+const RB=MiAulaRubricas;
+const listOrder=(a,b)=>(a.list_number??9999)-(b.list_number??9999);
+function isRubricActivity(a){return a?.grading_mode==='rubric';}
+const activityRubricCache=new WeakMap();
+function activityRubric(a){
+  if(!isRubricActivity(a))return null;
+  if(activityRubricCache.has(a))return activityRubricCache.get(a);
+  const n=RB.normalizeRubric(a.rubric),r=n.ok?n.rubric:null;
+  activityRubricCache.set(a,r);return r;
+}
+function rubricGradeState(a,rec){
+  const r=activityRubric(a);
+  if(!r)return {valid:false,complete:false,done:0,total:0,score:null};
+  return RB.rubricScore(r,RB.cleanSelection(r,rec?.rubric_levels),+a.max_score||10);
+}
+function rubricGradeScore(a,rec){return rubricGradeState(a,rec).score;}
+// Valor para Excel/boleta: número completo, “2 de 5 criterios” si está incompleta.
+function exportGradeValue(a,rec){
+  if(isRubricActivity(a)){
+    const st=rubricGradeState(a,rec);
+    if(st.complete)return st.score;
+    if(st.done>0)return `${st.done} de ${st.total} criterios`;
+    return '';
+  }
+  return rec?.score!=null?rec.score:(String(rec?.status||'').toUpperCase()==='NP'?'NP':'');
+}
+function scoreTone(score,max=10){
+  const v=+score*10/(+max||10);
+  return v>=8?'good':v>=6?'mid':'low';
+}
+
+// ---------- Deshacer genérico (12 s) ----------
+let actionUndoTimer=null,actionUndoFn=null;
+function showActionUndo(message,undoFn,ms=12000){
+  const bar=$('#actionUndo');if(!bar)return;
+  $('#actionUndoMessage').textContent=message;actionUndoFn=undoFn;
+  bar.classList.remove('hidden');clearTimeout(actionUndoTimer);
+  actionUndoTimer=setTimeout(()=>{bar.classList.add('hidden');actionUndoFn=null;},ms);
+}
+$('#actionUndoBtn')?.addEventListener('click',async()=>{
+  const fn=actionUndoFn;actionUndoFn=null;$('#actionUndo').classList.add('hidden');clearTimeout(actionUndoTimer);
+  if(fn){try{await fn();toast('Cambio deshecho');}catch(e){console.error(e);toast('No se pudo deshacer: '+e.message,true);}}
+});
+
+async function refreshAfterGradeChange(){
+  if(currentView==='notebook')await loadNotebook();
+  else if(currentView==='activities')await loadActivities();
+  try{await loadSummary();}catch{}
+}
+
+// ---------- Plantillas (Mis rúbricas) ----------
+async function loadRubricTemplates(){
+  return (await MiAulaDB.all('instruments')).filter(i=>i.format===RB.FORMAT).sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'));
+}
+async function rubricTemplateFromRef(ref){
+  const [kind,id]=String(ref||'').split(':');
+  if(kind==='bank')return RB.BANK.find(b=>b.id===id)||null;
+  if(kind==='mine')return await MiAulaDB.get('instruments',+id)||null;
+  return null;
+}
+async function rubricSnapshotFromRef(ref){
+  const t=await rubricTemplateFromRef(ref);if(!t)return null;
+  return RB.snapshotForActivity(t,ref);
+}
+function rubricSummary(r){
+  return r.kind==='cotejo'?`Lista de cotejo · ${r.criteria.length} criterios`:`Rúbrica · ${r.levels.length} niveles · ${r.criteria.length} criterios`;
+}
+async function populateActivityRubricSelect(){
+  const sel=$('#activityRubricSelect');if(!sel)return;
+  const prev=sel.value,mine=await loadRubricTemplates();
+  const opt=(v,t)=>`<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`;
+  sel.innerHTML='<option value="">Elige una…</option>'
+    +(mine.length?`<optgroup label="Mis rúbricas">${mine.map(m=>opt('mine:'+m.id,`${m.name} (${m.kind==='cotejo'?'lista de cotejo':'rúbrica'})`)).join('')}</optgroup>`:'')
+    +`<optgroup label="Banco de MiAula">${RB.BANK.map(b=>opt('bank:'+b.id,`${b.name} (${b.kind==='cotejo'?'lista de cotejo':'rúbrica'})`)).join('')}</optgroup>`;
+  if([...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+function syncGradingModeUI(){
+  const rubric=document.querySelector('#activityForm input[name="grading_mode"]:checked')?.value==='rubric';
+  $('#activityRubricLabel')?.classList.toggle('hidden',!rubric);
+  $('#activityMaxLabel')?.classList.toggle('hidden',rubric);
+  const sel=$('#activityRubricSelect');if(sel)sel.required=rubric;
+}
+$$('#activityForm input[name="grading_mode"]').forEach(r=>r.addEventListener('change',syncGradingModeUI));
+populateActivityRubricSelect();syncGradingModeUI();
+
+// ---------- Botones en tarjetas, cuaderno y Vista alumno ----------
+function activityCardButtons(a){
+  if(isRubricActivity(a)){
+    const ok=!!activityRubric(a);
+    return `<button class="btn small primary" onclick="openRubricEvaluator(${a.id})" ${ok?'':'disabled title="La rúbrica de esta actividad está dañada"'}>Evaluar</button><button class="btn small subtle" onclick="openTeamGrading(${a.id})" ${ok?'':'disabled'}>Evaluar por equipos</button><button class="btn small subtle" onclick="openActivityRubricEditor(${a.id})" ${ok?'':'disabled'}>Rúbrica</button>`;
+  }
+  return `<button class="btn small primary" onclick="openGrades(${a.id})">Calificar</button><button class="btn small subtle" onclick="openTeamGrading(${a.id})">Calificar por equipos</button>`;
+}
+function teamColumnButton(a){
+  const label=isRubricActivity(a)?'Evaluar por equipos':'Calificar por equipos';
+  return `<button type="button" class="col-team-btn" onclick="openTeamGrading(${a.id})" aria-label="${label}: ${escapeHtml(a.title)}" title="${label}"><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg><span>Equipos</span></button>`;
+}
+function rubricNotebookCell(a,s,pd,rec){
+  const st=rubricGradeState(a,rec),name=studentLabel(s);
+  if(!st.valid)return `<td class="notebook-grade-cell rubric-cell"><button type="button" class="rubric-cell-btn broken" disabled aria-label="Rúbrica dañada">—</button></td>`;
+  let cls='todo',label='Evaluar',aria=`Evaluar a ${name} en ${a.title}`;
+  if(st.complete){cls='done '+scoreTone(st.score,a.max_score);label=fmtNum(st.score);aria=`${name}: ${fmtNum(st.score)} en ${a.title}. Toca para revisar.`;}
+  else if(st.done>0){cls='partial';label=`${st.done}/${st.total}`;aria=`${name}: ${st.done} de ${st.total} criterios evaluados en ${a.title}`;}
+  return `<td class="notebook-grade-cell rubric-cell"><button type="button" class="rubric-cell-btn ${cls}" onclick="openRubricEvaluator(${a.id},{studentId:${s.id}})" aria-label="${escapeHtml(aria)}">${label}</button></td>`;
+}
+function rubricDrawerCard(a,pd,studentId){
+  const st=rubricGradeState(a,pd.grades.get(`${a.id}:${studentId}`)),r=activityRubric(a);
+  const status=!st.valid?'<span class="pending-score">Rúbrica dañada</span>':st.complete?`<b class="rubric-pill ${scoreTone(st.score,a.max_score)}">${fmtNum(st.score)}</b>`:st.done?`<b class="rubric-pill partial">${st.done}/${st.total}</b>`:'<span class="pending-score">Sin evaluar</span>';
+  return `<div class="student-activity-card"><div class="student-activity-copy"><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${r?escapeHtml(rubricSummary(r)):'Rúbrica'}</small></div><div class="student-score-box rubric-drawer-box">${status}<button type="button" class="btn small primary" ${st.valid?'':'disabled'} onclick="closeStudentDrawer();openRubricEvaluator(${a.id},{studentId:${studentId}})">Evaluar con rúbrica</button></div></div>`;
+}
+
+// ---------- Pestañas de Calificaciones ----------
+function setActivitiesTab(tab){
+  $$('#activitiesTabs button').forEach(b=>{const on=b.dataset.tab===tab;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});
+  $('#rubricLibrary')?.classList.toggle('hidden',tab!=='rubrics');
+  $('#activitiesTabMain')?.classList.toggle('hidden',tab==='rubrics');
+  if(tab==='rubrics'){$('#gradePanel')?.classList.add('hidden');renderRubricLibrary();}
+}
+$$('#activitiesTabs button').forEach(b=>b.addEventListener('click',()=>setActivitiesTab(b.dataset.tab)));
+
+// ---------- Biblioteca de rúbricas ----------
+async function renderRubricLibrary(){
+  const box=$('#rubricLibrary');if(!box)return;
+  const mine=await loadRubricTemplates();
+  const legacy=(await MiAulaDB.all('instruments')).filter(i=>i.format!==RB.FORMAT&&Array.isArray(i.criteria));
+  const card=(r,actions,extraCls='')=>`<article class="rubric-card ${extraCls}"><div class="rubric-card-head"><span class="rubric-kind ${r.kind}">${r.kind==='cotejo'?'Lista de cotejo':'Rúbrica'}</span><h4>${escapeHtml(r.name)}</h4><small>${escapeHtml(rubricSummary(r))}</small></div><p class="rubric-card-crit">${r.criteria.slice(0,4).map(c=>escapeHtml(c.n)).join(' · ')}${r.criteria.length>4?' · …':''}</p><div class="rubric-card-actions">${actions}</div></article>`;
+  const mineCards=mine.map(m=>{const n=RB.normalizeRubric(m);if(!n.ok)return `<article class="rubric-card broken"><h4>${escapeHtml(m.name||'Sin nombre')}</h4><p>Esta rúbrica está dañada y no se puede usar.</p><div class="rubric-card-actions"><button class="btn small danger" onclick="removeRubricTemplate(${m.id})">Quitar</button></div></article>`;
+    return card(n.rubric,`<button class="btn small primary" onclick="useRubricInActivity('mine:${m.id}')">Usar en una actividad</button><button class="btn small subtle" onclick="editRubricTemplate(${m.id})">Editar</button><button class="btn small subtle" onclick="duplicateRubricTemplate(${m.id})">Duplicar</button><button class="btn small subtle" onclick="printRubricRef('mine:${m.id}')">Imprimir</button><button class="btn small subtle" onclick="shareRubricTemplate(${m.id})">Compartir</button><button class="btn small danger" onclick="removeRubricTemplate(${m.id})">Quitar</button>`);}).join('');
+  const bankCards=RB.BANK.map(b=>card(b,`<button class="btn small primary" onclick="useRubricInActivity('bank:${b.id}')">Usar en una actividad</button><button class="btn small subtle" onclick="viewRubricRef('bank:${b.id}')">Ver</button><button class="btn small subtle" onclick="printRubricRef('bank:${b.id}')">Imprimir</button><button class="btn small subtle" onclick="copyBankRubric('${b.id}')">Hacer una copia para editar</button>`,'bank')).join('');
+  const legacyCards=legacy.map(i=>`<article class="rubric-card legacy"><div class="rubric-card-head"><span class="rubric-kind">${i.instrument_type==='checklist'?'Lista de cotejo':'Rúbrica'} · Proyecto</span><h4>${escapeHtml(i.name)}</h4><small>${i.criteria.length} criterios · formato anterior</small></div><p class="rubric-card-crit">Sigue funcionando igual en la pantalla Proyecto.</p><div class="rubric-card-actions"><button class="btn small subtle" onclick="convertLegacyInstrument(${i.id})">Crear copia de un clic</button></div></article>`).join('');
+  box.innerHTML=`
+    <div class="panel rubric-help"><div><h3>Rúbricas y listas de cotejo</h3><p>Crea una actividad con <b>«Cómo se califica: Rúbrica o lista de cotejo»</b>. Al evaluar, solo tocas el nivel de cada criterio y MiAula calcula la nota de 0 a 10. Puedes usar las del banco tal cual o hacer una copia para ajustarla.</p></div>
+      <div class="rubric-help-actions"><button class="btn primary" onclick="newRubricTemplate('rubrica')">+ Nueva rúbrica</button><button class="btn subtle" onclick="newRubricTemplate('cotejo')">+ Nueva lista de cotejo</button><button class="btn subtle" onclick="exportMyRubrics()" ${mine.length?'':'disabled'}>Guardar mis rúbricas en un archivo</button><button class="btn subtle" onclick="openRubricImport()">Traer rúbricas de un archivo</button></div></div>
+    <section class="rubric-section"><h3>Mis rúbricas <small>${mine.length}</small></h3>${mine.length?`<div class="rubric-grid">${mineCards}</div>`:'<div class="empty-state">Todavía no tienes rúbricas propias. Usa una del banco, haz una copia para editarla o crea una nueva.</div>'}</section>
+    ${legacy.length?`<section class="rubric-section"><h3>Instrumentos de Proyecto (formato anterior) <small>${legacy.length}</small></h3><div class="rubric-grid">${legacyCards}</div></section>`:''}
+    <section class="rubric-section"><h3>Banco de MiAula <small>${RB.BANK.length}</small></h3><div class="rubric-grid">${bankCards}</div></section>`;
+}
+window.useRubricInActivity=async ref=>{
+  setActivitiesTab('activities');
+  const radio=document.querySelector('#activityForm input[name="grading_mode"][value="rubric"]');if(radio)radio.checked=true;
+  await populateActivityRubricSelect();$('#activityRubricSelect').value=ref;syncGradingModeUI();
+  const name=document.querySelector('#activityForm input[name="title"]');name?.focus();name?.scrollIntoView({block:'center'});
+  toast('Escribe el nombre de la actividad y toca «Crear actividad».');
+};
+window.copyBankRubric=async id=>{
+  const b=RB.BANK.find(x=>x.id===id);if(!b)return;
+  const mine=await loadRubricTemplates(),copy=RB.clone(RB.normalizeRubric(b).rubric);
+  copy.name=RB.uniqueName(`${b.name} (mi copia)`,mine.map(m=>m.name));copy.criteria=copy.criteria.map(c=>({...c,id:RB.newId()}));
+  const id2=await MiAulaDB.add('instruments',{...copy,format:RB.FORMAT,created_at:new Date().toISOString()});
+  await populateActivityRubricSelect();await renderRubricLibrary();toast('Copia creada en «Mis rúbricas»');
+  editRubricTemplate(id2);
+};
+window.duplicateRubricTemplate=async id=>{
+  const t=await MiAulaDB.get('instruments',id);if(!t)return;
+  const mine=await loadRubricTemplates(),copy=RB.clone(t);delete copy.id;
+  copy.name=RB.uniqueName(t.name,mine.map(m=>m.name));copy.criteria=(copy.criteria||[]).map(c=>({...c,id:RB.newId()}));copy.created_at=new Date().toISOString();
+  await MiAulaDB.add('instruments',copy);await populateActivityRubricSelect();await renderRubricLibrary();toast(`Duplicada como «${copy.name}»`);
+};
+window.removeRubricTemplate=async id=>{
+  const t=await MiAulaDB.get('instruments',id);if(!t)return;
+  await MiAulaDB.remove('instruments',id);await populateActivityRubricSelect();await renderRubricLibrary();
+  showActionUndo(`Se quitó «${t.name}». Las actividades que ya la usan no cambian.`,async()=>{await MiAulaDB.put('instruments',t);await populateActivityRubricSelect();await renderRubricLibrary();});
+};
+window.convertLegacyInstrument=async id=>{
+  const inst=await MiAulaDB.get('instruments',id),r=RB.fromLegacyInstrument(inst);if(!r){toast('No se pudo convertir este instrumento.',true);return;}
+  const mine=await loadRubricTemplates();r.name=RB.uniqueName(r.name,mine.map(m=>m.name));
+  const nid=await MiAulaDB.add('instruments',{...r,format:RB.FORMAT,created_at:new Date().toISOString()});
+  await populateActivityRubricSelect();await renderRubricLibrary();toast('Copia creada. Escribe las descripciones de cada nivel.');editRubricTemplate(nid);
+};
+window.newRubricTemplate=kind=>{
+  const levels=kind==='cotejo'?RB.clone(RB.CHECKLIST_LEVELS):[{n:'Destacado',p:10},{n:'Satisfactorio',p:8},{n:'Suficiente',p:6},{n:'Requiere apoyo',p:5}];
+  openRubricEditor({mode:'template',isNew:true,rubric:{name:'',kind,levels,criteria:[{id:RB.newId(),n:'',w:kind==='cotejo'?1:25,d:levels.map(()=> '')}]}});
+};
+window.editRubricTemplate=async id=>{
+  const t=await MiAulaDB.get('instruments',id);if(!t)return;
+  openRubricEditor({mode:'template',id,rubric:RB.clone(t)});
+};
+window.viewRubricRef=async ref=>{
+  const t=await rubricTemplateFromRef(ref),n=RB.normalizeRubric(t);if(!n.ok){toast('Esta rúbrica está dañada.',true);return;}
+  openModal(n.rubric.name,`<div class="rubric-preview">${rubricTableHTML(n.rubric)}</div><div class="modal-actions"><button class="btn subtle" onclick="printRubricRef('${escapeHtml(ref)}')">Imprimir</button>${ref.startsWith('bank:')?`<button class="btn primary" onclick="closeModal();copyBankRubric('${escapeHtml(ref.slice(5))}')">Hacer una copia para editar</button>`:''}</div>`);
+  $('#modal .modal-card')?.classList.add('wide');
+};
+function rubricTableHTML(r){
+  const pct=RB.weightPercents(r.criteria);
+  if(r.kind==='cotejo')return `<table class="rubric-view-table"><thead><tr><th>Criterio</th><th>Peso</th><th>Sí</th><th>No</th></tr></thead><tbody>${r.criteria.map((c,i)=>`<tr><td>${escapeHtml(c.n)}</td><td>${pct[i]}%</td><td class="box"></td><td class="box"></td></tr>`).join('')}</tbody></table>`;
+  return `<table class="rubric-view-table"><thead><tr><th>Criterio</th>${r.levels.map(l=>`<th>${escapeHtml(l.n)}<small>${fmtShort(l.p)} pts</small></th>`).join('')}</tr></thead><tbody>${r.criteria.map((c,i)=>`<tr><td><b>${escapeHtml(c.n)}</b><small>${pct[i]}%</small></td>${r.levels.map((_,j)=>`<td>${escapeHtml(c.d?.[j]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+function printRubricSheet(r,opts={}){
+  const g=opts.group||{};
+  const html=`<header class="pr-head"><div class="pr-brand"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".75"/></svg><div><strong>${escapeHtml(opts.title||r.name)}</strong><span>${r.kind==='cotejo'?'Lista de cotejo':'Rúbrica'}${opts.title?` · ${escapeHtml(r.name)}`:''}${g.name?` · ${escapeHtml(g.name)} ${escapeHtml(g.discipline||'')}`:''}</span></div></div><div class="pr-meta"><span>Calificación de 0 a ${fmtShort(opts.maxScore||10)}</span></div></header>
+  <section class="pr-fill"><div><small>Nombre del alumno</small><span></span></div><div><small>Grupo</small><span></span></div><div><small>Fecha</small><span></span></div><div><small>Calificación</small><span></span></div></section>
+  <div class="pr-rubric">${rubricTableHTML(r)}</div>
+  <p class="pr-note">${r.kind==='cotejo'?'Cada criterio cumplido (Sí) suma según su peso.':'La calificación se calcula con el nivel alcanzado en cada criterio y su peso.'}</p>
+  <footer class="pr-foot"><span>Generado con MiAula Slate · Control de bitácora</span></footer>`;
+  printHTML(`${r.kind==='cotejo'?'Lista de cotejo':'Rúbrica'} ${r.name}`,html);
+}
+window.printRubricRef=async ref=>{const t=await rubricTemplateFromRef(ref),n=RB.normalizeRubric(t);if(!n.ok){toast('Esta rúbrica está dañada.',true);return;}printRubricSheet(n.rubric);};
+
+// ---------- Compartir por archivo ----------
+function downloadRubricFile(list,label){
+  const file=RB.buildShareFile(list);
+  downloadBlob(new Blob([JSON.stringify(file,null,2)],{type:'application/json'}),`MiAula_rubricas_${label}_${new Date().toISOString().slice(0,10)}.json`);
+  toast(`Archivo guardado con ${file.count} rúbrica${file.count===1?'':'s'}. No incluye datos de alumnos.`);
+}
+window.exportMyRubrics=async()=>{const mine=await loadRubricTemplates();if(!mine.length){toast('Aún no tienes rúbricas propias.',true);return;}downloadRubricFile(mine,'mis_rubricas');};
+window.shareRubricTemplate=async id=>{const t=await MiAulaDB.get('instruments',id);if(t)downloadRubricFile([t],String(t.name).replace(/[^\wáéíóúñü]+/gi,'_').slice(0,40));};
+let rubricImportItems=[];
+window.openRubricImport=()=>{
+  openModal('Traer rúbricas de un archivo',`<p class="modal-help">Elige o arrastra un archivo <b>.json</b> de rúbricas de MiAula (por ejemplo, el que te compartió otro docente). Antes de agregar podrás ver cuáles trae.</p>
+    <label class="rubric-drop" id="rubricDrop" tabindex="0"><input type="file" id="rubricImportFile" accept=".json,application/json" hidden><b>Arrastra aquí el archivo</b><span>o toca para elegirlo</span></label>
+    <div id="rubricImportResult"></div>`);
+  $('#modal .modal-card')?.classList.add('wide');
+  const drop=$('#rubricDrop'),input=$('#rubricImportFile');
+  input.onchange=()=>{if(input.files[0])readRubricImportFile(input.files[0]);};
+  drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();}});
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+  drop.addEventListener('drop',e=>{const f=e.dataTransfer?.files?.[0];if(f)readRubricImportFile(f);});
+};
+async function readRubricImportFile(file){
+  const box=$('#rubricImportResult');
+  const res=RB.parseShareFile(await file.text());
+  if(!res.ok){rubricImportItems=[];box.innerHTML=`<div class="import-error ${res.backup?'backup':''}">${escapeHtml(res.error)}</div>`;return;}
+  rubricImportItems=res.items;
+  box.innerHTML=`<div class="import-list">${res.items.map((it,i)=>`<label class="import-item ${it.ok?'':'bad'}"><input type="checkbox" data-import="${i}" ${it.ok?'checked':'disabled'}><span><b>${escapeHtml(it.name)}</b><small>${it.ok?escapeHtml(rubricSummary(it.rubric)):'Dañada: '+escapeHtml(it.error||'')}</small></span></label>`).join('')}</div>
+    <div class="modal-actions"><button class="btn subtle" onclick="closeModal()">Cancelar</button><button class="btn primary" id="rubricImportApply">Agregar las seleccionadas</button></div>`;
+  $('#rubricImportApply').onclick=applyRubricImport;
+}
+async function applyRubricImport(){
+  const chosen=$$('#rubricImportResult input[data-import]:checked').map(x=>rubricImportItems[+x.dataset.import]).filter(it=>it?.ok).map(it=>it.rubric);
+  if(!chosen.length){toast('Marca al menos una rúbrica.',true);return;}
+  const mine=await loadRubricTemplates(),prepared=RB.prepareImport(chosen,mine.map(m=>m.name)),now=new Date().toISOString();
+  for(const r of prepared)await MiAulaDB.add('instruments',{...r,format:RB.FORMAT,imported_at:now,created_at:now});
+  closeModal();await populateActivityRubricSelect();await renderRubricLibrary();
+  toast(`${prepared.length} rúbrica${prepared.length===1?' agregada':'s agregadas'} a «Mis rúbricas»`);
+}
+
+// ---------- Editor de rúbricas ----------
+let rubricEditorState=null;
+function openRubricEditor(opts){
+  rubricEditorState={...opts,draft:RB.clone(opts.rubric)};
+  const d=rubricEditorState.draft;
+  if(d.kind==='cotejo')d.levels=RB.clone(RB.CHECKLIST_LEVELS);
+  d.criteria=(d.criteria||[]).map(c=>({id:c.id||RB.newId(),n:c.n||'',w:c.w??(d.kind==='cotejo'?1:25),d:d.levels.map((_,j)=>c.d?.[j]||'')}));
+  $('#rubricEditor').classList.remove('hidden');document.body.classList.add('sheet-open');
+  renderRubricEditor();
+  setTimeout(()=>$('#rbeName')?.focus(),50);
+}
+function closeRubricEditor(){$('#rubricEditor').classList.add('hidden');document.body.classList.toggle('sheet-open',!$('#rubricEval').classList.contains('hidden'));rubricEditorState=null;}
+function renderRubricEditor(){
+  const st=rubricEditorState,d=st.draft,box=$('#rubricEditor'),locked=!!st.locked,cot=d.kind==='cotejo';
+  const pct=RB.weightPercents(d.criteria);
+  const title=st.mode==='activity'?`Rúbrica de la actividad «${escapeHtml(st.activityTitle||'')}»`:st.isNew?(cot?'Nueva lista de cotejo':'Nueva rúbrica'):'Editar rúbrica';
+  box.innerHTML=`<div class="rb-sheet-inner">
+    <header class="rb-head"><div><span class="eyebrow">${st.mode==='activity'?'Solo cambia esta actividad':'Plantilla en «Mis rúbricas»'}</span><h2 id="rubricEditorTitle">${title}</h2></div><button type="button" class="btn subtle" data-rbe="cancel">Cerrar sin guardar</button></header>
+    <p class="rb-help">${cot?'En una lista de cotejo cada criterio se marca <b>Sí</b> o <b>No</b>. El peso indica cuánto vale cada criterio.':'Los niveles van del <b>mejor</b> al más bajo. El peso dice cuánto vale cada criterio (se muestra en %). En cada casilla describe cómo se ve ese nivel.'}${st.mode==='activity'?' Si cambias pesos o puntos, las notas de esta actividad se recalculan solas.':''}</p>
+    ${locked?'<div class="rb-notice">Esta actividad ya tiene alumnos evaluados: puedes cambiar textos, pesos y puntos, pero no agregar ni quitar criterios o niveles.</div>':''}
+    <div class="rbe-top"><label class="rbe-name">Nombre<input id="rbeName" data-rbe-field="name" value="${escapeHtml(d.name)}" placeholder="${cot?'Ej. Entrega de tarea':'Ej. Exposición oral'}" maxlength="120"></label>
+    ${cot?'':`<div class="rbe-levels"><span class="rbe-label">Niveles (del mejor al más bajo)</span><div class="rbe-level-list">${d.levels.map((l,i)=>`<div class="rbe-level"><input aria-label="Nombre del nivel ${i+1}" data-lv-name="${i}" value="${escapeHtml(l.n)}"><label class="rbe-pts"><input type="number" aria-label="Puntos del nivel ${i+1}" data-lv-points="${i}" min="0" max="100" step="0.5" value="${escapeHtml(l.p)}"><span>pts</span></label>${!locked&&d.levels.length>2?`<button type="button" class="rbe-mini" data-lv-del="${i}" aria-label="Quitar el nivel ${escapeHtml(l.n||i+1)}">−</button>`:''}</div>`).join('')}${!locked&&d.levels.length<6?'<button type="button" class="btn small subtle" data-rbe="add-level">+ Nivel</button>':''}</div></div>`}</div>
+    <div class="rbe-table-wrap"><table class="rbe-table"><thead><tr><th>Criterio</th><th class="rbe-w">Peso</th>${cot?'':d.levels.map((l,j)=>`<th data-lv-head="${j}">${escapeHtml(l.n)}</th>`).join('')}<th class="rbe-del"></th></tr></thead><tbody>
+      ${d.criteria.map((c,i)=>`<tr><td><textarea rows="2" aria-label="Criterio ${i+1}" data-c-name="${i}" placeholder="Ej. Dominio del tema">${escapeHtml(c.n)}</textarea></td><td class="rbe-w"><input type="number" aria-label="Peso del criterio ${i+1}" data-c-w="${i}" min="0.1" max="100" step="0.5" value="${escapeHtml(c.w)}"><small data-c-pct="${i}">${pct[i]}%</small></td>${cot?'':d.levels.map((l,j)=>`<td><textarea rows="3" aria-label="Descripción de ${escapeHtml(l.n)} en criterio ${i+1}" data-c-d="${i}:${j}">${escapeHtml(c.d[j]||'')}</textarea></td>`).join('')}<td class="rbe-del">${!locked&&d.criteria.length>1?`<button type="button" class="rbe-mini" data-c-del="${i}" aria-label="Quitar el criterio ${i+1}">×</button>`:''}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${!locked&&d.criteria.length<30?'<button type="button" class="btn subtle rbe-add" data-rbe="add-criterion">+ Agregar criterio</button>':''}
+    <div class="rbe-errors" id="rbeErrors" role="alert"></div>
+    <footer class="rb-foot"><button type="button" class="btn subtle" data-rbe="cancel">Cancelar</button><button type="button" class="btn primary rb-big" data-rbe="save">Guardar</button></footer>
+  </div>`;
+}
+function rbeUpdatePercents(){
+  const pct=RB.weightPercents(rubricEditorState.draft.criteria);
+  pct.forEach((p,i)=>{const el=document.querySelector(`#rubricEditor [data-c-pct="${i}"]`);if(el)el.textContent=`${p}%`;});
+}
+$('#rubricEditor')?.addEventListener('input',e=>{
+  const st=rubricEditorState;if(!st)return;const d=st.draft,t=e.target;
+  if(t.dataset.rbeField==='name')d.name=t.value;
+  else if(t.dataset.lvName!=null){d.levels[+t.dataset.lvName].n=t.value;const h=document.querySelector(`#rubricEditor [data-lv-head="${t.dataset.lvName}"]`);if(h)h.textContent=t.value;}
+  else if(t.dataset.lvPoints!=null)d.levels[+t.dataset.lvPoints].p=t.value===''?'':+t.value;
+  else if(t.dataset.cName!=null)d.criteria[+t.dataset.cName].n=t.value;
+  else if(t.dataset.cW!=null){d.criteria[+t.dataset.cW].w=t.value===''?'':+t.value;rbeUpdatePercents();}
+  else if(t.dataset.cD!=null){const [i,j]=t.dataset.cD.split(':').map(Number);d.criteria[i].d[j]=t.value;}
+});
+$('#rubricEditor')?.addEventListener('click',async e=>{
+  const st=rubricEditorState;if(!st)return;const d=st.draft,b=e.target.closest('button');if(!b)return;
+  const scrollBox=$('#rubricEditor'),y=scrollBox.scrollTop;
+  if(b.dataset.lvDel!=null&&!st.locked){const i=+b.dataset.lvDel;d.levels.splice(i,1);d.criteria.forEach(c=>c.d.splice(i,1));renderRubricEditor();scrollBox.scrollTop=y;return;}
+  if(b.dataset.cDel!=null&&!st.locked){d.criteria.splice(+b.dataset.cDel,1);renderRubricEditor();scrollBox.scrollTop=y;return;}
+  const act=b.dataset.rbe;
+  if(act==='add-level'&&!st.locked&&d.levels.length<6){d.levels.push({n:'Nuevo nivel',p:0});d.criteria.forEach(c=>c.d.push(''));renderRubricEditor();scrollBox.scrollTop=y;}
+  else if(act==='add-criterion'&&!st.locked&&d.criteria.length<30){d.criteria.push({id:RB.newId(),n:'',w:d.kind==='cotejo'?1:15,d:d.levels.map(()=> '')});renderRubricEditor();scrollBox.scrollTop=scrollBox.scrollHeight;setTimeout(()=>{const all=$$('#rubricEditor [data-c-name]');all[all.length-1]?.focus();},30);}
+  else if(act==='cancel')closeRubricEditor();
+  else if(act==='save')await saveRubricEditor();
+});
+async function saveRubricEditor(){
+  const st=rubricEditorState,d=RB.clone(st.draft);
+  d.name=String(d.name||'').trim();d.criteria.forEach(c=>{c.n=String(c.n||'').trim();});
+  const errors=RB.validateRubric(d);
+  const errBox=$('#rbeErrors');
+  if(errors.length){errBox.innerHTML=`<b>Revisa antes de guardar:</b><ul>${errors.slice(0,8).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`;errBox.scrollIntoView({block:'nearest'});return;}
+  const norm=RB.normalizeRubric(d);if(!norm.ok){errBox.textContent=norm.error;return;}
+  if(st.mode==='template'){
+    const now=new Date().toISOString();
+    if(st.id){const old=await MiAulaDB.get('instruments',st.id);await MiAulaDB.put('instruments',{...(old||{}),...norm.rubric,id:st.id,format:RB.FORMAT,updated_at:now});}
+    else await MiAulaDB.add('instruments',{...norm.rubric,format:RB.FORMAT,created_at:now});
+    closeRubricEditor();await populateActivityRubricSelect();await renderRubricLibrary();toast('Rúbrica guardada');
+    return;
+  }
+  // Rúbrica de una actividad
+  const activity=await MiAulaDB.get('activities',st.activityId);if(!activity)return;
+  const oldR=activityRubric(activity),grades=await MiAulaDB.byIndex('grades','activity_id',activity.id);
+  const evaluated=grades.some(g=>g.rubric_levels&&Object.keys(g.rubric_levels).length);
+  const check=RB.canApplyActivityEdit(oldR,norm.rubric,evaluated);
+  if(!check.ok){errBox.textContent=check.error;return;}
+  const updated={...activity,rubric:{...norm.rubric,source:activity.rubric?.source,copied_at:activity.rubric?.copied_at,edited_at:new Date().toISOString()}};
+  await saveActivityRubric(updated,grades);
+  closeRubricEditor();toast('Rúbrica de la actividad guardada · notas recalculadas');
+  if(rubricEvalState&&+rubricEvalState.activity.id===+updated.id){rubricEvalState.activity=updated;rubricEvalState.rubric=activityRubric(updated);renderRubricEval();}
+  else await refreshAfterGradeChange();
+}
+async function saveActivityRubric(activity,grades){
+  await MiAulaDB.put('activities',activity);
+  const r=activityRubric(activity);if(!r)return;
+  for(const g of grades){
+    if(!g.rubric_levels)continue;
+    const sc=RB.rubricScore(r,RB.cleanSelection(r,g.rubric_levels),+activity.max_score||10).score;
+    if(g.score!==sc)await MiAulaDB.put('grades',{...g,score:sc,updated_at:new Date().toISOString()});
+  }
+}
+window.openActivityRubricEditor=async aid=>{
+  const a=await MiAulaDB.get('activities',+aid),r=activityRubric(a);if(!r){toast('La rúbrica de esta actividad está dañada.',true);return;}
+  const grades=await MiAulaDB.byIndex('grades','activity_id',a.id);
+  const evaluated=grades.some(g=>g.rubric_levels&&Object.keys(g.rubric_levels).length);
+  openRubricEditor({mode:'activity',activityId:a.id,activityTitle:a.title,rubric:r,locked:evaluated});
+};
+
+// ---------- Pantalla «Evaluar con rúbrica» ----------
+let rubricEvalState=null;
+window.openRubricEvaluator=async function(aid,opts={}){
+  await flushNotebookAutoSave();
+  const activity=await MiAulaDB.get('activities',+aid);if(!activity)return;
+  if(!isRubricActivity(activity)){await openTeamGrading(aid);return;}
+  const rubric=activityRubric(activity);
+  if(!rubric){toast('La rúbrica de esta actividad está dañada; no se puede evaluar. El resto de tus datos está bien.',true);return;}
+  const gid=+activity.group_id,g=await getGroupState(gid);
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort(listOrder);
+  if(!students.length){toast('Este grupo no tiene alumnos activos.',true);return;}
+  const grades=await MiAulaDB.byIndex('grades','activity_id',activity.id);
+  const {teams}=await readSavedTeams(gid);
+  rubricEvalState={activity,rubric,gid,group:g,students,recs:new Map(grades.map(x=>[+x.student_id,x])),teams:teams.filter(isUsableTeam),mode:'student',index:0,teamIndex:0,queue:Promise.resolve()};
+  const st=rubricEvalState;
+  if(opts.mode==='team'&&st.teams.length){st.mode='team';const i=st.teams.findIndex(t=>t.name===opts.teamName);st.teamIndex=i>=0?i:0;}
+  else if(opts.studentId){const i=students.findIndex(s=>+s.id===+opts.studentId);st.index=i>=0?i:0;}
+  $('#rubricEval').classList.remove('hidden');document.body.classList.add('sheet-open');
+  renderRubricEval();
+  setTimeout(()=>$('#rubricEval .rb-level')?.focus(),60);
+};
+function rbSelection(sid){
+  const st=rubricEvalState;return RB.cleanSelection(st.rubric,st.recs.get(+sid)?.rubric_levels||{});
+}
+function rbTeamMembers(t){
+  const st=rubricEvalState,active=new Map(st.students.map(s=>[+s.id,s]));
+  return (t?.member_ids||[]).map(Number).filter(id=>active.has(id)&&!isSecretaryPendingStudent(active.get(id)));
+}
+function rbTargets(){
+  const st=rubricEvalState;
+  if(st.mode==='team')return rbTeamMembers(st.teams[st.teamIndex]);
+  return [+st.students[st.index].id];
+}
+function rbStudentStatus(sid){
+  const st=rubricEvalState;return RB.rubricScore(st.rubric,rbSelection(sid),+st.activity.max_score||10);
+}
+function rbTeamStatus(t){
+  const st=rubricEvalState,ids=rbTeamMembers(t),sels=ids.map(rbSelection),total=st.rubric.criteria.length;
+  if(!ids.length)return {label:'Sin alumnos',cls:'empty',done:0,total,complete:false};
+  const done=st.rubric.criteria.filter(c=>Number.isInteger(RB.teamCriterionState(sels,c.id))).length;
+  const scores=ids.map(rbStudentStatus);
+  if(scores.every(x=>x.complete)){const same=scores.every(x=>x.score===scores[0].score);return {label:same?fmtNum(scores[0].score):'Ajustada',cls:same?'done '+scoreTone(scores[0].score,st.activity.max_score):'partial',done:total,total,complete:true,score:same?scores[0].score:null};}
+  return {label:done?`${done}/${total}`:'Evaluar',cls:done?'partial':'todo',done,total,complete:false};
+}
+function statusChip(s,max){
+  if(s.complete)return `<b class="rubric-pill ${scoreTone(s.score,max)}">${fmtNum(s.score)}</b>`;
+  if(s.done)return `<b class="rubric-pill partial">${s.done}/${s.total}</b>`;
+  return '<b class="rubric-pill todo">—</b>';
+}
+function renderRubricEval(){
+  const st=rubricEvalState;if(!st)return;
+  const r=st.rubric,a=st.activity,max=+a.max_score||10,cot=r.kind==='cotejo',team=st.mode==='team';
+  const pct=RB.weightPercents(r.criteria),best=r.levels[0];
+  const targets=rbTargets(),sels=targets.map(rbSelection);
+  const stateFor=cid=>team?RB.teamCriterionState(sels,cid):(Number.isInteger(sels[0]?.[cid])?sels[0][cid]:null);
+  let headName,headSub,scoreBox,members='',warning='';
+  if(team){
+    const t=st.teams[st.teamIndex],ts=rbTeamStatus(t);
+    headName=escapeHtml(t.name);headSub=`Equipo ${st.teamIndex+1} de ${st.teams.length}`;
+    const tags=(t.members||[]).map(m=>{const ok=targets.includes(+m.id);return `<span class="rb-member ${ok?'':'off'}">${m.list_number??'—'}. ${escapeHtml(studentLabel(m))}${ok?'':` · ${m.active===0?'baja':'Secretaría'} (no se califica)`}</span>`;}).join('');
+    members=`<div class="rb-members">${tags||'<span class="rb-member off">Sin integrantes</span>'}</div>`;
+    if(targets.length>1&&RB.selectionsDiffer(sels))warning='<div class="rb-warning" role="status">Algunos integrantes tienen evaluaciones distintas: cada criterio que toques quedará igual para todos.</div>';
+    scoreBox=!targets.length?'<div class="rb-score empty">Sin alumnos activos</div>':ts.complete&&ts.score!=null?`<div class="rb-score ${scoreTone(ts.score,max)}"><small>Nota del equipo</small><b>${fmtNum(ts.score)}</b><span>de ${fmtShort(max)}</span></div>`:ts.complete?'<div class="rb-score partial"><small>Nota</small><b>Ajustada</b><span>cada integrante tiene su nota</span></div>':`<div class="rb-score pending"><small>Faltan</small><b>${ts.total-ts.done}</b><span>criterio${ts.total-ts.done===1?'':'s'}</span></div>`;
+  }else{
+    const s=st.students[st.index],res=RB.rubricScore(r,sels[0],max);
+    headName=`${s.list_number??'—'}. ${escapeHtml(studentLabel(s))}`;headSub=`Alumno ${st.index+1} de ${st.students.length}`;
+    scoreBox=res.complete?`<div class="rb-score ${scoreTone(res.score,max)}"><small>Nota</small><b>${fmtNum(res.score)}</b><span>de ${fmtShort(max)}</span></div>`:`<div class="rb-score pending"><small>Faltan</small><b>${res.total-res.done}</b><span>criterio${res.total-res.done===1?'':'s'}</span></div>`;
+  }
+  const list=team
+    ?st.teams.map((t,i)=>{const ts=rbTeamStatus(t);return `<button type="button" class="rb-list-item ${i===st.teamIndex?'current':''}" data-rb-team="${i}" aria-current="${i===st.teamIndex}"><span><b>${escapeHtml(t.name)}</b><small>${rbTeamMembers(t).length} alumnos</small></span><b class="rubric-pill ${ts.cls}">${ts.label}</b></button>`;}).join('')
+    :st.students.map((s,i)=>`<button type="button" class="rb-list-item ${i===st.index?'current':''}" data-rb-student="${i}" aria-current="${i===st.index}"><span><b>${s.list_number??'—'}</b>${escapeHtml(studentLabel(s))}</span>${statusChip(rbStudentStatus(s.id),max)}</button>`).join('');
+  const rows=r.criteria.map((c,i)=>{
+    const cur=stateFor(c.id),some=team?new Set(sels.map(x=>x[c.id]).filter(Number.isInteger)):new Set();
+    return `<tr><th scope="row"><b>${escapeHtml(c.n)}</b><small>${pct[i]}%</small></th>${r.levels.map((l,j)=>{
+      const on=cur===j,partial=!on&&cur==='mixed'&&some.has(j);
+      const desc=cot?'':(c.d?.[j]||'');
+      const aria=`${c.n}: ${l.n}${cot?'':` (${fmtShort(l.p)} puntos)`}${desc?'. '+desc:''}${on?'. Elegido':''}`;
+      return `<td><button type="button" class="rb-level ${on?'on':''} ${partial?'some':''} ${cot&&j===1?'is-no':''}" data-crit="${escapeHtml(c.id)}" data-level="${j}" aria-pressed="${on}" aria-label="${escapeHtml(aria)}"><b>${escapeHtml(l.n)}</b>${desc?`<span>${escapeHtml(desc)}</span>`:''}</button></td>`;
+    }).join('')}</tr>`;
+  }).join('');
+  const lastIdx=team?st.teams.length-1:st.students.length-1,cur=team?st.teamIndex:st.index;
+  $('#rubricEval').innerHTML=`<div class="rb-eval-layout">
+    <aside class="rb-list" aria-label="${team?'Equipos':'Alumnos del grupo'}"><div class="rb-list-head"><b>${team?'Equipos':'Grupo '+escapeHtml(st.group?.name||'')}</b><small>${team?'Toca un equipo':'Toca un alumno'}</small></div><div class="rb-list-items">${list}</div></aside>
+    <section class="rb-main">
+      <header class="rb-eval-head">
+        <div class="rb-eval-title"><span class="eyebrow">${cot?'Lista de cotejo':'Rúbrica'} · ${escapeHtml(a.title)}</span><h2 id="rubricEvalTitle">${headName}</h2><small>${headSub}</small>${members}</div>
+        ${scoreBox}
+        <button type="button" class="btn subtle rb-close" data-rb="close" aria-label="Cerrar la evaluación">Cerrar</button>
+      </header>
+      <div class="rb-tools"><button type="button" class="rb-link" data-rb="edit">Ver o cambiar la rúbrica</button><button type="button" class="rb-link" data-rb="print">Imprimir la rúbrica</button>${team?'<button type="button" class="rb-link" data-rb="mode-student">Evaluar alumno por alumno</button>':st.teams.length?'<button type="button" class="rb-link" data-rb="mode-team">Evaluar por equipos</button>':'<span class="rb-hint">Para evaluar por equipos, forma equipos en «Ruleta y equipos».</span>'}</div>
+      ${warning}
+      <p class="rb-help">${team?'Cada nivel que toques se aplica a todos los integrantes. ':''}Toca el nivel de cada criterio. Tocar otro nivel lo cambia; tocar el mismo lo quita. Se guarda solo.</p>
+      <div class="rb-table-wrap"><table class="rb-table ${cot?'cotejo':''}"><thead><tr><th>Criterio</th>${r.levels.map(l=>`<th>${escapeHtml(l.n)}${cot?'':`<small>${fmtShort(l.p)} pts</small>`}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+      <footer class="rb-eval-foot">
+        <button type="button" class="btn subtle" data-rb="prev" ${cur<=0?'disabled':''}>← ${team?'Equipo anterior':'Anterior'}</button>
+        <button type="button" class="btn subtle" data-rb="all-best" ${team&&!targets.length?'disabled':''}>Todo en «${escapeHtml(best.n)}»</button>
+        <button type="button" class="btn subtle danger-text-btn" data-rb="clear" ${team&&!targets.length?'disabled':''}>Borrar lo de este ${team?'equipo':'alumno'}</button>
+        <button type="button" class="btn primary rb-next" id="rbNext" data-rb="next">${cur>=lastIdx?'Terminar':team?'Siguiente equipo →':'Siguiente alumno →'}</button>
+      </footer>
+    </section></div>`;
+  $('#rubricEval .rb-list-item.current')?.scrollIntoView({block:'nearest'});
+}
+function rbSave(entries){
+  const st=rubricEvalState,a=st.activity,r=st.rubric,max=+a.max_score||10,now=new Date().toISOString();
+  for(const {sid,sel} of entries){
+    const old=st.recs.get(+sid)||null;
+    st.recs.set(+sid,{...(old||{}),activity_id:a.id,student_id:+sid,rubric_levels:sel,score:RB.rubricScore(r,sel,max).score,status:'',notes:old?.notes||'',updated_at:now});
+  }
+  setSaveState('saving','Guardando…');
+  st.queue=st.queue.then(async()=>{
+    for(const {sid} of entries){
+      const rec=st.recs.get(+sid),old=await MiAulaDB.firstByIndex('grades','unique_key',[a.id,+sid]);
+      if(old){await MiAulaDB.put('grades',{...old,...rec,id:old.id});st.recs.set(+sid,{...old,...rec,id:old.id});}
+      else{const id=await MiAulaDB.add('grades',{...rec});st.recs.set(+sid,{...rec,id});}
+    }
+    setSaveState('saved','Todo guardado');
+  }).catch(e=>{console.error(e);setSaveState('error','No se pudo guardar');toast('No se pudo guardar la evaluación: '+e.message,true);});
+  return st.queue;
+}
+function rbIsComplete(){
+  const st=rubricEvalState;if(!st)return false;
+  const ids=rbTargets();if(!ids.length)return false;
+  return ids.every(id=>rbStudentStatus(id).complete);
+}
+function rbMove(delta){
+  const st=rubricEvalState;
+  if(st.mode==='team'){const n=st.teamIndex+delta;if(n<0)return;if(n>=st.teams.length){closeRubricEvaluator();return;}st.teamIndex=n;}
+  else{const n=st.index+delta;if(n<0)return;if(n>=st.students.length){closeRubricEvaluator();return;}st.index=n;}
+  renderRubricEval();$('#rubricEval .rb-main')?.scrollTo({top:0});
+  setTimeout(()=>$('#rubricEval .rb-level')?.focus({preventScroll:true}),30);
+}
+async function closeRubricEvaluator(){
+  const st=rubricEvalState;if(!st)return;
+  await st.queue;
+  $('#rubricEval').classList.add('hidden');document.body.classList.toggle('sheet-open',!$('#rubricEditor').classList.contains('hidden'));
+  rubricEvalState=null;
+  await refreshAfterGradeChange();
+}
+$('#rubricEval')?.addEventListener('click',async e=>{
+  const st=rubricEvalState;if(!st)return;
+  const b=e.target.closest('button');if(!b||b.disabled)return;
+  if(b.dataset.crit!=null){
+    const cid=b.dataset.crit,j=+b.dataset.level,ids=rbTargets();if(!ids.length)return;
+    const wasComplete=rbIsComplete();
+    const sels=ids.map(rbSelection);
+    const next=st.mode==='team'?RB.applyTeamTap(sels,cid,j):sels.map(s=>{const n={...s};if(n[cid]===j)delete n[cid];else n[cid]=j;return n;});
+    rbSave(ids.map((sid,i)=>({sid,sel:next[i]})));
+    try{navigator.vibrate?.(8);}catch{}
+    renderRubricEval();
+    if(!wasComplete&&rbIsComplete())$('#rbNext')?.focus();
+    else document.querySelector(`#rubricEval .rb-level[data-crit="${CSS.escape(cid)}"][data-level="${j}"]`)?.focus({preventScroll:true});
+    return;
+  }
+  if(b.dataset.rbStudent!=null){st.index=+b.dataset.rbStudent;renderRubricEval();return;}
+  if(b.dataset.rbTeam!=null){st.teamIndex=+b.dataset.rbTeam;renderRubricEval();return;}
+  const act=b.dataset.rb;
+  if(act==='next')rbMove(1);
+  else if(act==='prev')rbMove(-1);
+  else if(act==='close')closeRubricEvaluator();
+  else if(act==='all-best'||act==='clear'){
+    const ids=rbTargets();if(!ids.length)return;
+    const before=ids.map(sid=>({sid,sel:rbSelection(sid)}));
+    const sel=act==='clear'?{}:Object.fromEntries(st.rubric.criteria.map(c=>[c.id,0]));
+    rbSave(ids.map(sid=>({sid,sel:{...sel}})));renderRubricEval();
+    const who=st.mode==='team'?`al equipo (${ids.length} alumnos)`:'al alumno';
+    showActionUndo(act==='clear'?`Se borró la evaluación ${st.mode==='team'?'del equipo':'del alumno'}.`:`Se puso todo en «${st.rubric.levels[0].n}» ${who}.`,async()=>{
+      if(!rubricEvalState)return;await rbSave(before);renderRubricEval();
+    });
+    if(act==='all-best')$('#rbNext')?.focus();
+  }
+  else if(act==='edit'){await st.queue;await openActivityRubricEditor(st.activity.id);}
+  else if(act==='print')printRubricSheet(st.rubric,{title:st.activity.title,maxScore:st.activity.max_score,group:st.group});
+  else if(act==='mode-team'&&st.teams.length){
+    const sid=+st.students[st.index].id,ti=st.teams.findIndex(t=>(t.member_ids||[]).map(Number).includes(sid));
+    st.mode='team';st.teamIndex=ti>=0?ti:0;renderRubricEval();
+  }
+  else if(act==='mode-student'){
+    const first=rbTargets()[0],i=st.students.findIndex(s=>+s.id===+first);
+    st.mode='student';st.index=i>=0?i:0;renderRubricEval();
+  }
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(!$('#rubricEditor')?.classList.contains('hidden')){closeRubricEditor();return;}
+  if(!$('#rubricEval')?.classList.contains('hidden'))closeRubricEvaluator();
+});
+
+// ---------- Calificar por equipos (actividades con número) ----------
+function noTeamsHTML(){
+  return `<div class="tg-empty"><p><b>Este grupo todavía no tiene equipos guardados.</b></p><ol><li>Abre <b>Ruleta y equipos → Formar equipos</b>.</li><li>Toca <b>Crear equipos</b> (a mano) o <b>Crear automáticamente</b> (al azar, indicando cuántos por equipo).</li><li>Los equipos se guardan solos. Regresa aquí y vuelve a tocar «Calificar por equipos».</li></ol><div class="modal-actions"><button class="btn subtle" onclick="closeModal()">Cerrar</button><button class="btn primary" onclick="closeModal();openDynamicsMode('teams')">Ir a formar equipos</button></div></div>`;
+}
+window.openTeamGrading=async function(aid){
+  await flushNotebookAutoSave();
+  const activity=await MiAulaDB.get('activities',+aid);if(!activity)return;
+  const gid=+activity.group_id,{record,teams}=await readSavedTeams(gid),usable=teams.filter(isUsableTeam);
+  if(!usable.length){openModal(isRubricActivity(activity)?'Evaluar por equipos':'Calificar por equipos',noTeamsHTML());return;}
+  if(isRubricActivity(activity)){await openRubricEvaluator(aid,{mode:'team'});return;}
+  const all=await MiAulaDB.groupStudents(gid,{includeInactive:true}),sm=new Map(all.map(s=>[+s.id,s]));
+  const grades=await MiAulaDB.byIndex('grades','activity_id',activity.id),gm=new Map(grades.map(x=>[+x.student_id,x]));
+  const eligible=s=>s&&s.active!==0&&!isSecretaryPendingStudent(s);
+  const hasGrade=g=>!!g&&(g.score!=null||String(g.status||'').toUpperCase()==='NP');
+  const inTeam=new Set(usable.flatMap(t=>t.member_ids.map(Number)));
+  const teamless=all.filter(s=>eligible(s)&&!inTeam.has(+s.id)).sort(listOrder);
+  const max=+activity.max_score||10,quick=[10,9,8,7,6].filter(v=>v<=max);
+  const date=record?.updated_at?new Date(record.updated_at).toLocaleDateString('es-MX'):'';
+  const rows=usable.map((t,i)=>{
+    const ids=t.member_ids.map(Number),elig=ids.filter(id=>eligible(sm.get(id))),graded=elig.filter(id=>hasGrade(gm.get(id))).length;
+    const chips=ids.map(id=>{const s=sm.get(id);if(!s)return '';const ok=eligible(s);return `<span class="tg-chip ${ok?'':'off'}">${s.list_number??'—'}. ${escapeHtml(studentLabel(s))}${ok?'':` · ${s.active===0?'baja':'Secretaría'}`}</span>`;}).join('');
+    return `<div class="tg-row"><div class="tg-team"><strong>${escapeHtml(t.name)}</strong><small>${graded} de ${elig.length} ya tienen calificación</small><div class="tg-members">${chips}</div></div><div class="tg-input"><input type="text" inputmode="decimal" autocomplete="off" data-tg="${i}" placeholder="0 a ${fmtShort(max)} o NP" aria-label="Calificación de ${escapeHtml(t.name)}"><div class="tg-quick">${quick.map(v=>`<button type="button" data-tgq="${i}" data-v="${v}">${v}</button>`).join('')}<button type="button" data-tgq="${i}" data-v="NP" class="np">NP</button></div></div></div>`;
+  }).join('');
+  openModal('Calificar por equipos',`<p class="modal-help"><b>${escapeHtml(activity.title)}</b> · calificación de 0 a ${fmtShort(max)} o NP. Escribe la nota de cada equipo y toca «Aplicar». Después puedes cambiar a un alumno en particular en el cuaderno.</p>
+    <div class="tg-options"><label>Organización de equipos<select id="tgOrg"><option>Equipos guardados del grupo${date?` (${date})`:''} · ${usable.length} equipos</option></select></label>
+    <label class="tg-replace"><input type="checkbox" id="tgReplace"> Reemplazar las notas que ya tienen</label></div>
+    <div class="tg-list">${rows}</div>
+    ${teamless.length?`<p class="tg-teamless"><b>Sin equipo (se califican aparte):</b> ${teamless.map(s=>`${s.list_number??'—'}. ${escapeHtml(studentLabel(s))}`).join(' · ')}</p>`:''}
+    <div class="rbe-errors" id="tgErrors" role="alert"></div>
+    <div class="modal-actions"><button class="btn subtle" onclick="closeModal()">Cancelar</button><button class="btn primary" id="tgApply">Aplicar a los equipos</button></div>`);
+  $('#modal .modal-card')?.classList.add('wide');
+  $('#modalBody').onclick=e=>{const b=e.target.closest('[data-tgq]');if(!b)return;const inp=document.querySelector(`#modalBody input[data-tg="${b.dataset.tgq}"]`);if(inp){inp.value=b.dataset.v;inp.dispatchEvent(new Event('input'));}};
+  $('#tgApply').onclick=async()=>{
+    const values={};$$('#modalBody input[data-tg]').forEach(x=>{values[x.dataset.tg]=x.value;});
+    const replace=$('#tgReplace').checked;
+    const studentsMap=new Map(all.map(s=>[+s.id,{active:s.active,secretary_pending:isSecretaryPendingStudent(s)}]));
+    const plan=RB.planTeamGrades({teams:usable,students:studentsMap,existing:gm,values,replace,parse:raw=>notebookParseScore(raw,max)});
+    const err=$('#tgErrors');
+    if(plan.errors.length){err.innerHTML=`<b>Revisa:</b> ${plan.errors.map(escapeHtml).join(' ')} La calificación debe ir de 0 a ${fmtShort(max)} o NP.`;return;}
+    if(!plan.filledTeams){err.textContent='No escribiste la calificación de ningún equipo.';return;}
+    if(!plan.changes.length){err.textContent=`No se cambió nada: ${plan.kept} alumno${plan.kept===1?' ya tenía':'s ya tenían'} calificación. Marca «Reemplazar las notas que ya tienen» si quieres cambiarlas.`;return;}
+    $('#tgApply').disabled=true;
+    const undo=[];
+    for(const c of plan.changes){
+      const old=await MiAulaDB.firstByIndex('grades','unique_key',[activity.id,c.student_id]);
+      const rec={...(old||{}),activity_id:activity.id,student_id:c.student_id,score:c.score,status:c.status,notes:old?.notes||'',updated_at:new Date().toISOString()};
+      if(old){await MiAulaDB.put('grades',rec);undo.push({old});}
+      else{const id=await MiAulaDB.add('grades',rec);undo.push({newId:id});}
+    }
+    closeModal();await refreshAfterGradeChange();
+    showActionUndo(`Calificación aplicada a ${plan.changes.length} alumno${plan.changes.length===1?'':'s'}${plan.kept?` · se ${plan.kept===1?'respetó 1 nota que ya existía':`respetaron ${plan.kept} notas que ya existían`}`:''}.`,async()=>{
+      for(const u of undo){if(u.old)await MiAulaDB.put('grades',u.old);else if(u.newId!=null)await MiAulaDB.remove('grades',u.newId);}
+      await refreshAfterGradeChange();
+    });
+  };
+};

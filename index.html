@@ -9,11 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.7.0 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.7.0">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.7.0">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.7.0">
-  <link rel="stylesheet" href="styles.css?v=2.7.0">
+  <title>MiAula Slate 2.8.0 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.8.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.8.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.8.0">
+  <link rel="stylesheet" href="styles.css?v=2.8.0">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -44,8 +44,8 @@
 <div id="splash" class="splash" aria-hidden="true"><div class="splash-inner"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff" opacity=".96"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".72"/><path d="m36.5 33.2 3.6 3.6 6.4-7" fill="none" stroke="#2F5B88" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Mi<strong>Aula</strong></b></div></div>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.7.0" alt="MiAula">
-    <h1>MiAula Slate 2.7.0</h1>
+    <img src="assets/icon-books-192.png?v=2.8.0" alt="MiAula">
+    <h1>MiAula Slate 2.8.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -54,8 +54,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.7.0" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.7.0 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.8.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.8.0 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -86,7 +86,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.7.0</span>
+        <span class="version-badge">MiAula Slate · 2.8.0</span>
         <button class="btn icon-btn theme-toggle" id="themeToggle" type="button" aria-label="Cambiar a modo claro" title="Cambiar a modo claro"><svg class="ui-icon" aria-hidden="true"><use href="#i-sun"></use></svg></button>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
@@ -244,20 +244,35 @@
     <section id="view-activities" class="view">
       <div class="section-status-row">
         <span class="period-badge" id="activityPeriodBadge">Selecciona un grupo</span>
+        <div class="segmented activities-tabs" id="activitiesTabs" role="tablist" aria-label="Secciones de Calificaciones">
+          <button type="button" class="active" data-tab="activities" role="tab" aria-selected="true"><svg class="ui-icon" aria-hidden="true"><use href="#i-activity"></use></svg><span>Actividades</span></button>
+          <button type="button" data-tab="rubrics" role="tab" aria-selected="false"><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg><span>Rúbricas y listas de cotejo</span></button>
+        </div>
       </div>
+      <div id="rubricLibrary" class="rubric-library hidden" role="tabpanel" aria-label="Rúbricas y listas de cotejo"></div>
+      <div id="activitiesTabMain">
       <div class="grid-2">
         <div class="panel"><div class="panel-head"><div><h3>Nueva actividad</h3><p>Trabajos, prácticas y exposiciones del parcial activo.</p></div></div>
           <form id="activityForm" class="form-grid">
             <label class="span-2">Grupo<select name="group_id" id="activityGroup"></select></label>
             <label class="span-2">Nombre<input name="title" placeholder="Ej. Actividad de funciones" required></label>
             <label>Tipo<select name="activity_type"><option>Trabajo</option><option>Práctica</option><option>Exposición</option></select></label>
-            <label>Puntaje máximo<input type="number" name="max_score" value="10" min="1" step="0.1"></label>
+            <fieldset class="span-2 grading-mode-field">
+              <legend>Cómo se califica</legend>
+              <div class="grading-mode-options">
+                <label class="grading-mode-option"><input type="radio" name="grading_mode" value="number" checked><span><b>Número</b><small>Escribes la calificación (0 al máximo o NP)</small></span></label>
+                <label class="grading-mode-option"><input type="radio" name="grading_mode" value="rubric"><span><b>Rúbrica o lista de cotejo</b><small>Tocas el nivel de cada criterio y MiAula calcula la nota</small></span></label>
+              </div>
+            </fieldset>
+            <label class="span-2 hidden" id="activityRubricLabel">Rúbrica o lista de cotejo<select name="rubric_ref" id="activityRubricSelect"></select><small class="field-help">Se guarda una copia dentro de la actividad: si después editas la plantilla, las notas ya puestas no cambian.</small></label>
+            <label id="activityMaxLabel">Puntaje máximo<input type="number" name="max_score" value="10" min="1" step="0.1"></label>
             <label>Peso<input type="number" name="weight" value="1" min="0" step="0.1"></label>
             <label>Fecha<input type="date" name="activity_date" id="activityDate"></label>
             <button class="btn primary span-2" type="submit">Crear actividad</button>
           </form>
         </div>
         <div class="panel"><div class="panel-head"><div><h3>Actividades del parcial</h3><p>Al cerrar el parcial, esta área inicia limpia; el historial se conserva.</p></div></div><label>Ver grupo<select id="activityFilter"></select></label><div id="activityCards" class="stack"></div></div>
+      </div>
       </div>
       <div id="gradePanel" class="panel hidden"><div class="panel-head"><div><h3 id="gradeTitle">Captura</h3><p>Usa botones rápidos o escribe la calificación.</p></div><button class="btn subtle" id="fillMax">Máximo a todos</button></div><div id="gradeList"></div><button id="saveGrades" class="btn primary wide">Guardar calificaciones</button></div>
     </section>
@@ -438,7 +453,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.7.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.8.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -483,6 +498,10 @@
 <div id="updateBanner" class="update-banner hidden" role="status"><svg class="ui-icon" aria-hidden="true"><use href="#i-refresh"></use></svg><span>Hay una versión nueva de MiAula lista.</span><button type="button" class="btn primary" id="updateNow">Actualizar ahora</button></div>
 <div id="printArea" class="print-area" aria-hidden="true"></div>
 
+<div id="rubricEditor" class="rubric-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="rubricEditorTitle"></div>
+<div id="rubricEval" class="rubric-sheet rubric-eval hidden" role="dialog" aria-modal="true" aria-labelledby="rubricEvalTitle"></div>
+<div id="actionUndo" class="action-undo hidden" role="status"><span id="actionUndoMessage"></span><button type="button" id="actionUndoBtn">Deshacer</button></div>
+
 <div id="undoBar" class="undo-bar hidden"><span id="undoMessage">Cambio guardado</span><button type="button" id="undoNotebook">Deshacer</button></div>
 
 <div id="studentDrawer" class="student-drawer hidden" aria-hidden="true">
@@ -497,8 +516,9 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.7.0"></script>
-<script src="xlsx-lite.js?v=2.7.0"></script>
-<script src="app.js?v=2.7.0"></script>
+<script src="db.js?v=2.8.0"></script>
+<script src="xlsx-lite.js?v=2.8.0"></script>
+<script src="rubricas.js?v=2.8.0"></script>
+<script src="app.js?v=2.8.0"></script>
 </body>
 </html>
