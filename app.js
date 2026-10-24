@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.9.1',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.9.2',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1420,7 +1420,7 @@ async function getScheme(gid,period){
   return s;
 }
 
-async function computeGroupGrading(gid,period){
+async function computeGroupGrading(gid,period,opts={}){
   const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
   const activities=await MiAulaDB.byIndex('activities','group_period',[gid,String(period)]);
   const allGrades=await MiAulaDB.all('grades');
@@ -1453,6 +1453,16 @@ async function computeGroupGrading(gid,period){
       if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}
       else if(type==='examen'){examTotal+=normalized*w;examW+=w;}
       else{workTotal+=normalized*w;workW+=w;}
+    }
+    // Solo en la exportación «cierre de evaluación»: actividad sin calificación cuenta como 0.
+    // NP y rúbricas a medias NO se tocan (siguen sin contar, como en la app).
+    if(opts.emptyAsZero&&!isSecretaryPendingStudent(s)){
+      const withContent=new Set((gByStudent.get(s.id)||[]).filter(g=>!isEmptyGrade(actMap.get(g.activity_id),g)).map(g=>+g.activity_id));
+      for(const a of activities){
+        if(withContent.has(+a.id)||+a.max_score<=0||+a.weight<=0)continue;
+        const w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
+        if(type==='proyecto')projectW+=w;else if(type==='examen')examW+=w;else workW+=w;
+      }
     }
 
     if(principalType==='project'){
@@ -2241,17 +2251,18 @@ async function saveNotebookChanges(opts={}){
   return true;
 }
 
-async function buildNotebookWorkbook(gid,selection){
+async function buildNotebookWorkbook(gid,selection,opts={}){
   const g=await getGroupState(gid);if(!g)throw new Error('Grupo no encontrado');
   const periods=selection==='all'?periodNumbers(g):[String(selection)];
   const sheets=[];
   for(const p of periods){
     const pd=await buildNotebookPeriodData(gid,p),principal=principalLabel(pd.scheme.principal_type||'project');
+    const closing=!!opts.emptyAsZero,closeMap=closing?new Map((await computeGroupGrading(gid,p,{emptyAsZero:true})).students.map(r=>[r.id,r])):null;
     const headers=['No.','Alumno','Extra + disponibles','Extra -','Extra + ganados','Extra + aplicados',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,'Valores','Actitudes','Final','Estado'];
     const rows=[headers];
     for(const s of pd.students){
-      const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{},ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0,goodEarned:0,goodUsed:0};
-      const scores=pd.activities.map(a=>exportGradeValue(a,pd.grades.get(`${a.id}:${s.id}`)));
+      const gr=(closing?closeMap.get(s.id):pd.gradingMap.get(s.id))||{},comp=pd.components.get(s.id)||{},ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0,goodEarned:0,goodUsed:0};
+      const scores=pd.activities.map(a=>{const rec=pd.grades.get(`${a.id}:${s.id}`);if(closing&&!isSecretaryPendingStudent(s)&&isEmptyGrade(a,rec)){if(opts.stats)opts.stats.zeros++;return 0;}return exportGradeValue(a,rec);});
       rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,gr.principal_avg,gr.values_score,gr.attitudes_score,gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
     }
     sheets.push({name:`Libreta P${p}`,rows});
@@ -2264,6 +2275,7 @@ async function buildNotebookWorkbook(gid,selection){
     history.push([r.period,st?.list_number??'',studentLabel(st||{}),r.kind==='good'?'Bueno':r.kind==='bad'?'Malo':'Aplicado',r.kind==='bad'?-r.points:r.points,r.source||'',ac?.title||'',r.created_at?new Date(r.created_at).toLocaleString('es-MX'):'',r.note||'']);
   }
   sheets.push({name:'Historial extras',rows:history});
+  if(opts.emptyAsZero)sheets.unshift(closingNotesSheet(g,opts.stats));
   return {sheets};
 }
 
@@ -2292,8 +2304,10 @@ $('#notebookExcel').onclick=async()=>{
   const gid=+$('#notebookGroup').value;if(!gid){toast('Selecciona un grupo',true);return;}
   try{
     const ok=await saveNotebookChanges({silent:true,noReload:true});if(!ok)return;
-    const g=await MiAulaDB.get('groups',gid),selection=$('#notebookPeriod').value||String(g.current_period||1),book=await buildNotebookWorkbook(gid,selection),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');
-    downloadBlob(blob,`MiAula_Cuaderno_${safe}_${selection==='all'?'Todos':`P${selection}`}_${today}.xlsx`);toast('Excel del cuaderno generado');
+    const mode=await askExportMode('Generar Excel del cuaderno');if(!mode)return;
+    const stats={zeros:0},closing=mode==='closing';
+    const g=await MiAulaDB.get('groups',gid),selection=$('#notebookPeriod').value||String(g.current_period||1),book=await buildNotebookWorkbook(gid,selection,closing?{emptyAsZero:true,stats}:{}),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');
+    downloadBlob(blob,`MiAula_Cuaderno_${safe}_${selection==='all'?'Todos':`P${selection}`}${closing?'_CIERRE':''}_${today}.xlsx`);toast(closing?`Excel de cierre generado · ${stats.zeros} vacías exportadas como 0`:'Excel del cuaderno generado');
     await loadNotebook();
   }catch(e){console.error(e);toast(e.message,true);}
 };
@@ -2319,14 +2333,14 @@ function attendanceTotals(records){
   out.absencePct=out.total?Math.round(out.F*1000/out.total)/10:null;
   return out;
 }
-async function buildWorkbook(gid){
+async function buildWorkbook(gid,opts={}){
   const g=await MiAulaDB.get('groups',gid);if(!g)throw new Error('Grupo no encontrado');
   const allStudents=await MiAulaDB.groupStudents(gid,{includeInactive:true}),students=allStudents.filter(s=>s.active!==0).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999)),inactive=allStudents.filter(s=>s.active===0);
   const attendance=(await MiAulaDB.byIndex('attendance','group_id',gid)).sort((a,b)=>a.attendance_date.localeCompare(b.attendance_date)),activities=(await MiAulaDB.byIndex('activities','group_id',gid)).sort((a,b)=>String(a.period).localeCompare(String(b.period))||String(a.activity_date).localeCompare(String(b.activity_date)));
   const allGrades=await MiAulaDB.all('grades'),actIds=new Set(activities.map(a=>a.id)),grades=allGrades.filter(x=>actIds.has(x.activity_id)),evals=(await MiAulaDB.byIndex('evaluations','group_id',gid)).sort((a,b)=>String(a.period).localeCompare(String(b.period))||String(a.evaluation_date).localeCompare(String(b.evaluation_date))),insts=await MiAulaDB.all('instruments');
   const im=new Map(insts.map(i=>[i.id,i])),sm=new Map(allStudents.map(s=>[s.id,s])),am=new Map(activities.map(a=>[a.id,a])),gradeKey=new Map(grades.map(gr=>[`${gr.activity_id}:${gr.student_id}`,gr]));
   const dates=[...new Set(attendance.map(a=>a.attendance_date))].sort(),attKey=new Map(attendance.map(a=>[`${a.student_id}:${a.attendance_date}`,a]));
-  const periods=periodNumbers(g);const grading={};for(const p of periods)grading[p]=await computeGroupGrading(gid,p);
+  const periods=periodNumbers(g);const grading={};for(const p of periods)grading[p]=await computeGroupGrading(gid,p,opts.emptyAsZero?{emptyAsZero:true}:{});
   const avgFinal=p=>{const v=grading[p].students.filter(x=>x.final_grade!=null).map(x=>x.final_grade);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const groupAttendance=attendanceTotals(attendance.filter(a=>sm.get(a.student_id)?.active!==0));
   const studentAttendanceStats=students.map(st=>attendanceTotals(attendance.filter(a=>a.student_id===st.id)));
@@ -2340,7 +2354,7 @@ async function buildWorkbook(gid){
   const conc=[['No.','Código','Alumno','Grado','Asistencia %','Faltas %','Alerta asistencia','Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
     const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],risk=absenceRiskMeta(at.absencePct),row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.absencePct,risk.label,at.P,at.F,at.R,at.J,at.S];
-    for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`),v=isRubricActivity(a)?rubricGradeScore(a,gr):(gr?.score??null),shown=exportGradeValue(a,gr);row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
+    for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`);let v=isRubricActivity(a)?rubricGradeScore(a,gr):(gr?.score??null),shown=exportGradeValue(a,gr);if(opts.emptyAsZero&&!isSecretaryPendingStudent(s)&&isEmptyGrade(a,gr)){v=0;shown=0;if(opts.stats)opts.stats.zeros++;}row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
     row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,...periods.map(p=>grading[p].students.find(x=>x.id===s.id)?.final_grade??null));conc.push(row);
   }
   const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.','Total hrs computables','Asistencia %','Faltas %','Alerta 20%']];
@@ -2359,18 +2373,20 @@ async function buildWorkbook(gid){
   const teamSheet=[['Equipo','No.','Alumno','Estado','Guardado / actualizado']];
   for(const t of savedTeams)for(const st of t.members)teamSheet.push([t.name,st.list_number??'',studentLabel(st),st.active!==0?'Activo':'Baja',teamRecord?.updated_at?new Date(teamRecord.updated_at).toLocaleString('es-MX'):'']);
   if(!savedTeams.length)teamSheet.push(['Sin equipos guardados','','','','']);
-  return {sheets:[{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
+  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
 async function exportFullExcelForGroup(gid){
   gid=+gid||0;if(!gid){toast('Selecciona un grupo',true);return;}
-  try{toast('Generando Excel completo…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}_${today}.xlsx`);toast('Excel completo generado');}catch(e){console.error(e);toast(e.message,true);}
+  const mode=await askExportMode('Exportar todo a Excel');if(!mode)return;
+  const stats={zeros:0},closing=mode==='closing';
+  try{toast('Generando Excel completo…');const g=await MiAulaDB.get('groups',gid),book=await buildWorkbook(gid,closing?{emptyAsZero:true,stats}:{}),blob=XLSXLite.write(book),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(blob,`MiAula_${safe}${closing?'_CIERRE':''}_${today}.xlsx`);toast(closing?`Excel de cierre generado · ${stats.zeros} vacías exportadas como 0`:'Excel completo generado');}catch(e){console.error(e);toast(e.message,true);}
 }
 $('#exportBtn').onclick=async()=>{await exportFullExcelForGroup(+$('#exportGroup').value);};
 async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.9.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.9.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -3706,4 +3722,45 @@ async function saveProjectRubricEvaluation(gid,p,scheme,ref){
   projectEvalSelection={};await renderProjectRubricCriteria(ref);
   await loadEvalHistory(gid,p);await loadSummary();
   if(+$('#gradingGroup').value===gid)await loadGrading();
+}
+
+// ==========================================================================
+// 2.9.2 · Exportación «cierre de evaluación»: actividades vacías = 0
+// Solo cambia el archivo exportado. En MiAula los vacíos siguen pendientes.
+// ==========================================================================
+// Vacía = sin calificación, sin NP y (en rúbrica) sin ningún criterio marcado.
+function isEmptyGrade(a,rec){
+  if(!rec)return true;
+  if(rec.score!=null)return false;
+  if(String(rec.status||'').toUpperCase()==='NP')return false;
+  if(a&&isRubricActivity(a)&&rec.rubric_levels&&Object.keys(rec.rubric_levels).length)return false;
+  return true;
+}
+function closingNotesSheet(g,stats){
+  return {name:'Cierre',rows:[
+    ['Exportación para cierre de evaluación'],
+    ['Grupo',`${g?.name||''} · ${g?.discipline||''}`],
+    ['Fecha',new Date().toLocaleString('es-MX')],
+    ['Actividades sin calificación exportadas como 0',stats?.zeros??''],
+    ['Regla','Las actividades sin calificación cuentan como 0 en el promedio de trabajos y en la final de este archivo.'],
+    ['NP','Se exporta como «NP» y no cuenta en el promedio (igual que en MiAula).'],
+    ['Rúbricas a medias','Se exportan como «N de M criterios» y no cuentan en el promedio.'],
+    ['Pendiente Secretaría','Sus actividades vacías no se convierten en 0.'],
+    ['Importante','En MiAula no se cambió ninguna calificación: los vacíos siguen como pendientes.']
+  ]};
+}
+function askExportMode(title){
+  return new Promise(resolve=>{
+    let done=false;const finish=v=>{if(done)return;done=true;resolve(v);};
+    openModal(title,`<p class="modal-help">¿Cómo quieres exportar?</p>
+      <div class="create-choice export-choice">
+        <button type="button" class="bank-action" id="exportAsIs"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-excel"></use></svg></span><span><b>Como está</b><small>Las actividades sin calificación quedan en blanco</small></span></button>
+        <button type="button" class="bank-action closing" id="exportClosing"><span class="bank-action-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-alert"></use></svg></span><span><b>Para cierre de evaluación</b><small>Las actividades sin calificación salen en <b>0</b> y cuentan en el promedio y la final. NP y rúbricas a medias se quedan igual.</small></span></button>
+      </div>
+      <p class="muted-text export-choice-note">En ambos casos tus calificaciones en MiAula no cambian.</p>`);
+    $('#exportAsIs').onclick=()=>{closeModal();finish('asis');};
+    $('#exportClosing').onclick=()=>{closeModal();finish('closing');};
+    const obs=new MutationObserver(()=>{if($('#modal').classList.contains('hidden')){obs.disconnect();finish(null);}});
+    obs.observe($('#modal'),{attributes:true,attributeFilter:['class']});
+  });
 }

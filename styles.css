@@ -1,4 +1,4 @@
-@import url("./styles-legacy.css?v=2.9.1");
+@import url("./styles-legacy.css?v=2.9.2");
 
 /* ==========================================================================\n   MiAula Slate 2.4.6 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
@@ -1421,3 +1421,10 @@ body.class-mode .bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!im
   .app-tab b{font-size:9px!important}
   .app-tab span{width:22px!important;height:22px!important}
 }
+
+/* 2.9.2 · Elegir cómo exportar */
+.export-choice .bank-action.closing{border-color:rgba(214,168,75,.35)}
+.export-choice .bank-action.closing .bank-action-icon{background:var(--warning-soft);color:var(--warning-text)}
+.export-choice .bank-action small b{color:var(--text-strong)}
+.export-choice-note{margin:12px 0 0}
+.export-choice .bank-action small b{display:inline;font-size:inherit}
