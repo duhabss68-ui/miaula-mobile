@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.10.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.10.1',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -1393,9 +1393,12 @@ async function getScheme(gid,period){
   const key=`${gid}:${period}`;
   let s=await MiAulaDB.get('gradingSchemes',key);
   if(!s){
+    // 2.10.1: un parcial nuevo copia los porcentajes del parcial anterior; Proyecto/Examen queda por elegir.
+    const prev=+period>1?await MiAulaDB.get('gradingSchemes',`${gid}:${+period-1}`):null;
+    const okPrev=prev&&[prev.work_pct,prev.project_pct,prev.values_pct,prev.attitudes_pct].reduce((a,b)=>a+(+b||0),0)===100;
     s={
       key,group_id:+gid,period:String(period),
-      work_pct:40,project_pct:40,values_pct:10,attitudes_pct:10,
+      work_pct:okPrev?+prev.work_pct:40,project_pct:okPrev?+prev.project_pct:40,values_pct:okPrev?+prev.values_pct:10,attitudes_pct:okPrev?+prev.attitudes_pct:10,
       principal_type:'project',mode_locked:false,
       updated_at:new Date().toISOString()
     };
@@ -1993,7 +1996,10 @@ async function loadNotebook(opts={}){
   const g=await getGroupState(gid); if(!g)return;
   await syncContextIndicators(gid);
   const periodSelect=$('#notebookPeriod');
-  const previous=opts.resetPeriod?'':periodSelect.value;
+  // 2.10.1: si cambió el grupo o se cerró un parcial, abrir el parcial actual (no el que quedó elegido antes).
+  const sameContext=periodSelect.dataset.gid===String(gid)&&periodSelect.dataset.current===String(g.current_period||1);
+  const previous=opts.resetPeriod||!sameContext?'':periodSelect.value;
+  periodSelect.dataset.gid=String(gid);periodSelect.dataset.current=String(g.current_period||1);
   const periods=periodNumbers(g);
   periodSelect.innerHTML=periods.map(p=>`<option value="${p}">Parcial ${p}${+p===+g.current_period?' · actual':''}</option>`).join('')+'<option value="all">Todos los parciales</option>';
   const target=previous && (previous==='all'||periods.includes(previous))?previous:String(g.current_period||periods[0]||1);
@@ -2386,7 +2392,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.10.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.10.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
