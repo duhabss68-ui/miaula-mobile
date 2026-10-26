@@ -9,11 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.10.1 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.10.1">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.10.1">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.10.1">
-  <link rel="stylesheet" href="styles.css?v=2.10.1">
+  <title>MiAula Slate 2.11.0 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.11.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.11.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.11.0">
+  <link rel="stylesheet" href="styles.css?v=2.11.0">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -44,8 +44,8 @@
 <div id="splash" class="splash" aria-hidden="true"><div class="splash-inner"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff" opacity=".96"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".72"/><path d="m36.5 33.2 3.6 3.6 6.4-7" fill="none" stroke="#2F5B88" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Mi<strong>Aula</strong></b></div></div>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.10.1" alt="MiAula">
-    <h1>MiAula Slate 2.10.1</h1>
+    <img src="assets/icon-books-192.png?v=2.11.0" alt="MiAula">
+    <h1>MiAula Slate 2.11.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -54,8 +54,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.10.1" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.10.1 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.11.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.11.0 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -86,7 +86,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.10.1</span>
+        <span class="version-badge">MiAula Slate · 2.11.0</span>
         <button class="btn icon-btn theme-toggle" id="themeToggle" type="button" aria-label="Cambiar a modo claro" title="Cambiar a modo claro"><svg class="ui-icon" aria-hidden="true"><use href="#i-sun"></use></svg></button>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
@@ -173,6 +173,7 @@
       </div>
       <div class="toolbar attendance-history-toolbar">
         <label>Grupo<select id="attendanceHistoryGroup"></select></label>
+        <label>Parcial<select id="attendanceHistoryPeriod"></select></label>
         <button class="btn primary" id="refreshAttendanceMonitor" type="button">Actualizar historial</button>
         <button class="btn subtle" id="printAttendanceReport" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#i-print"></use></svg><span>Reporte para Secretaría (PDF)</span></button>
         <button class="btn subtle" id="exportAttendanceList" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#i-excel"></use></svg><span>Lista de asistencia (Excel)</span></button>
@@ -182,10 +183,10 @@
         <div id="secretaryPendingList"><div class="empty-state">Selecciona un grupo para revisar pendientes.</div></div>
       </div>
       <div class="panel attendance-monitor-panel">
-        <div class="panel-head attendance-monitor-head"><div><h3>Asistencia acumulada</h3><p>Monitorea las horas registradas y detecta estudiantes que se acercan al 20% de faltas.</p></div></div>
+        <div class="panel-head attendance-monitor-head"><div><h3 id="attendanceMonitorTitle">Asistencia del parcial</h3><p>Cada parcial empieza en 0. Elige un parcial cerrado para consultarlo o «Todo el semestre» para verlo completo.</p></div></div>
         <div id="attendanceMonitorSummary" class="attendance-monitor-summary"><div class="empty-state">Selecciona un grupo para ver el seguimiento acumulado.</div></div>
         <div id="attendanceMonitorTable" class="attendance-monitor-table"></div>
-        <p class="attendance-monitor-note">El porcentaje usa únicamente horas con P, F, R o J. <strong>Pendiente Secretaría</strong> queda fuera del cálculo hasta que confirmes la situación.</p>
+        <p class="attendance-monitor-note"><strong>Asist. 10%</strong> = clases con asistencia ÷ clases del parcial × 10 (P, R y J cuentan como asistencia; solo F resta). El porcentaje de faltas usa únicamente horas con P, F, R o J. <strong>Pendiente Secretaría</strong> queda fuera del cálculo hasta que confirmes la situación.</p>
       </div>
     </section>
 
@@ -348,6 +349,7 @@
         </div>
         <div class="partial-header-actions">
           <label>Grupo<select id="gradingGroup"></select></label>
+          <button class="btn subtle" id="consultPastPeriodsBtn" type="button">Consultar parciales pasados</button>
           <button class="btn danger-outline" id="closePeriodBtn">Cerrar parcial e iniciar siguiente</button>
         </div>
       </div>
@@ -365,8 +367,9 @@
             </div>
             <label class="scheme-item variable"><span>Trabajos <small>grupo</small></span><div class="percent-input"><input id="workPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
             <label class="scheme-item variable"><span><span id="principalPctLabel">Proyecto</span> <small>grupo</small></span><div class="percent-input"><input id="projectPct" type="number" min="0" max="100" step="1" value="40"><b>%</b></div></label>
-            <label class="scheme-item fixed"><span>Valores <small>docente</small></span><div class="percent-input"><input id="valuesPct" type="number" min="0" max="100" step="1" value="10"><b>%</b></div></label>
-            <label class="scheme-item fixed"><span>Actitudes <small>docente</small></span><div class="percent-input"><input id="attitudesPct" type="number" min="0" max="100" step="1" value="10"><b>%</b></div></label>
+            <label class="scheme-item fixed" id="valuesSchemeItem"><span>Valores <small>docente</small></span><div class="percent-input"><input id="valuesPct" type="number" min="0" max="100" step="1" value="10"><b>%</b></div></label>
+            <label class="scheme-item fixed" id="attitudesSchemeItem"><span>Actitudes <small>docente</small></span><div class="percent-input"><input id="attitudesPct" type="number" min="0" max="100" step="1" value="10"><b>%</b></div></label>
+            <label class="scheme-item fixed attendance-scheme-item hidden" id="attendanceSchemeItem"><span>Asistencia <small>automática · fija</small></span><div class="percent-input"><input id="attendancePct" type="number" value="10" readonly tabindex="-1" aria-readonly="true"><b>%</b></div></label>
             <div class="scheme-total span-2"><span>Total</span><strong id="schemeTotal">100%</strong></div>
             <button class="btn primary span-2" type="submit">Guardar esquema del parcial</button>
           </form>
@@ -374,7 +377,7 @@
         <div class="panel"><div class="panel-head"><div><h3>Promedio del grupo</h3><p>El final aparece cuando todos los rubros con porcentaje tienen información.</p></div></div><div class="term-average"><span>Parcial actual</span><strong id="gradingGroupAverage">—</strong></div><p class="muted-text"><span id="gradingPrincipalLabel">Proyecto</span> utiliza el mismo porcentaje definido como componente principal. Al cerrar el parcial, el siguiente inicia limpio.</p></div>
       </div>
 
-      <div class="panel"><div class="panel-head"><div><h3>Valores, actitudes y final</h3><p>Trabajos y el componente principal se calculan automáticamente.</p></div><div class="action-row"><button class="btn small subtle" id="fillValues10">Valores 10</button><button class="btn small subtle" id="fillAttitudes10">Actitudes 10</button></div></div><div id="gradingTable" class="empty-state">Selecciona un grupo.</div><button id="saveComponents" class="btn primary wide hidden">Guardar Valores y Actitudes</button></div>
+      <div class="panel"><div class="panel-head"><div><h3 id="componentsPanelTitle">Valores, actitudes y final</h3><p id="componentsPanelNote">Trabajos y el componente principal se calculan automáticamente.</p></div><div class="action-row"><button class="btn small subtle" id="fillValues10">Valores 10</button><button class="btn small subtle" id="fillAttitudes10">Actitudes 10</button></div></div><div id="gradingTable" class="empty-state">Selecciona un grupo.</div><button id="saveComponents" class="btn primary wide hidden">Guardar Valores y Actitudes</button></div>
     </section>
 
     <section id="view-evaluation" class="view">
@@ -443,7 +446,7 @@
         <div class="admin-current" id="adminCurrentGroup"><span>Grupo activo</span><strong>Selecciona un grupo</strong><small>—</small></div>
       </div>
       <div class="admin-primary-grid">
-        <button class="admin-primary-card tone-percent" onclick="goView('grading')"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-percent"></use></svg></span><div><small>Evaluación</small><strong>Porcentajes del parcial</strong><p id="adminSchemeSummary">Trabajos · Principal · Valores · Actitudes</p></div><b>→</b></button>
+        <button class="admin-primary-card tone-percent" onclick="goView('grading')"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-percent"></use></svg></span><div><small>Evaluación</small><strong>Porcentajes del parcial</strong><p id="adminSchemeSummary">Trabajos · Principal · Asistencia</p></div><b>→</b></button>
         <button class="admin-primary-card tone-principal" onclick="goView('evaluation')"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><div><small>Componente principal</small><strong id="adminPrincipalTitle">Proyecto / Examen</strong><p id="adminPrincipalSummary">Configura el componente del parcial activo</p></div><b>→</b></button>
         <button class="admin-primary-card tone-excel" id="adminExportBtn" type="button"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-excel"></use></svg></span><div><small>Concentrado completo</small><strong>Exportar todo a Excel</strong><p>Asistencia, actividades, parciales, extras e instrumentos</p></div><b>↓</b></button>
         <button class="admin-primary-card tone-backup" id="adminBackupBtn" type="button"><span class="admin-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><div><small>Seguridad</small><strong>Crear respaldo</strong><p>Copia completa de los datos de esta tablet</p></div><b>↓</b></button>
@@ -455,6 +458,7 @@
           <button class="more-nav-card" onclick="goView('activities')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-activity"></use></svg></span><strong>Calificaciones</strong><small>Crear y revisar actividades</small></button>
           <button class="more-nav-card" onclick="goView('grading')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-percent"></use></svg></span><strong>Parcial</strong><small>Esquema, porcentajes y cierre</small></button>
           <button class="more-nav-card" onclick="goView('evaluation')"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-eval"></use></svg></span><strong id="moreEvaluationLabel">Proyecto</strong><small>Proyecto, rúbricas o examen</small></button>
+          <button class="more-nav-card" onclick="openPastPeriodsConsult(+$('#contextGroup')?.value||0)"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg></span><strong>Parciales pasados</strong><small>Consulta en solo lectura</small></button>
         </div>
       </div>
       <div class="grid-2">
@@ -466,7 +470,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.10.1 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.11.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -478,7 +482,6 @@
   <button class="app-tab new-activity-tab" data-app-view="activities" data-focus="new-activity" aria-label="Nueva actividad"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-plus"></use></svg></span><b>Actividad</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="roulette"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-roulette"></use></svg></span><b>Ruleta</b></button>
   <button class="app-tab" data-app-view="dynamics" data-mode="teams"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-teams"></use></svg></span><b>Equipos</b></button>
-  <button class="app-tab backup-tab" id="bottomBackupBtn" type="button"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-backup"></use></svg></span><b>Respaldo</b></button>
   <button class="app-tab" data-app-view="more"><span><svg class="ui-icon" aria-hidden="true"><use href="#i-data"></use></svg></span><b>Más</b></button>
 </nav>
 
@@ -530,9 +533,9 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.10.1"></script>
-<script src="xlsx-lite.js?v=2.10.1"></script>
-<script src="rubricas.js?v=2.10.1"></script>
-<script src="app.js?v=2.10.1"></script>
+<script src="db.js?v=2.11.0"></script>
+<script src="xlsx-lite.js?v=2.11.0"></script>
+<script src="rubricas.js?v=2.11.0"></script>
+<script src="app.js?v=2.11.0"></script>
 </body>
 </html>

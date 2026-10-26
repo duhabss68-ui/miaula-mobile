@@ -200,7 +200,7 @@ function goView(name){
   }[name]||name;
   updateAppNav();
   if(name==='dashboard') loadSummary();
-  if(name==='attendanceHistory'){renderAttendanceMonitor();renderSecretaryPendingList();}
+  if(name==='attendanceHistory'){if(pendingAttendancePeriod==null)pendingAttendancePeriod='__current';renderAttendanceMonitor();renderSecretaryPendingList();}
   if(name==='activities') loadActivities();
   if(name==='notebook') loadNotebook();
   if(name==='grading') loadGrading();
@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.10.1',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.11.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -247,6 +247,7 @@ async function init(){
   try{
     await MiAulaDB.open();
     await MiAulaDB.normalizeRecords();
+    try{await stampAllAttendancePeriods();}catch(e){console.warn('Asistencia por parcial',e);}
     $('#systemStatus').textContent='Datos locales listos';
     await refreshGroups();
     await loadInstruments();
@@ -291,8 +292,9 @@ async function loadSummary(){
   const activities=await MiAulaDB.all('activities');
   const activeGroupIds=new Set(groups.map(g=>g.id));
   const students=allStudents.filter(s=>activeGroupIds.has(s.group_id)&&s.active!==0);
-  const studentIds=new Set(students.map(s=>s.id));
-  const att=attendance.filter(a=>studentIds.has(a.student_id));
+  const studentIds=new Set(students.map(s=>s.id)),groupById=new Map(groups.map(g=>[g.id,g]));
+  // 2.11.0: el tablero muestra la asistencia del parcial en curso de cada grupo (cada parcial empieza en 0).
+  const att=attendance.filter(a=>studentIds.has(a.student_id)&&groupById.has(a.group_id)&&attendancePeriodOf(a,groupById.get(a.group_id))===String(groupById.get(a.group_id).current_period||1));
   const totalHours=att.reduce((n,a)=>n+(a.status==='S'?0:(+a.class_hours||1)),0);
   const attendedHours=att.reduce((n,a)=>n+((a.status==='F'||a.status==='S')?0:(+a.class_hours||1)),0);
   const attendancePct=totalHours?`${(attendedHours*100/totalHours).toFixed(1)}%`:'—';
@@ -307,7 +309,7 @@ async function loadSummary(){
     .map(g=>+g.score*10/+actMap.get(g.activity_id).max_score);
   const avg=normalized.length?(normalized.reduce((a,b)=>a+b,0)/normalized.length).toFixed(1):'—';
   $('#kpis').innerHTML=[
-    ['Grupos activos',groups.length],['Alumnos activos',students.length],['Asistencia por hora',attendancePct],['Horas registradas',registeredClassHours||'—']
+    ['Grupos activos',groups.length],['Alumnos activos',students.length],['Asistencia (parcial actual)',attendancePct],['Horas del parcial',registeredClassHours||'—']
   ].map(x=>`<div class="kpi"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');
 
   const cards=[];
@@ -518,6 +520,7 @@ async function loadAttendance(){
   const existing=await MiAulaDB.byIndex('attendance','group_date',[gid,dt]);
   const em=new Map(existing.map(a=>[a.student_id,a]));
   if(existing.length) $('#attendanceHours').value=String(existing[0].class_hours||1);
+  await renderAttendancePeriodNote(gid,dt,existing);
   attendanceData=students.map(student=>{
     const old=em.get(student.id);
     const pending=isSecretaryPendingStudent(student);
@@ -531,6 +534,20 @@ async function loadAttendance(){
     };
   });
   renderAttendance();
+}
+
+async function renderAttendancePeriodNote(gid,dt,existing){
+  let box=$('#attendancePeriodNote');
+  if(!box){box=document.createElement('div');box.id='attendancePeriodNote';box.className='attendance-period-note hidden';$('#attendanceList')?.before(box);}
+  const g=await getGroupState(gid);if(!g){box.classList.add('hidden');return;}
+  const p=existing?.length?attendancePeriodOf(existing[0],g):inferAttendancePeriod(g,dt,new Date().toISOString());
+  if(isPeriodClosed(g,p)){
+    box.className='attendance-period-note closed';
+    box.innerHTML=`<strong>Parcial ${p} · cerrado</strong><span>Esta fecha pertenece a un parcial ya cerrado. Puedes corregirla (por ejemplo, cambiar R por P al recibir el justificante); el cambio se guarda en el Parcial ${p} y no afecta al parcial actual.</span>`;
+  }else{
+    box.className='attendance-period-note';
+    box.innerHTML=`<strong>Parcial ${p}</strong><span>El pase de lista cuenta para la Asistencia (10%) de este parcial.</span>`;
+  }
 }
 
 function attendanceStatusButtons(row,i){
@@ -571,7 +588,8 @@ function updateAttendanceStats(){
 
 async function upsertAttendanceStatus(gid,studentId,dt,status,hours,notes=''){
   const old=await MiAulaDB.firstByIndex('attendance','unique_key',[+gid,+studentId,dt]);
-  const rec={...(old||{}),group_id:+gid,student_id:+studentId,attendance_date:dt,status,notes:notes||old?.notes||'',class_hours:Math.max(1,+hours||1),updated_at:new Date().toISOString()};
+  const period=old?.period!=null&&old.period!==''?String(old.period):inferAttendancePeriod(await MiAulaDB.get('groups',+gid),dt,old?.updated_at||new Date().toISOString());
+  const rec={...(old||{}),group_id:+gid,student_id:+studentId,attendance_date:dt,period,status,notes:notes||old?.notes||'',class_hours:Math.max(1,+hours||1),updated_at:new Date().toISOString()};
   if(old)await MiAulaDB.put('attendance',rec);else await MiAulaDB.add('attendance',rec);
   return rec;
 }
@@ -652,6 +670,21 @@ function absenceRiskMeta(pct){
 }
 function fmtPct(v){return v==null||!Number.isFinite(+v)?'—':`${(+v).toFixed(1)}%`;}
 function attendanceHistoryGroupId(){return +($('#attendanceHistoryGroup')?.value||$('#attendanceGroup')?.value||0);}
+// 2.11.0: el historial se consulta por parcial (actual por defecto), por parcial cerrado o todo el semestre.
+let pendingAttendancePeriod=null;
+function syncAttendancePeriodSelect(g){
+  const sel=$('#attendanceHistoryPeriod');if(!sel||!g)return 'all';
+  const current=String(g.current_period||1),periods=periodNumbers(g).filter(p=>isPeriodClosed(g,p)||(p===current&&!g.course_closed));
+  const prev=sel.dataset.gid===String(g.id)&&sel.dataset.current===current?sel.value:'';
+  sel.innerHTML=periods.map(p=>`<option value="${p}">Parcial ${p}${p===current&&!g.course_closed?' · actual':' · cerrado (consulta)'}</option>`).join('')+'<option value="all">Todo el semestre</option>';
+  sel.dataset.gid=String(g.id);sel.dataset.current=current;
+  const fallback=g.course_closed?(periods[periods.length-1]||'all'):current,keepPrev=pendingAttendancePeriod!=='__current'&&prev&&[...periods,'all'].includes(prev);
+  const want=pendingAttendancePeriod&&[...periods,'all'].includes(pendingAttendancePeriod)?pendingAttendancePeriod:(keepPrev?prev:fallback);
+  pendingAttendancePeriod=null;sel.value=want;
+  return want;
+}
+function attendanceHistoryPeriodValue(){return $('#attendanceHistoryPeriod')?.value||'all';}
+function attendancePeriodLabel(g,p){return p==='all'?'Todo el semestre':`Parcial ${p}${isPeriodClosed(g,p)?' (cerrado)':''}`;}
 
 async function renderSecretaryPendingList(){
   const box=$('#secretaryPendingList');if(!box)return;
@@ -671,14 +704,18 @@ async function renderAttendanceMonitor(){
     return;
   }
   const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  const records=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const g=await getGroupState(gid),period=syncAttendancePeriodSelect(g);
+  const records=attendanceForPeriod(await MiAulaDB.byIndex('attendance','group_id',gid),g,period);
   const byStudent=new Map();
   for(const r of records){if(!byStudent.has(r.student_id))byStudent.set(r.student_id,[]);byStudent.get(r.student_id).push(r);}
   const rows=students.map(student=>{
-    const totals=attendanceTotals(byStudent.get(student.id)||[]);
+    const list=byStudent.get(student.id)||[];
+    const totals=attendanceTotals(list);
     const risk=absenceRiskMeta(totals.absencePct);
-    return {student,totals,risk};
+    return {student,totals,risk,grade:attendanceGrade(list)};
   });
+  if($('#attendanceMonitorTitle'))$('#attendanceMonitorTitle').textContent=period==='all'?'Asistencia de todo el semestre':`Asistencia · ${attendancePeriodLabel(g,period)}`;
+  const classDays=new Set(records.filter(r=>String(r.status||'').toUpperCase()!=='S').map(r=>r.attendance_date)).size;
   const pending=students.filter(isSecretaryPendingStudent).length;
   const normalRows=rows.filter(r=>!isSecretaryPendingStudent(r.student));
   const critical=normalRows.filter(r=>(r.totals.absencePct||0)>=20).length;
@@ -689,7 +726,8 @@ async function renderAttendanceMonitor(){
   const classHours=[...classBlocks.values()].reduce((a,b)=>a+b,0);
   const pctRows=normalRows.filter(r=>r.totals.absencePct!=null);
   const groupAbsence=pctRows.length?pctRows.reduce((n,r)=>n+(r.totals.absencePct||0),0)/pctRows.length:0;
-  summary.innerHTML=`
+  summary.innerHTML=`${period!=='all'&&isPeriodClosed(g,period)?'<div class="attendance-consult-note"><span class="consult-chip">Modo consulta</span><span>Parcial cerrado: estos datos ya no se mezclan con el parcial actual.</span></div>':''}
+    <div class="attendance-monitor-kpi"><span>Clases registradas</span><strong>${classDays}</strong><small>${period==='all'?'en el semestre':'en este parcial'}</small></div>
     <div class="attendance-monitor-kpi"><span>Horas registradas</span><strong>${classHours||0}</strong><small>del grupo</small></div>
     <div class="attendance-monitor-kpi risk-ok"><span>En rango</span><strong>${inRange}</strong><small>menos de 15%</small></div>
     <div class="attendance-monitor-kpi risk-warning"><span>Cerca del límite</span><strong>${warning}</strong><small>15% a 19.9%</small></div>
@@ -697,18 +735,20 @@ async function renderAttendanceMonitor(){
     <div class="attendance-monitor-kpi"><span>Pend. Secretaría</span><strong>${pending}</strong><small>fuera del cálculo</small></div>
     <div class="attendance-monitor-kpi"><span>Promedio faltas</span><strong>${pctRows.length?groupAbsence.toFixed(1)+'%':'—'}</strong><small>grupo activo</small></div>`;
   if(!rows.length){table.innerHTML='<div class="empty-state">Este grupo no tiene alumnos activos.</div>';return;}
-  table.innerHTML=`<div class="table-wrap"><table class="attendance-monitor-grid"><thead><tr><th>No.</th><th>Alumno</th><th>Hrs</th><th>P</th><th>F</th><th>R</th><th>J</th><th>Sec.</th><th>Faltas</th><th>Estado</th><th></th></tr></thead><tbody>${rows.map(({student,totals,risk})=>`<tr class="attendance-risk-row ${risk.key} ${isSecretaryPendingStudent(student)?'secretary-pending-monitor':''}"><td>${student.list_number??'—'}</td><td><strong>${escapeHtml(studentLabel(student))}</strong>${isSecretaryPendingStudent(student)?'<span class="secretary-inline-badge">Pendiente</span>':''}</td><td>${totals.total}</td><td>${totals.P}</td><td class="absence-hours">${totals.F}</td><td>${totals.R}</td><td>${totals.J}</td><td>${totals.S}</td><td><strong class="absence-pct ${risk.key}">${fmtPct(totals.absencePct)}</strong></td><td>${isSecretaryPendingStudent(student)?'<span class="secretary-state">Pendiente Secretaría</span>':`<span class="attendance-risk-badge ${risk.key}">${risk.label}</span>`}</td><td><div class="action-row"><button class="btn small subtle" type="button" onclick="openAttendanceHistory(${student.id})">Historial / corregir</button>${isSecretaryPendingStudent(student)?`<button class="btn small" type="button" onclick="resolveSecretaryPending(${student.id})">Resolver</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
+  table.innerHTML=`<div class="table-wrap"><table class="attendance-monitor-grid"><thead><tr><th>No.</th><th>Alumno</th><th>Hrs</th><th>P</th><th>F</th><th>R</th><th>J</th><th>Sec.</th><th>Faltas</th>${period!=='all'?'<th>Asist. 10%</th>':''}<th>Estado</th><th></th></tr></thead><tbody>${rows.map(({student,totals,risk,grade})=>`<tr class="attendance-risk-row ${risk.key} ${isSecretaryPendingStudent(student)?'secretary-pending-monitor':''}"><td>${student.list_number??'—'}</td><td><strong>${escapeHtml(studentLabel(student))}</strong>${isSecretaryPendingStudent(student)?'<span class="secretary-inline-badge">Pendiente</span>':''}</td><td>${totals.total}</td><td>${totals.P}</td><td class="absence-hours">${totals.F}</td><td>${totals.R}</td><td>${totals.J}</td><td>${totals.S}</td><td><strong class="absence-pct ${risk.key}">${fmtPct(totals.absencePct)}</strong></td>${period!=='all'?`<td>${grade.score==null?'—':`<strong>${fmtNum(grade.score)}</strong><small class="att-classes">${grade.attended}/${grade.classes}</small>`}</td>`:''}<td>${isSecretaryPendingStudent(student)?'<span class="secretary-state">Pendiente Secretaría</span>':`<span class="attendance-risk-badge ${risk.key}">${risk.label}</span>`}</td><td><div class="action-row"><button class="btn small subtle" type="button" onclick="openAttendanceHistory(${student.id})">Historial / corregir</button>${isSecretaryPendingStudent(student)?`<button class="btn small" type="button" onclick="resolveSecretaryPending(${student.id})">Resolver</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 window.renderAttendanceMonitor=renderAttendanceMonitor;
 
 async function openAttendanceHistory(studentId){
   const student=await MiAulaDB.get('students',+studentId);if(!student)return;
-  const records=(await MiAulaDB.byIndex('attendance','student_id',+studentId)).sort((a,b)=>String(b.attendance_date).localeCompare(String(a.attendance_date)));
-  const totals=attendanceTotals(records),risk=absenceRiskMeta(totals.absencePct);
+  const sg=await getGroupState(student.group_id),period=sg&&+attendanceHistoryGroupId()===+student.group_id?attendanceHistoryPeriodValue():String(sg?.current_period||1);
+  const records=attendanceForPeriod((await MiAulaDB.byIndex('attendance','student_id',+studentId)).filter(r=>+r.group_id===+student.group_id),sg,period).sort((a,b)=>String(b.attendance_date).localeCompare(String(a.attendance_date)));
+  const totals=attendanceTotals(records),risk=absenceRiskMeta(totals.absencePct),ag=attendanceGrade(records);
   const statusLabels={P:'Presente',F:'Falta',R:'Retardo',J:'Justificada',S:'Pendiente Secretaría'};
   const rows=records.length?records.map(r=>`<tr><td><strong>${escapeHtml(r.attendance_date)}</strong></td><td>${+r.class_hours||1} h</td><td><select class="attendance-history-status" data-attendance-id="${r.id}">${['P','F','R','J','S'].map(st=>`<option value="${st}" ${r.status===st?'selected':''}>${st} · ${statusLabels[st]}</option>`).join('')}</select></td><td><button type="button" class="btn small subtle" onclick="openAttendanceDay('${escapeHtml(r.attendance_date)}')">Abrir día</button></td></tr>`).join(''):'<tr><td colspan="4">Sin registros todavía.</td></tr>';
-  openModal(`Asistencia · ${studentLabel(student)}`,`
+  openModal(`Asistencia · ${studentLabel(student)} · ${attendancePeriodLabel(sg,period)}`,`
     <div class="attendance-history-summary">
+      ${period!=='all'?`<div><span>Asistencia 10%</span><strong>${ag.score==null?'—':fmtNum(ag.score)}</strong></div>`:''}
       <div><span>Horas computables</span><strong>${totals.total}</strong></div>
       <div><span>Presentes</span><strong>${totals.P}</strong></div>
       <div><span>Faltas</span><strong class="danger-text">${totals.F}</strong></div>
@@ -757,6 +797,7 @@ $('#backToAttendance')?.addEventListener('click',()=>{
 });
 $('#refreshAttendanceMonitor')?.addEventListener('click',async()=>{await renderAttendanceMonitor();await renderSecretaryPendingList();});
 $('#attendanceHistoryGroup')?.addEventListener('change',async()=>{syncContextFromControl('#attendanceHistoryGroup');await renderAttendanceMonitor();await renderSecretaryPendingList();});
+$('#attendanceHistoryPeriod')?.addEventListener('change',()=>renderAttendanceMonitor());
 
 // -------------------- RULETA Y EQUIPOS --------------------
 $$('#dynamicsTabs button').forEach(btn=>btn.onclick=()=>setDynamicsMode(btn.dataset.mode));
@@ -1389,24 +1430,43 @@ window.editActivityDate=async id=>{
 window.deleteActivity=async id=>{const delA=await MiAulaDB.get('activities',id),delG=(await MiAulaDB.byIndex('grades','activity_id',id)).filter(g=>g.score!=null||g.status||(g.rubric_levels&&Object.keys(g.rubric_levels).length)).length;if(!confirm(`¿Eliminar definitivamente la actividad «${delA?.title||''}» y sus ${delG} calificaciones${isRubricActivity(delA)?' (incluida su rúbrica)':''}?\n\nEsto no se puede deshacer.`))return;await MiAulaDB.deleteActivity(id);$('#gradePanel').classList.add('hidden');await loadActivities();await loadSummary();toast('Actividad eliminada');};
 
 // -------------------- PARCIAL / ESQUEMA DE EVALUACIÓN --------------------
+function schemeTotalPct(s){return (+s?.work_pct||0)+(+s?.project_pct||0)+(+s?.values_pct||0)+(+s?.attitudes_pct||0)+(+s?.attendance_pct||0);}
+function isAttendanceScheme(s){return +s?.attendance_pct>0;}
+// 2.11.0: Valores y Actitudes se reemplazan por Asistencia (10% fijo, automática). Lo que sobra pasa a Trabajos.
+function toAttendanceScheme(s){
+  const freed=(+s.values_pct||0)+(+s.attitudes_pct||0)+(+s.attendance_pct||0)-10;
+  let work=+s.work_pct||0,project=+s.project_pct||0;
+  if(freed>0)work+=freed;
+  else if(freed<0){let need=-freed;const w=Math.min(work,need);work-=w;need-=w;project=Math.max(0,project-need);}
+  return {...s,work_pct:work,project_pct:project,values_pct:0,attitudes_pct:0,attendance_pct:10,attendance_mode:true,
+    legacy_values_pct:s.legacy_values_pct??(+s.values_pct||0),legacy_attitudes_pct:s.legacy_attitudes_pct??(+s.attitudes_pct||0),updated_at:new Date().toISOString()};
+}
+function schemeBadgeText(s){
+  const principal=principalLabel(s?.principal_type||'project');
+  return isAttendanceScheme(s)?`Trabajos ${s.work_pct}% · ${principal} ${s.project_pct}% · Asistencia ${s.attendance_pct}%`:`Trabajos ${s.work_pct}% · ${principal} ${s.project_pct}% · Valores ${s.values_pct}% · Actitudes ${s.attitudes_pct}%`;
+}
 async function getScheme(gid,period){
   const key=`${gid}:${period}`;
   let s=await MiAulaDB.get('gradingSchemes',key);
+  const closed=isPeriodClosed(await MiAulaDB.get('groups',+gid),period);
   if(!s){
     // 2.10.1: un parcial nuevo copia los porcentajes del parcial anterior; Proyecto/Examen queda por elegir.
     const prev=+period>1?await MiAulaDB.get('gradingSchemes',`${gid}:${+period-1}`):null;
-    const okPrev=prev&&[prev.work_pct,prev.project_pct,prev.values_pct,prev.attitudes_pct].reduce((a,b)=>a+(+b||0),0)===100;
+    const okPrev=prev&&schemeTotalPct(prev)===100;
     s={
       key,group_id:+gid,period:String(period),
-      work_pct:okPrev?+prev.work_pct:40,project_pct:okPrev?+prev.project_pct:40,values_pct:okPrev?+prev.values_pct:10,attitudes_pct:okPrev?+prev.attitudes_pct:10,
+      work_pct:okPrev?+prev.work_pct:40,project_pct:okPrev?+prev.project_pct:40,values_pct:okPrev?+(prev.values_pct||0):10,attitudes_pct:okPrev?+(prev.attitudes_pct||0):10,attendance_pct:okPrev?+(prev.attendance_pct||0):0,
       principal_type:'project',mode_locked:false,
       updated_at:new Date().toISOString()
     };
+    // Los parciales cerrados se quedan como se calificaron; los abiertos usan Asistencia automática.
+    if(!closed)s=toAttendanceScheme(s);
     await MiAulaDB.put('gradingSchemes',s);
   }else{
     let changed=false;
     if(!s.principal_type){s.principal_type='project';changed=true;}
     if(s.mode_locked===undefined){s.mode_locked=false;changed=true;}
+    if(!closed&&!s.attendance_mode){s=toAttendanceScheme(s);changed=true;}
     if(changed) await MiAulaDB.put('gradingSchemes',s);
   }
   if(!s.mode_locked){
@@ -1433,6 +1493,11 @@ async function computeGroupGrading(gid,period,opts={}){
   const comps=await MiAulaDB.byIndex('studentComponents','group_period',[gid,String(period)]);
   const scheme=await getScheme(gid,period);
   const principalType=scheme.principal_type||'project';
+  const attMode=isAttendanceScheme(scheme),attByStudent=new Map();
+  if(attMode){
+    const group=await MiAulaDB.get('groups',+gid);
+    for(const r of attendanceForPeriod(await MiAulaDB.byIndex('attendance','group_id',+gid),group,period)){if(!attByStudent.has(r.student_id))attByStudent.set(r.student_id,[]);attByStudent.get(r.student_id).push(r);}
+  }
 
   const gByStudent=new Map(),eByStudent=new Map(),cByStudent=new Map(comps.map(c=>[c.student_id,c]));
   for(const g of grades){
@@ -1483,9 +1548,10 @@ async function computeGroupGrading(gid,period,opts={}){
       principal=projectW?projectTotal/projectW:null;
     }
     const values=comp?.values_score??null,attitudes=comp?.attitudes_score??null;
+    const att=attMode?attendanceGrade(attByStudent.get(s.id)||[]):null;
 
     let complete=true,final=0;
-    for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[values,+scheme.values_pct],[attitudes,+scheme.attitudes_pct]]){
+    for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[values,+scheme.values_pct],[attitudes,+scheme.attitudes_pct],[att?.score??null,+scheme.attendance_pct||0]]){
       if(pct>0){
         if(score==null)complete=false;
         else final+=+score*pct/100;
@@ -1498,6 +1564,7 @@ async function computeGroupGrading(gid,period,opts={}){
       project_avg:principalType==='project'&&principal!=null?+principal.toFixed(2):null,
       exam_score:principalType==='exam'&&principal!=null?+principal.toFixed(2):(comp?.exam_score??null),
       values_score:values,attitudes_score:attitudes,
+      attendance_score:att?.score??null,attendance_classes:att?att.classes:null,attendance_attended:att?att.attended:null,
       final_grade:complete?+final.toFixed(2):null,complete,
       notes:comp?.notes||''
     });
@@ -1506,12 +1573,25 @@ async function computeGroupGrading(gid,period,opts={}){
   return {period:String(period),scheme,students:rows,group_average:finals.length?finals.reduce((a,b)=>a+b,0)/finals.length:null};
 }
 
+let schemeAttendanceMode=false;
+function applySchemeMode(on){
+  schemeAttendanceMode=!!on;
+  $('#valuesSchemeItem')?.classList.toggle('hidden',schemeAttendanceMode);
+  $('#attitudesSchemeItem')?.classList.toggle('hidden',schemeAttendanceMode);
+  $('#attendanceSchemeItem')?.classList.toggle('hidden',!schemeAttendanceMode);
+  $('#fillValues10')?.classList.toggle('hidden',schemeAttendanceMode);
+  $('#fillAttitudes10')?.classList.toggle('hidden',schemeAttendanceMode);
+  if($('#componentsPanelTitle'))$('#componentsPanelTitle').textContent=schemeAttendanceMode?'Asistencia y calificación final':'Valores, actitudes y final';
+  if($('#componentsPanelNote'))$('#componentsPanelNote').textContent=schemeAttendanceMode?'Trabajos, el componente principal y la Asistencia se calculan solos. Asistencia = clases asistidas ÷ clases del parcial × 10 (R y J cuentan como asistencia).':'Trabajos y el componente principal se calculan automáticamente.';
+}
 function schemeNumbers(){
+  const att=schemeAttendanceMode;
   return {
     work:+$('#workPct').value||0,
     project:+$('#projectPct').value||0,
-    values:+$('#valuesPct').value||0,
-    attitudes:+$('#attitudesPct').value||0
+    values:att?0:+$('#valuesPct').value||0,
+    attitudes:att?0:+$('#attitudesPct').value||0,
+    attendance:att?(+$('#attendancePct')?.value||10):0
   };
 }
 function selectedPrincipalType(){
@@ -1528,7 +1608,7 @@ function setPrincipalSelector(type,locked=false){
   setEvaluationNavLabel(type);
 }
 function updateSchemeUI(){
-  const s=schemeNumbers(),total=s.work+s.project+s.values+s.attitudes;
+  const s=schemeNumbers(),total=s.work+s.project+s.values+s.attitudes+s.attendance;
   $('#schemeTotal').textContent=total+'%';
   $('#schemeTotal').parentElement.classList.toggle('bad',total!==100);
 }
@@ -1549,6 +1629,8 @@ async function loadGrading(){
   const g=await getGroupState(gid),period=String(g.current_period||1);
   gradingData=await computeGroupGrading(gid,period);
   const s=gradingData.scheme;
+  applySchemeMode(isAttendanceScheme(s));
+  if($('#attendancePct'))$('#attendancePct').value=+s.attendance_pct||10;
   $('#workPct').value=s.work_pct;
   $('#projectPct').value=s.project_pct;
   $('#valuesPct').value=s.values_pct;
@@ -1564,8 +1646,8 @@ async function loadGrading(){
 
 function localFinal(row){
   const s=schemeNumbers();
-  const pairs=[[row.work_avg,s.work],[row.principal_avg,s.project],[row.values_score,s.values],[row.attitudes_score,s.attitudes]];
-  const total=s.work+s.project+s.values+s.attitudes;
+  const pairs=[[row.work_avg,s.work],[row.principal_avg,s.project],[row.values_score,s.values],[row.attitudes_score,s.attitudes],[row.attendance_score,s.attendance]];
+  const total=s.work+s.project+s.values+s.attitudes+s.attendance;
   if(total!==100)return null;
   let out=0;
   for(const [v,p] of pairs){
@@ -1579,6 +1661,11 @@ function renderGradingTable(){
   if(!gradingData)return;
   const principal=principalLabel(gradingData.scheme.principal_type||'project');
   $('#gradingTable').className='';
+  if(isAttendanceScheme(gradingData.scheme)){
+    $('#gradingTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Alumno</th><th>Trabajos</th><th>${principal}</th><th>Asistencia <small>10% · automática</small></th><th>Final</th></tr></thead><tbody>${gradingData.students.map((s,i)=>`<tr><td>${s.list_number??''}</td><td><strong>${escapeHtml(s.name)}</strong></td><td><span class="auto-score">${fmtNum(s.work_avg)}</span></td><td><span class="auto-score">${fmtNum(s.principal_avg)}</span></td><td>${attendanceScoreHTML(s)}</td><td id="final-${i}">${localFinal(s)==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${localFinal(s).toFixed(2)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#saveComponents').classList.add('hidden');
+    return;
+  }
   $('#gradingTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Alumno</th><th>Trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${gradingData.students.map((s,i)=>`<tr><td>${s.list_number??''}</td><td><strong>${escapeHtml(s.name)}</strong></td><td><span class="auto-score">${fmtNum(s.work_avg)}</span></td><td><span class="auto-score">${fmtNum(s.principal_avg)}</span></td><td><input data-comp="values" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.values_score??''}"></td><td><input data-comp="attitudes" data-index="${i}" type="number" min="0" max="10" step="0.1" value="${s.attitudes_score??''}"></td><td id="final-${i}">${localFinal(s)==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${localFinal(s).toFixed(2)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
   $$('#gradingTable input[data-comp]').forEach(inp=>inp.oninput=e=>{
     const i=+e.target.dataset.index,key=e.target.dataset.comp+'_score';
@@ -1586,6 +1673,10 @@ function renderGradingTable(){
     updateFinalCell(i);
   });
   $('#saveComponents').classList.remove('hidden');
+}
+function attendanceScoreHTML(row){
+  if(row?.attendance_score==null)return '<span class="pending-score" title="Aún no hay pase de lista en este parcial">Sin clases</span>';
+  return `<span class="auto-score attendance-score" title="${row.attendance_attended} de ${row.attendance_classes} clases">${fmtNum(row.attendance_score)}</span><small class="att-classes">${row.attendance_attended}/${row.attendance_classes} clases</small>`;
 }
 function updateFinalCell(i){
   const v=localFinal(gradingData.students[i]);
@@ -1599,7 +1690,7 @@ $('#schemeForm').onsubmit=async e=>{
   if(!gid){toast('Selecciona un grupo',true);return;}
   const g=await getGroupState(gid);
   if(g.course_closed){toast(`Este grupo ya tiene sus ${totalPeriods(g)} parciales cerrados.`,true);return;}
-  const p=String(g.current_period||1),nums=schemeNumbers(),total=nums.work+nums.project+nums.values+nums.attitudes;
+  const p=String(g.current_period||1),nums=schemeNumbers(),total=nums.work+nums.project+nums.values+nums.attitudes+nums.attendance;
   if(total!==100){toast('Los porcentajes deben sumar exactamente 100%.',true);return;}
   const old=await getScheme(gid,p),type=selectedPrincipalType();
   if(old.mode_locked && old.principal_type!==type){
@@ -1607,7 +1698,7 @@ $('#schemeForm').onsubmit=async e=>{
   }
   await MiAulaDB.put('gradingSchemes',{
     ...old,key:`${gid}:${p}`,group_id:gid,period:p,
-    work_pct:nums.work,project_pct:nums.project,values_pct:nums.values,attitudes_pct:nums.attitudes,
+    work_pct:nums.work,project_pct:nums.project,values_pct:nums.values,attitudes_pct:nums.attitudes,attendance_pct:nums.attendance,
     principal_type:type,mode_locked:true,updated_at:new Date().toISOString()
   });
   toast(`${principalLabel(type)} definido para el Parcial ${p}`);
@@ -1637,6 +1728,26 @@ $('#saveComponents').onclick=async()=>{
 $('#fillValues10').onclick=()=>{if(!gradingData)return;gradingData.students.forEach(s=>s.values_score=10);renderGradingTable();};
 $('#fillAttitudes10').onclick=()=>{if(!gradingData)return;gradingData.students.forEach(s=>s.attitudes_score=10);renderGradingTable();};
 
+async function openPastPeriodsConsult(gid){
+  gid=+gid||+$('#gradingGroup')?.value||+$('#contextGroup')?.value||0;
+  if(!gid){toast('Selecciona un grupo',true);return;}
+  const g=await getGroupState(gid);if(!g)return;
+  const closed=periodNumbers(g).filter(p=>isPeriodClosed(g,p));
+  if(!closed.length){openModal('Consultar parciales pasados',`<div class="empty-state">${escapeHtml(g.name)} todavía no tiene parciales cerrados. Cuando cierres uno, aquí podrás consultarlo sin mezclarlo con el parcial actual.</div>`);return;}
+  const all=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const cards=[];
+  for(const p of closed){
+    const res=await computeGroupGrading(gid,p),acts=(await MiAulaDB.byIndex('activities','group_period',[gid,String(p)])).length;
+    const days=new Set(attendanceForPeriod(all,g,p).filter(r=>String(r.status||'').toUpperCase()!=='S').map(r=>r.attendance_date)).size;
+    const closedAt=periodClosures(g)[p];
+    cards.push(`<div class="past-period-card"><div class="past-period-head"><div><span class="consult-chip">Cerrado</span><h3>Parcial ${p}</h3><small>${closedAt?`Cerrado el ${new Date(closedAt).toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}`:'Cerrado'} · ${escapeHtml(schemeBadgeText(res.scheme))}</small></div><div class="past-period-avg"><span>Promedio</span><strong>${res.group_average==null?'—':fmtNum(res.group_average)}</strong></div></div><div class="past-period-stats"><div><span>Actividades</span><strong>${acts}</strong></div><div><span>Clases con lista</span><strong>${days}</strong></div><div><span>Alumnos con final</span><strong>${res.students.filter(s=>s.final_grade!=null).length}/${res.students.length}</strong></div></div><div class="past-period-actions"><button class="btn primary" type="button" onclick="openNotebookPeriod(${gid},'${p}')">Abrir cuaderno (consulta)</button><button class="btn subtle" type="button" onclick="openAttendancePeriod(${gid},'${p}')">Ver asistencia</button></div></div>`);
+  }
+  openModal(`Parciales pasados · ${g.name}`,`<p class="modal-help">Modo consulta: se abren en solo lectura y no se mezclan con lo nuevo que agregues en el Parcial ${g.course_closed?'actual':g.current_period}.</p><div class="past-period-list">${cards.join('')}</div>`);
+  $('#modal .modal-card')?.classList.add('wide');
+}
+window.openPastPeriodsConsult=openPastPeriodsConsult;
+$('#consultPastPeriodsBtn')?.addEventListener('click',()=>openPastPeriodsConsult(+$('#gradingGroup').value));
+
 $('#closePeriodBtn').onclick=async()=>{
   const gid=+$('#gradingGroup').value;
   if(!gid){toast('Selecciona un grupo',true);return;}
@@ -1644,12 +1755,15 @@ $('#closePeriodBtn').onclick=async()=>{
   if(g.course_closed){toast(`Los ${total} parciales ya están cerrados.`,true);return;}
   const next=p<total?p+1:null;
   const msg=next
-    ?`¿Cerrar el Parcial ${p} e iniciar el Parcial ${next}?\n\nLas actividades y el Proyecto/Examen del parcial actual dejarán de mostrarse en el área activa, pero NO se borrarán. Las rúbricas y listas de cotejo permanecerán disponibles.`
+    ?`¿Cerrar el Parcial ${p} e iniciar el Parcial ${next}?\n\nLas actividades, el Proyecto/Examen y la ASISTENCIA del Parcial ${p} quedan guardados (se pueden consultar en «Consultar parciales pasados»), pero NO se borran. El Parcial ${next} empieza con asistencia en 0. Las rúbricas y listas de cotejo permanecerán disponibles.`
     :`¿Cerrar el Parcial ${p}?\n\nSe conservará todo el historial y el banco de rúbricas/listas de cotejo. El grupo quedará marcado como ciclo concluido.`;
   if(!confirm(msg))return;
+  await stampAttendancePeriods(gid);
+  const closedAt=new Date().toISOString();
+  g.period_closures={...periodClosures(g),[p]:closedAt};
   g.closed_periods=[...new Set([...(g.closed_periods||[]),p])].sort((a,b)=>a-b);
   if(next){g.current_period=next;g.course_closed=false;}else{g.course_closed=true;}
-  g.last_period_closed_at=new Date().toISOString();
+  g.last_period_closed_at=closedAt;
   await MiAulaDB.put('groups',g);
   $('#gradePanel').classList.add('hidden');
   toast(next?`Parcial ${p} cerrado · Parcial ${next} iniciado`:`Parcial ${p} cerrado`);
@@ -1963,6 +2077,7 @@ async function setNotebookTeamIndex(index){
 async function applyGradeToCurrentTeam(){
   const team=currentNotebookTeam();if(!team){toast('Selecciona un equipo.',true);return;}
   const period=notebookData?.selected;if(!period||period==='all'){toast('Selecciona un parcial específico para calificar por equipo.',true);return;}
+  if(isPeriodReadOnly(notebookData.group,period)){toast(`Parcial ${period} en modo consulta. Desbloquéalo para corregir.`,true);return;}
   const pd=notebookData.periods?.[period],aid=+$('#teamActivitySelect')?.value,activity=pd?.activities.find(a=>+a.id===aid);
   if(!activity){toast('Selecciona una actividad.',true);return;}
   if(isRubricActivity(activity)){await openRubricEvaluator(activity.id,{mode:'team',teamName:team.name});return;}
@@ -2001,8 +2116,9 @@ async function loadNotebook(opts={}){
   const previous=opts.resetPeriod||!sameContext?'':periodSelect.value;
   periodSelect.dataset.gid=String(gid);periodSelect.dataset.current=String(g.current_period||1);
   const periods=periodNumbers(g);
-  periodSelect.innerHTML=periods.map(p=>`<option value="${p}">Parcial ${p}${+p===+g.current_period?' · actual':''}</option>`).join('')+'<option value="all">Todos los parciales</option>';
-  const target=previous && (previous==='all'||periods.includes(previous))?previous:String(g.current_period||periods[0]||1);
+  periodSelect.innerHTML=periods.map(p=>`<option value="${p}">Parcial ${p}${+p===+g.current_period&&!g.course_closed?' · actual':isPeriodClosed(g,p)?' · cerrado (consulta)':''}</option>`).join('')+'<option value="all">Todos los parciales</option>';
+  const wantedPeriod=opts.period!=null&&periods.includes(String(opts.period))?String(opts.period):'';
+  const target=wantedPeriod||(previous && (previous==='all'||periods.includes(previous))?previous:String(g.current_period||periods[0]||1));
   periodSelect.value=target;
   notebookEdits.grades.clear();notebookEdits.components.clear();
   const wanted=target==='all'?periods:[target];
@@ -2066,8 +2182,63 @@ function setupNotebookScrollSync(){
   });
 }
 
+// 2.11.0 · Modo consulta: los parciales cerrados se ven en solo lectura hasta que el docente los desbloquee.
+const notebookUnlocked=new Set();
+function isPeriodReadOnly(g,p){return isPeriodClosed(g,p)&&!notebookUnlocked.has(`${g?.id}:${p}`);}
+function notebookAttendanceCell(gr){
+  if(gr?.attendance_score==null)return '<span class="pending-score" title="Aún no hay pase de lista en este parcial">—</span>';
+  return `<span class="auto-score notebook-auto" title="${gr.attendance_attended} de ${gr.attendance_classes} clases del parcial">${fmtNum(gr.attendance_score)}</span><small class="att-classes">${gr.attendance_attended}/${gr.attendance_classes}</small>`;
+}
+let consultToastAt=0;
+function consultGuard(e){
+  const block=e.target?.closest?.('.notebook-period-block[data-readonly="1"]');if(!block)return;
+  if(e.target.closest('.student-name-button'))return;
+  if(!e.target.closest('input,button,select,textarea,[onclick]'))return;
+  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+  if(e.type==='focusin')e.target.blur?.();
+  if(Date.now()-consultToastAt>2500){consultToastAt=Date.now();toast(`Parcial ${block.dataset.periodBlock} en modo consulta. Usa «Desbloquear para corregir» si necesitas cambiar algo.`);}
+}
+document.addEventListener('click',consultGuard,true);
+document.addEventListener('focusin',consultGuard,true);
+function notebookConsultBanner(g,pds){
+  const closed=pds.filter(pd=>isPeriodClosed(g,pd.period));
+  if(!closed.length)return '';
+  const current=g.course_closed?null:String(g.current_period||1);
+  const goCurrent=current?`<button type="button" class="btn small primary" onclick="openNotebookPeriod(${g.id},'${current}')">Ir al Parcial ${current} (actual)</button>`:'';
+  return closed.map(pd=>{
+    const p=pd.period,locked=isPeriodReadOnly(g,p);
+    if(locked)return `<div class="consult-banner" data-consult-period="${p}"><div class="consult-copy"><span class="consult-chip">Modo consulta</span><strong>Parcial ${p} · cerrado</strong><small>Solo lectura: puedes revisar actividades, calificaciones y asistencia sin modificar nada. Lo nuevo sigue guardándose en el parcial actual.</small></div><div class="consult-actions">${goCurrent}<button type="button" class="btn small subtle" onclick="openAttendancePeriod(${g.id},'${p}')">Ver asistencia del Parcial ${p}</button><button type="button" class="btn small subtle" onclick="unlockNotebookPeriod('${p}')">Desbloquear para corregir</button></div></div>`;
+    return `<div class="consult-banner unlocked" data-consult-period="${p}"><div class="consult-copy"><span class="consult-chip warn">Corrección activa</span><strong>Parcial ${p} · cerrado</strong><small>Los cambios que hagas se guardan en el Parcial ${p}. Vuelve a bloquearlo al terminar.</small></div><div class="consult-actions">${goCurrent}<button type="button" class="btn small" onclick="lockNotebookPeriod('${p}')">Volver a bloquear</button></div></div>`;
+  }).join('');
+}
+window.unlockNotebookPeriod=async p=>{
+  const g=notebookData?.group;if(!g)return;
+  if(!confirm(`¿Desbloquear el Parcial ${p} (cerrado) para corregir?\n\nLos cambios se guardarán en ese parcial. Al terminar, vuelve a bloquearlo.`))return;
+  notebookUnlocked.add(`${g.id}:${p}`);await loadNotebook();toast(`Parcial ${p} desbloqueado para corrección`);
+};
+window.lockNotebookPeriod=async p=>{
+  const g=notebookData?.group;if(!g)return;
+  if($$('#notebookTable .notebook-score-input.changed').length)await saveNotebookChanges({silent:true,noReload:true});
+  notebookUnlocked.delete(`${g.id}:${p}`);await loadNotebook();toast(`Parcial ${p} bloqueado · modo consulta`);
+};
+window.openNotebookPeriod=async(gid,p)=>{
+  closeModal?.();
+  goView('notebook');
+  await setContextGroup(+gid,{propagate:true,refresh:false});
+  $('#notebookGroup').value=String(gid);
+  await loadNotebook({period:String(p)});
+};
+window.openAttendancePeriod=async(gid,p)=>{
+  closeModal?.();
+  if($('#attendanceHistoryGroup'))$('#attendanceHistoryGroup').value=String(gid);
+  pendingAttendancePeriod=String(p);
+  goView('attendanceHistory');
+  await renderAttendanceMonitor();await renderSecretaryPendingList();
+};
+
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
+  const attMode=isAttendanceScheme(pd.scheme),g=notebookData?.group,readOnly=isPeriodReadOnly(g,pd.period),closedP=isPeriodClosed(g,pd.period);
   const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${isRubricActivity(a)?(activityRubric(a)?.kind==='cotejo'?'Lista de cotejo':'Rúbrica'):escapeHtml(a.activity_type)} · /${fmtShort(a.max_score,1)}</small>${teamColumnButton(a)}</th>`).join('');
   const body=pd.students.map(s=>{
     const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
@@ -2075,11 +2246,12 @@ function renderNotebookPeriod(pd){
       ?notebookComponentInput('exam_score',s,pd,gr.exam_score??comp.exam_score??null)
       :`<span class="auto-score notebook-auto" title="Calculado desde rúbricas y listas de cotejo">${fmtNum(gr.principal_avg)}</span>`;
     const activityCells=pd.activities.length?pd.activities.map(a=>notebookActivityCell(a,s,pd)).join(''):'<td class="summary-cell">—</td>';
-    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td><td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td><td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
+    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td>${attMode?`<td class="summary-cell attendance-cell">${notebookAttendanceCell(gr)}</td>`:`<td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td>`}<td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
   }).join('');
   const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
-  const colspan=Math.max(pd.activities.length,1)+8;
-  return `<div class="notebook-period-block" data-period-block="${pd.period}"><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><span class="period-badge">Trabajos ${pd.scheme.work_pct}% · ${principal} ${pd.scheme.project_pct}% · Valores ${pd.scheme.values_pct}% · Actitudes ${pd.scheme.attitudes_pct}%</span></div><div class="notebook-top-scroll" aria-label="Desplazamiento horizontal del cuaderno"><div></div></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th><th>Valores</th><th>Actitudes</th><th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
+  const colspan=Math.max(pd.activities.length,1)+(attMode?7:8);
+  const lockBadge=closedP?`<span class="period-badge ${readOnly?'consult-badge':'consult-badge unlocked'}">${readOnly?'Cerrado · solo lectura':'Cerrado · corrección activa'}</span>`:'';
+  return `<div class="notebook-period-block${readOnly?' is-readonly':''}" data-period-block="${pd.period}"${readOnly?' data-readonly="1"':''}><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><div class="period-badges">${lockBadge}<span class="period-badge">${schemeBadgeText(pd.scheme)}</span></div></div><div class="notebook-top-scroll" aria-label="Desplazamiento horizontal del cuaderno"><div></div></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th>${attMode?'<th>Asistencia<br><small>10% auto</small></th>':'<th>Valores</th><th>Actitudes</th>'}<th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
 }
 function renderNotebook(){
   if(!notebookData)return;
@@ -2088,7 +2260,8 @@ function renderNotebook(){
   $('#notebookSummary').classList.remove('hidden');
   $('#notebookSummary').innerHTML=`<div><span>Grupo</span><strong>${escapeHtml(notebookData.group.name)}</strong></div><div><span>Alumnos</span><strong>${students}</strong></div><div><span>Actividades visibles</span><strong>${totalActs}</strong></div><div><span>Vista</span><strong>${notebookData.selected==='all'?'Todos':`Parcial ${notebookData.selected}`}</strong></div>`;
   $('#notebookTable').className='';
-  $('#notebookTable').innerHTML=pds.map(renderNotebookPeriod).join('');
+  $('#notebookTable').innerHTML=notebookConsultBanner(notebookData.group,pds)+pds.map(renderNotebookPeriod).join('');
+  $$('#notebookTable .notebook-period-block[data-readonly="1"] .notebook-score-input').forEach(inp=>{inp.readOnly=true;inp.tabIndex=-1;});
   setupNotebookScrollSync();
   $$('#notebookTable .notebook-score-input').forEach(inp=>{
     inp.addEventListener('focus',()=>{inp.dataset.focusValue=inp.value;});
@@ -2211,7 +2384,7 @@ function recalcNotebookRow(period,studentId){
   const a=notebookCurrentValue(`.notebook-score-input[data-kind="component"][data-field="attitudes_score"][data-period="${period}"][data-student="${studentId}"]`,10);
   const workCell=document.querySelector(`[data-work-cell="${period}:${studentId}"]`);if(workCell)workCell.textContent=fmtNum(work);
   let complete=true,final=0;
-  for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[v.invalid?null:v.score,+scheme.values_pct],[a.invalid?null:a.score,+scheme.attitudes_pct]]){if(pct>0){if(score==null)complete=false;else final+=score*pct/100;}}
+  for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[v.invalid?null:v.score,+scheme.values_pct],[a.invalid?null:a.score,+scheme.attitudes_pct],[old.attendance_score??null,+scheme.attendance_pct||0]]){if(pct>0){if(score==null)complete=false;else final+=score*pct/100;}}
   const finalCell=document.querySelector(`[data-final-cell="${period}:${studentId}"]`);
   if(finalCell)finalCell.innerHTML=complete?`<span class="final-score">${fmtNum(+final.toFixed(2))}</span>`:'<span class="pending-score">Pendiente</span>';
 }
@@ -2264,12 +2437,13 @@ async function buildNotebookWorkbook(gid,selection,opts={}){
   for(const p of periods){
     const pd=await buildNotebookPeriodData(gid,p),principal=principalLabel(pd.scheme.principal_type||'project');
     const closing=!!opts.emptyAsZero,closeMap=closing?new Map((await computeGroupGrading(gid,p,{emptyAsZero:true})).students.map(r=>[r.id,r])):null;
-    const headers=['No.','Alumno','Extra + disponibles','Extra -','Extra + ganados','Extra + aplicados',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,'Valores','Actitudes','Final','Estado'];
+    const attMode=isAttendanceScheme(pd.scheme);
+    const headers=['No.','Alumno','Extra + disponibles','Extra -','Extra + ganados','Extra + aplicados',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,...(attMode?['Asistencia (0-10)','Clases asistidas']:['Valores','Actitudes']),'Final','Estado'];
     const rows=[headers];
     for(const s of pd.students){
       const gr=(closing?closeMap.get(s.id):pd.gradingMap.get(s.id))||{},comp=pd.components.get(s.id)||{},ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0,goodEarned:0,goodUsed:0};
       const scores=pd.activities.map(a=>{const rec=pd.grades.get(`${a.id}:${s.id}`);if(closing&&!isSecretaryPendingStudent(s)&&isEmptyGrade(a,rec)){if(opts.stats)opts.stats.zeros++;return 0;}return exportGradeValue(a,rec);});
-      rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,gr.principal_avg,gr.values_score,gr.attitudes_score,gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
+      rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,gr.principal_avg,...(attMode?[gr.attendance_score??null,gr.attendance_classes?`${gr.attendance_attended}/${gr.attendance_classes}`:'']:[gr.values_score,gr.attitudes_score]),gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
     }
     sheets.push({name:`Libreta P${p}`,rows});
   }
@@ -2326,6 +2500,41 @@ $('#notebookPresentation').onclick=async()=>{
 };
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.classList.contains('notebook-focus')){document.body.classList.remove('notebook-focus');if($('#notebookPresentation'))$('#notebookPresentation').innerHTML='<svg class="ui-icon" aria-hidden="true"><use href="#i-screen"></use></svg><span>Presentación</span>';}});
 
+// 2.11.0 · Asistencia por parcial. Cada registro guarda `period`; los anteriores se ubican
+// por la fecha en que se cerró cada parcial (el mismo día: antes o después del cierre).
+function localDayOf(iso){const d=new Date(iso);if(isNaN(d))return '';return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function periodClosures(g){
+  const out={...(g?.period_closures||{})},closed=(g?.closed_periods||[]).map(Number).sort((a,b)=>a-b),last=closed[closed.length-1];
+  if(last&&!out[last]&&g?.last_period_closed_at)out[last]=g.last_period_closed_at;
+  return out;
+}
+function inferAttendancePeriod(g,date,stamp){
+  const closed=(g?.closed_periods||[]).map(Number).sort((a,b)=>a-b),cl=periodClosures(g);
+  for(const p of closed){
+    const c=cl[p];if(!c)continue;const day=localDayOf(c);
+    if(String(date)<day||(String(date)===day&&(!stamp||stamp<=c)))return String(p);
+  }
+  return String(g?.course_closed?(closed[closed.length-1]||g?.current_period||1):(g?.current_period||1));
+}
+function attendancePeriodOf(r,g){return r?.period!=null&&r.period!==''?String(r.period):inferAttendancePeriod(g,r?.attendance_date,r?.updated_at);}
+function attendanceForPeriod(records,g,period){return period==null||period==='all'?records:records.filter(r=>attendancePeriodOf(r,g)===String(period));}
+function isPeriodClosed(g,p){return (g?.closed_periods||[]).map(Number).includes(+p);}
+async function stampAttendancePeriods(gid){
+  const g=await MiAulaDB.get('groups',+gid);if(!g)return 0;
+  let n=0;
+  for(const r of await MiAulaDB.byIndex('attendance','group_id',+gid)){
+    if(r.period!=null&&r.period!=='')continue;
+    r.period=inferAttendancePeriod(g,r.attendance_date,r.updated_at);await MiAulaDB.put('attendance',r);n++;
+  }
+  return n;
+}
+async function stampAllAttendancePeriods(){for(const g of await MiAulaDB.all('groups'))await stampAttendancePeriods(g.id);}
+// Calificación de Asistencia (10%): por clases (un día = una clase). P, R y J cuentan como asistencia; F resta; S no cuenta.
+function attendanceGrade(records){
+  let classes=0,attended=0;
+  for(const r of records){const st=String(r.status||'').toUpperCase();if(!st||st==='S')continue;classes++;if(st!=='F')attended++;}
+  return {classes,attended,absences:classes-attended,score:classes?Math.round(attended*1000/classes)/100:null};
+}
 function attendanceTotals(records){
   const out={P:0,F:0,R:0,J:0,S:0,total:0,attended:0,absencePct:null};
   for(const a of records){
@@ -2355,18 +2564,21 @@ async function buildWorkbook(gid,opts={}){
   const classBlocks=new Map();for(const a of attendance){const k=a.attendance_date;classBlocks.set(k,Math.max(classBlocks.get(k)||0,+a.class_hours||1));}
   const classHours=[...classBlocks.values()].reduce((a,b)=>a+b,0);
   const resumen=[['Indicador','Valor'],['Grupo',g.name],['Grado / semestre',g.grade||''],['Disciplina',g.discipline||''],['Ciclo escolar',g.school_year||''],['Parciales configurados',totalPeriods(g)],['Alumnos activos',students.length],['Alumnos dados de baja',inactive.length],['Horas de clase registradas',classHours],['Horas-presente',groupAttendance.P],['Horas-falta',groupAttendance.F],['Horas-retardo',groupAttendance.R],['Horas-justificadas',groupAttendance.J],['Horas-pendiente Secretaría',groupAttendance.S],['Asistencia ponderada por hora %',groupAttendance.pct],['Faltas ponderadas por hora %',groupAttendance.absencePct],['Alumnos con faltas >=20%',attendanceCriticalCount],['Alumnos entre 15% y 19.9%',attendanceWarningCount],['Parcial activo',g.current_period||1],['Parciales cerrados',(g.closed_periods||[]).join(', ')||'Ninguno'],...periods.map(p=>[`Promedio final Parcial ${p}`,avgFinal(p)]),['Generado',new Date().toLocaleString('es-MX')]];
-  const esquema=[['Parcial','Componente principal','Trabajos %','Principal %','Valores %','Actitudes %','Total %','Estado']];for(const p of periods){const s=grading[p].scheme;esquema.push([p,principalLabel(s.principal_type||'project'),s.work_pct,s.project_pct,s.values_pct,s.attitudes_pct,+s.work_pct+ +s.project_pct+ +s.values_pct+ +s.attitudes_pct,(g.closed_periods||[]).includes(+p)?'Cerrado':(+g.current_period===+p&&!g.course_closed?'En curso':'Pendiente')]);}
-  const trim=[['No.','Código','Alumno','Parcial','Trabajos','Trabajos %','Componente principal','Tipo principal','Principal %','Valores','Valores %','Actitudes','Actitudes %','Final','Estado','Observación']];for(const p of periods){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.principal_avg,principalLabel(sc.principal_type||'project'),sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
+  const esquema=[['Parcial','Componente principal','Trabajos %','Principal %','Valores %','Actitudes %','Asistencia %','Total %','Estado']];for(const p of periods){const s=grading[p].scheme;esquema.push([p,principalLabel(s.principal_type||'project'),s.work_pct,s.project_pct,s.values_pct,s.attitudes_pct,+s.attendance_pct||0,schemeTotalPct(s),(g.closed_periods||[]).includes(+p)?'Cerrado':(+g.current_period===+p&&!g.course_closed?'En curso':'Pendiente')]);}
+  const trim=[['No.','Código','Alumno','Parcial','Trabajos','Trabajos %','Componente principal','Tipo principal','Principal %','Valores','Valores %','Actitudes','Actitudes %','Asistencia (0-10)','Clases asistidas','Asistencia %','Final','Estado','Observación']];for(const p of periods){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.principal_avg,principalLabel(sc.principal_type||'project'),sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.attendance_score??null,s.attendance_classes?`${s.attendance_attended}/${s.attendance_classes}`:'',+sc.attendance_pct||0,s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
   const conc=[['No.','Código','Alumno','Grado','Asistencia %','Faltas %','Alerta asistencia','Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
     const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],risk=absenceRiskMeta(at.absencePct),row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.absencePct,risk.label,at.P,at.F,at.R,at.J,at.S];
     for(const a of activities){const gr=gradeKey.get(`${a.id}:${s.id}`);let v=isRubricActivity(a)?rubricGradeScore(a,gr):(gr?.score??null),shown=exportGradeValue(a,gr);if(opts.emptyAsZero&&!isSecretaryPendingStudent(s)&&isEmptyGrade(a,gr)){v=0;shown=0;if(opts.stats)opts.stats.zeros++;}row.push(shown);if(v!=null&&+a.max_score>0)normalized.push(+v*10/+a.max_score);}
     row.push(normalized.length?Math.round(100*normalized.reduce((x,y)=>x+y,0)/normalized.length)/100:null,...periods.map(p=>grading[p].students.find(x=>x.id===s.id)?.final_grade??null));conc.push(row);
   }
-  const asist=[['No.','Alumno',...dates.map(d=>`${d} (registro)`),'Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.','Total hrs computables','Asistencia %','Faltas %','Alerta 20%']];
+  const dayPeriod=new Map(attendance.map(a=>[a.attendance_date,attendancePeriodOf(a,g)]));
+  const asist=[['No.','Alumno',...dates.map(d=>`${d} (P${dayPeriod.get(d)||'?'})`),'Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.','Total hrs computables','Asistencia %','Faltas %','Alerta 20%']];
   for(const s of students){const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),risk=absenceRiskMeta(at.absencePct);asist.push([s.list_number,studentLabel(s),...dates.map(d=>{const a=attKey.get(`${s.id}:${d}`);return a?`${a.status} ×${a.class_hours||1}`:'';}),at.P,at.F,at.R,at.J,at.S,at.total,at.pct,at.absencePct,risk.label]);}
   const hourHeaders=['No.','Alumno'];for(const d of dates){const hrs=classBlocks.get(d)||1;for(let h=1;h<=hrs;h++)hourHeaders.push(`${d} H${h}`);}const asistHoras=[hourHeaders];
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
+  const porParcial=[['No.','Alumno',...periods.flatMap(p=>[`P${p} clases`,`P${p} asistencias`,`P${p} faltas`,`P${p} calif. asistencia (0-10)`])]];
+  for(const s of students){const row=[s.list_number,studentLabel(s)];for(const p of periods){const ag=attendanceGrade(attendanceForPeriod(attendance.filter(a=>a.student_id===s.id),g,p));row.push(ag.classes,ag.attended,ag.absences,ag.score);}porParcial.push(row);}
   const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
   const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;const dv=isRubricActivity(a)?rubricGradeScore(a,gr):gr.score;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,exportGradeValue(a,gr),a.max_score,dv==null?null:Math.round(+dv*1000/+a.max_score)/100,gr.notes||'']);}
   const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||e.rubric?.name||'',(e.rubric?e.rubric.kind==='rubrica':i?.instrument_type==='rubric')?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
@@ -2379,7 +2591,7 @@ async function buildWorkbook(gid,opts={}){
   const teamSheet=[['Equipo','No.','Alumno','Estado','Guardado / actualizado']];
   for(const t of savedTeams)for(const st of t.members)teamSheet.push([t.name,st.list_number??'',studentLabel(st),st.active!==0?'Activo':'Baja',teamRecord?.updated_at?new Date(teamRecord.updated_at).toLocaleString('es-MX'):'']);
   if(!savedTeams.length)teamSheet.push(['Sin equipos guardados','','','','']);
-  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
+  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por parcial',rows:porParcial},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
 async function exportFullExcelForGroup(gid){
   gid=+gid||0;if(!gid){toast('Selecciona un grupo',true);return;}
@@ -2392,7 +2604,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.10.1_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.11.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -2419,7 +2631,7 @@ async function loadAdminOverview(){
   const g=await getGroupState(gid);if(!g)return;
   const period=String(g.current_period||1),scheme=await getScheme(gid,period),principal=principalLabel(scheme.principal_type||'project');
   if(box)box.innerHTML=`<span>Grupo activo</span><strong>${escapeHtml(g.name)} · ${escapeHtml(g.discipline||'')}</strong><small>Parcial ${period} de ${totalPeriods(g)}</small>`;
-  if(schemeText)schemeText.textContent=`Trabajos ${scheme.work_pct}% · ${principal} ${scheme.project_pct}% · Valores ${scheme.values_pct}% · Actitudes ${scheme.attitudes_pct}%`;
+  if(schemeText)schemeText.textContent=schemeBadgeText(scheme);
   if(principalTitle)principalTitle.textContent=principal;
   if(principalSummary)principalSummary.textContent=`Parcial ${period} · ${scheme.project_pct}% del total`;
 }
@@ -2640,7 +2852,10 @@ window.openStudentView=async function(period,studentId){
   }
   const valueId=`sv-values-${period}-${studentId}`,attId=`sv-att-${period}-${studentId}`;
   const valuesVal=drawerInputValue('component',period,studentId,'','values_score'),attVal=drawerInputValue('component',period,studentId,'','attitudes_score');
-  $('#studentDrawerBody').innerHTML=`<div class="student-summary-strip"><button type="button" class="extra-summary-button" onclick="openExtraModal('${period}',${studentId})"><span>Puntos extra</span><b class="extra-good">+${ex.goodAvailable}</b><b class="extra-bad">${formatBadExtras(ex.bad)}</b><small>Editar</small></button><div><span>Prom. trabajos</span><strong>${fmtNum(gr.work_avg)}</strong></div><div><span>Final actual</span><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></div><div class="student-section-title"><h3>Actividades</h3><span>Califica alumno por alumno</span></div><div class="student-activities-list">${activities}</div><div class="student-section-title"><h3>Componentes</h3></div>${principal}<div class="student-component-card"><div><strong>Valores</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${valueId}" class="drawer-score-input" data-kind="component" data-field="values_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(valuesVal)}" placeholder="—">${quickButtonsHTML(valueId,10)}</div></div><div class="student-component-card"><div><strong>Actitudes</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${attId}" class="drawer-score-input" data-kind="component" data-field="attitudes_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(attVal)}" placeholder="—">${quickButtonsHTML(attId,10)}</div></div>`;
+  const attMode=isAttendanceScheme(pd.scheme),drawerRO=isPeriodReadOnly(notebookData.group,period);
+  const compCards=attMode?`<div class="student-component-card readonly"><div><strong>Asistencia</strong><small>Automática · ${gr.attendance_classes?`${gr.attendance_attended} de ${gr.attendance_classes} clases del parcial`:'sin pase de lista en este parcial'} · ${+pd.scheme.attendance_pct||10}%</small></div><b>${fmtNum(gr.attendance_score)}</b></div>`:null;
+  $('#studentDrawerBody').innerHTML=`${drawerRO?`<div class="drawer-consult-note"><strong>Modo consulta · Parcial ${period} cerrado</strong><span>Solo lectura. Desbloquéalo desde el cuaderno si necesitas corregir.</span></div>`:''}<div class="student-summary-strip"><button type="button" class="extra-summary-button" onclick="openExtraModal('${period}',${studentId})"><span>Puntos extra</span><b class="extra-good">+${ex.goodAvailable}</b><b class="extra-bad">${formatBadExtras(ex.bad)}</b><small>Editar</small></button><div><span>Prom. trabajos</span><strong>${fmtNum(gr.work_avg)}</strong></div><div><span>Final actual</span><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></div><div class="student-section-title"><h3>Actividades</h3><span>Califica alumno por alumno</span></div><div class="student-activities-list">${activities}</div><div class="student-section-title"><h3>Componentes</h3></div>${principal}${compCards??`<div class="student-component-card"><div><strong>Valores</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${valueId}" class="drawer-score-input" data-kind="component" data-field="values_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(valuesVal)}" placeholder="—">${quickButtonsHTML(valueId,10)}</div></div><div class="student-component-card"><div><strong>Actitudes</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${attId}" class="drawer-score-input" data-kind="component" data-field="attitudes_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(attVal)}" placeholder="—">${quickButtonsHTML(attId,10)}</div></div>`}`;
+  if(drawerRO)$$('#studentDrawerBody input,#studentDrawerBody .student-score-box button,#studentDrawerBody .extra-summary-button').forEach(el=>el.disabled=true);
   $$('#studentDrawer .drawer-score-input').forEach(inp=>inp.addEventListener('input',()=>{inp.classList.add('changed');setSaveState('changed','Cambios sin guardar');}));
   $('#studentDrawer').classList.remove('hidden');$('#studentDrawer').setAttribute('aria-hidden','false');document.body.classList.add('drawer-open');
   updateStudentDrawerNav(pd);
@@ -2655,6 +2870,12 @@ function updateStudentDrawerNav(pd){
 async function commitStudentDrawer(move=0,targetStudentId=null){
   if(!studentDrawerState.studentId)return;
   const {period,studentId}=studentDrawerState;
+  if(isPeriodReadOnly(notebookData?.group,period)){
+    const pd=notebookData.periods?.[period]||await buildNotebookPeriodData(notebookData.group.id,period),ids=pd.students.map(s=>+s.id),idx=ids.indexOf(+studentId);
+    const next=targetStudentId!=null?+targetStudentId:ids[idx+move];
+    if((targetStudentId!=null||move)&&next)await openStudentView(period,next);
+    return;
+  }
   for(const src of $$('#studentDrawer .drawer-score-input')){
     let target=null;
     if(src.dataset.kind==='grade')target=document.querySelector(`.notebook-score-input[data-kind="grade"][data-period="${period}"][data-student="${studentId}"][data-activity="${src.dataset.activity}"]`);
@@ -2792,7 +3013,7 @@ async function renderAttentionPanel(gid){
   const g=await getGroupState(gid);if(!g)return;
   const p=String(g.current_period||1);
   const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  const records=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const records=attendanceForPeriod(await MiAulaDB.byIndex('attendance','group_id',gid),g,p);
   const byStudent=new Map();for(const r of records){if(!byStudent.has(r.student_id))byStudent.set(r.student_id,[]);byStudent.get(r.student_id).push(r);}
   const risk=students.filter(s=>!isSecretaryPendingStudent(s)).map(s=>({s,t:attendanceTotals(byStudent.get(s.id)||[])})).filter(x=>(x.t.absencePct||0)>=15).sort((a,b)=>(b.t.absencePct||0)-(a.t.absencePct||0));
   const pendingSec=students.filter(isSecretaryPendingStudent);
@@ -2974,10 +3195,10 @@ async function printStudentReport(){
   const g=await getGroupState(gid),pd=await buildNotebookPeriodData(gid,period);
   const s=pd.students.find(x=>+x.id===sid);if(!s){toast('No se encontró el alumno.',true);return;}
   const gr=pd.gradingMap.get(sid)||{},sc=pd.scheme,principal=principalLabel(sc.principal_type||'project');
-  const att=attendanceTotals((await MiAulaDB.byIndex('attendance','student_id',sid)).filter(r=>+r.group_id===gid));
+  const att=attendanceTotals(attendanceForPeriod((await MiAulaDB.byIndex('attendance','student_id',sid)).filter(r=>+r.group_id===gid),g,period));
   const risk=absenceRiskMeta(att.absencePct),ex=pd.extrasByStudent.get(sid)||{goodAvailable:0,goodUsed:0,bad:0};
   const rows=pd.activities.map(a=>{const r=pd.grades.get(`${a.id}:${sid}`),v=String(exportGradeValue(a,r));return `<tr><td>${a.activity_date?parseISODateLocal(a.activity_date).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}):'—'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activity_type||'')}</td><td class="pr-num">${v===''?'<span class="pr-muted">—</span>':v==='NP'?'<b class="pr-np">NP</b>':escapeHtml(v)} <small>/ ${fmtShort(a.max_score)}</small></td></tr>`;}).join('')||'<tr><td colspan="4" class="pr-muted">Sin actividades registradas en este parcial.</td></tr>';
-  const comps=[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],['Valores',sc.values_pct,gr.values_score],['Actitudes',sc.attitudes_pct,gr.attitudes_score]];
+  const comps=isAttendanceScheme(sc)?[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],[`Asistencia (${gr.attendance_classes?`${gr.attendance_attended} de ${gr.attendance_classes} clases`:'sin clases'})`,sc.attendance_pct,gr.attendance_score]]:[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],['Valores',sc.values_pct,gr.values_score],['Actitudes',sc.attitudes_pct,gr.attitudes_score]];
   const html=`${prHeader(`Boleta de calificaciones · Parcial ${period}`,g)}
   <section class="pr-student"><div><small>Alumno</small><strong>${escapeHtml(studentLabel(s))}</strong></div><div><small>No. de lista</small><strong>${s.list_number??'—'}</strong></div><div class="pr-final"><small>Calificación del parcial</small><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></section>
   <h3>Componentes de evaluación</h3>
@@ -2985,7 +3206,7 @@ async function printStudentReport(){
   <h3>Actividades del parcial</h3>
   <table class="pr-table"><thead><tr><th>Fecha</th><th>Actividad</th><th>Tipo</th><th class="pr-num">Calificación</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="pr-grid">
-    <section><h3>Asistencia (acumulada)</h3><table class="pr-table compact"><tbody><tr><td>Horas computables</td><td class="pr-num">${att.total}</td></tr><tr><td>Presente</td><td class="pr-num">${att.P} h</td></tr><tr><td>Faltas</td><td class="pr-num">${att.F} h</td></tr><tr><td>Retardos</td><td class="pr-num">${att.R} h</td></tr><tr><td>Justificadas</td><td class="pr-num">${att.J} h</td></tr><tr><td><b>Porcentaje de faltas</b></td><td class="pr-num"><b>${fmtPct(att.absencePct)}</b> · ${risk.label}</td></tr></tbody></table></section>
+    <section><h3>Asistencia (Parcial ${period})</h3><table class="pr-table compact"><tbody><tr><td>Horas computables</td><td class="pr-num">${att.total}</td></tr><tr><td>Presente</td><td class="pr-num">${att.P} h</td></tr><tr><td>Faltas</td><td class="pr-num">${att.F} h</td></tr><tr><td>Retardos</td><td class="pr-num">${att.R} h</td></tr><tr><td>Justificadas</td><td class="pr-num">${att.J} h</td></tr><tr><td><b>Porcentaje de faltas</b></td><td class="pr-num"><b>${fmtPct(att.absencePct)}</b> · ${risk.label}</td></tr></tbody></table></section>
     <section><h3>Puntos extra (Parcial ${period})</h3><table class="pr-table compact"><tbody><tr><td>Disponibles</td><td class="pr-num">+${ex.goodAvailable||0}</td></tr><tr><td>Usados en actividades</td><td class="pr-num">${ex.goodUsed||0}</td></tr><tr><td>Puntos negativos</td><td class="pr-num">${ex.bad?'-'+ex.bad:'0'}</td></tr></tbody></table></section>
   </div>
   <div class="pr-signs"><div><span></span><small>Ing. Niccolás C.M. · Docente</small></div><div><span></span><small>Nombre y firma de enterado (padre, madre o tutor)</small></div></div>
@@ -2996,9 +3217,9 @@ $('#printStudentReport')?.addEventListener('click',()=>printStudentReport().catc
 
 async function printAttendanceReport(){
   const gid=attendanceHistoryGroupId();if(!gid){toast('Selecciona un grupo.',true);return;}
-  const g=await getGroupState(gid);
+  const g=await getGroupState(gid),period=attendanceHistoryPeriodValue();
   const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  const records=await MiAulaDB.byIndex('attendance','group_id',gid);
+  const records=attendanceForPeriod(await MiAulaDB.byIndex('attendance','group_id',gid),g,period);
   const byStudent=new Map();for(const r of records){if(!byStudent.has(r.student_id))byStudent.set(r.student_id,[]);byStudent.get(r.student_id).push(r);}
   const rows=students.map(s=>({s,t:attendanceTotals(byStudent.get(s.id)||[]),pending:isSecretaryPendingStudent(s)}));
   const normal=rows.filter(r=>!r.pending),risk=normal.filter(r=>(r.t.absencePct||0)>=15).sort((a,b)=>(b.t.absencePct||0)-(a.t.absencePct||0));
@@ -3006,7 +3227,7 @@ async function printAttendanceReport(){
   const range=dates.length?`${parseISODateLocal(dates[0]).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} – ${parseISODateLocal(dates[dates.length-1]).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}`:'Sin registros';
   const line=({s,t,pending})=>{const m=absenceRiskMeta(t.absencePct);return `<tr class="${pending?'pr-pending':m.key}"><td class="pr-num">${s.list_number??'—'}</td><td>${escapeHtml(studentLabel(s))}</td><td class="pr-num">${t.total}</td><td class="pr-num">${t.P}</td><td class="pr-num">${t.F}</td><td class="pr-num">${t.R}</td><td class="pr-num">${t.J}</td><td class="pr-num"><b>${pending?'—':fmtPct(t.absencePct)}</b></td><td>${pending?'Pendiente Secretaría':m.label}</td></tr>`;};
   const head='<thead><tr><th class="pr-num">No.</th><th>Alumno</th><th class="pr-num">Horas</th><th class="pr-num">P</th><th class="pr-num">F</th><th class="pr-num">R</th><th class="pr-num">J</th><th class="pr-num">% faltas</th><th>Estado</th></tr></thead>';
-  const html=`${prHeader('Reporte de inasistencias',g,`<span>Periodo: ${range}</span>`)}
+  const html=`${prHeader('Reporte de inasistencias',g,`<span>${escapeHtml(attendancePeriodLabel(g,period))}</span><span>Periodo: ${range}</span>`)}
   <section class="pr-kpis"><div><small>Alumnos activos</small><strong>${students.length}</strong></div><div class="critical"><small>20% o más</small><strong>${normal.filter(r=>(r.t.absencePct||0)>=20).length}</strong></div><div class="warning"><small>15% a 19.9%</small><strong>${normal.filter(r=>(r.t.absencePct||0)>=15&&(r.t.absencePct||0)<20).length}</strong></div><div><small>Pendientes Secretaría</small><strong>${rows.filter(r=>r.pending).length}</strong></div></section>
   <h3>Alumnos que requieren atención (15% o más de faltas)</h3>
   ${risk.length?`<table class="pr-table">${head}<tbody>${risk.map(line).join('')}</tbody></table>`:'<p class="pr-muted">Ningún alumno alcanza el 15% de faltas.</p>'}
@@ -3784,7 +4005,7 @@ async function buildAttendanceListWorkbook(gid,opts={}){
   const g=await getGroupState(gid);if(!g)throw new Error('Grupo no encontrado');
   const unit=opts.unit==='sessions'?'sessions':'hours',closing=!!opts.closing;
   const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
-  const records=(await MiAulaDB.byIndex('attendance','group_id',gid)).filter(r=>(!opts.from||r.attendance_date>=opts.from)&&(!opts.to||r.attendance_date<=opts.to));
+  const records=attendanceForPeriod(await MiAulaDB.byIndex('attendance','group_id',gid),g,opts.period||'all').filter(r=>(!opts.from||r.attendance_date>=opts.from)&&(!opts.to||r.attendance_date<=opts.to));
   const dates=[...new Set(records.map(r=>r.attendance_date))].sort();
   const recMap=new Map(records.map(r=>[`${r.student_id}|${r.attendance_date}`,r]));
   const periods=periodNumbers(g),finals={};
@@ -3797,7 +4018,7 @@ async function buildAttendanceListWorkbook(gid,opts={}){
   const rows=[];
   const r0=blankRow();r0[0]=cell('LISTA DE ASISTENCIA','title');rows.push(r0);
   const range=D?`del ${longDateEs(dates[0])} al ${longDateEs(dates[D-1])}`:'sin registros';
-  const r1=blankRow();r1[0]=cell(`Grupo: ${g.name}${g.discipline?` · Asignatura: ${g.discipline}`:''}${g.school_year?` · Ciclo ${g.school_year}`:''} · Docente: Ing. Niccolás C.M. · Periodo ${range}`,'sub');rows.push(r1);
+  const r1=blankRow();r1[0]=cell(`Grupo: ${g.name}${g.discipline?` · Asignatura: ${g.discipline}`:''}${g.school_year?` · Ciclo ${g.school_year}`:''} · Docente: Ing. Niccolás C.M.${opts.period&&opts.period!=='all'?` · Parcial ${opts.period}`:''} · Periodo ${range}`,'sub');rows.push(r1);
   const h1=blankRow(),h2=blankRow(),h3=blankRow();
   h1[0]=cell('No.','h');h1[1]=cell('NOMBRE DEL ALUMNO','h');
   [h2,h3].forEach(r=>{r[0]=cell('','h');r[1]=cell('','h');});
@@ -3828,7 +4049,7 @@ async function buildAttendanceListWorkbook(gid,opts={}){
   rows.push(blankRow());
   const legend=blankRow();legend[1]=cell('Marcas:  .  asistencia    /  falta    J  justificada    R  retardo    S  pendiente con Secretaría (no cuenta)','sub');rows.push(legend);
   const note=blankRow();note[1]=cell(`Totales en ${unit==='hours'?'horas de clase (igual que MiAula y la regla del 20%)':'sesiones (una marca por día)'}. % asistencia = (computables − faltas injustificadas) ÷ computables. % faltas en rojo cuando llega al 20%.`,'sub');rows.push(note);
-  const note2=blankRow();note2[1]=cell(closing?'Calificación para cierre de evaluación: las actividades sin calificación cuentan como 0 (NP y rúbricas a medias sin cambio). «Pend.» = falta proyecto/examen, valores o actitudes. En MiAula no se modificó ninguna calificación.':'Calificación como está en MiAula. «Pend.» = al alumno le falta algún componente (trabajos, proyecto/examen, valores o actitudes) en ese parcial. El promedio aparece cuando todos los parciales tienen calificación.','sub');rows.push(note2);
+  const note2=blankRow();note2[1]=cell(closing?'Calificación para cierre de evaluación: las actividades sin calificación cuentan como 0 (NP y rúbricas a medias sin cambio). «Pend.» = falta proyecto/examen o algún componente del parcial. En MiAula no se modificó ninguna calificación.':'Calificación como está en MiAula. «Pend.» = al alumno le falta algún componente (trabajos, proyecto/examen, asistencia, o valores/actitudes en parciales anteriores) en ese parcial. El promedio aparece cuando todos los parciales tienen calificación.','sub');rows.push(note2);
   const sign=blankRow();sign[1]=cell('Firma del docente: ____________________________','sub');rows.push(blankRow(),sign);
   const merges=[`A1:${xlsCol(lastCol)}1`,`A2:${xlsCol(lastCol)}2`,'A3:A5','B3:B5'];
   if(D>1)merges.push(`${xlsCol(c0)}3:${xlsCol(cT-1)}3`);
@@ -3841,12 +4062,14 @@ async function buildAttendanceListWorkbook(gid,opts={}){
 function openAttendanceListExport(gid){
   gid=+gid||attendanceHistoryGroupId()||+$('#contextGroup')?.value||0;
   if(!gid){toast('Selecciona un grupo.',true);return;}
-  MiAulaDB.byIndex('attendance','group_id',gid).then(recs=>{
+  Promise.all([MiAulaDB.byIndex('attendance','group_id',gid),getGroupState(gid)]).then(([recs,g])=>{
     const dates=[...new Set(recs.map(r=>r.attendance_date))].sort(),first=dates[0]||today,last=dates[dates.length-1]||today;
+    const perPeriod=periodNumbers(g).map(p=>({p,n:new Set(attendanceForPeriod(recs,g,p).map(r=>r.attendance_date)).size})).filter(x=>x.n);
     openModal('Lista de asistencia (Excel)',`<p class="modal-help">Se genera como lista tradicional: una columna por fecha con <b>.</b> asistencia, <b>/</b> falta y <b>J</b> justificada; al final los totales, el % y la calificación de cada parcial.</p>
       <div class="al-form">
         <fieldset><legend>Fechas</legend>
           <label class="al-opt"><input type="radio" name="alRange" value="all" checked> Todas las fechas registradas (${dates.length})</label>
+          ${perPeriod.map(x=>`<label class="al-opt"><input type="radio" name="alRange" value="p${x.p}"> Solo Parcial ${x.p}${isPeriodClosed(g,x.p)?' · cerrado':' · actual'} <small>(${x.n} fechas)</small></label>`).join('')}
           <label class="al-opt"><input type="radio" name="alRange" value="range"> Solo un periodo</label>
           <div class="al-dates"><label>Desde<input type="date" id="alFrom" value="${first}"></label><label>Hasta<input type="date" id="alTo" value="${last}"></label></div>
         </fieldset>
@@ -3863,13 +4086,13 @@ function openAttendanceListExport(gid){
     $('#modal .modal-card')?.classList.add('wide');
     $('#alGenerate').onclick=async()=>{
       const range=document.querySelector('input[name="alRange"]:checked').value,unit=document.querySelector('input[name="alUnit"]:checked').value,closing=document.querySelector('input[name="alGrade"]:checked').value==='closing';
-      const from=range==='range'?$('#alFrom').value:'',to=range==='range'?$('#alTo').value:'';
+      const from=range==='range'?$('#alFrom').value:'',to=range==='range'?$('#alTo').value:'',period=/^p\d+$/.test(range)?range.slice(1):'all';
       if(from&&to&&from>to){toast('La fecha «Desde» debe ser antes de «Hasta».',true);return;}
       try{
-        const {workbook,stats}=await buildAttendanceListWorkbook(gid,{from,to,unit,closing});
+        const {workbook,stats}=await buildAttendanceListWorkbook(gid,{from,to,unit,closing,period});
         if(!stats.dates){toast('No hay asistencias registradas en esas fechas.',true);return;}
         const g=await MiAulaDB.get('groups',gid),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');
-        downloadBlob(XLSXLite.write(workbook),`MiAula_ListaAsistencia_${safe}${closing?'_CIERRE':''}_${today}.xlsx`);
+        downloadBlob(XLSXLite.write(workbook),`MiAula_ListaAsistencia_${safe}${period!=='all'?`_P${period}`:''}${closing?'_CIERRE':''}_${today}.xlsx`);
         closeModal();toast(`Lista generada · ${stats.students} alumnos · ${stats.dates} fechas`);
       }catch(e){console.error(e);toast(e.message,true);}
     };

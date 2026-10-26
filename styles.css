@@ -1441,3 +1441,52 @@ body.class-mode .bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!im
 #exportAttendanceList{display:inline-flex!important;align-items:center;gap:7px}#exportAttendanceList .ui-icon{width:17px;height:17px}
 #exportAttendanceListAdmin{margin-top:8px;width:100%}
 @media(max-width:1000px){.al-form{grid-template-columns:1fr}}
+
+/* 2.11.0 · Barra inferior sin Respaldo (7 accesos; 6 en Modo clase) */
+.bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!important;width:min(860px,calc(100% - 32px))}
+body.class-mode .bottom-app-nav{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+@media(max-width:699px){
+  .bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!important;width:calc(100% - 8px)!important}
+  body.class-mode .bottom-app-nav{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+}
+
+/* 2.11.0 · Asistencia automática y modo consulta */
+.att-classes{display:block;font-size:11px;font-weight:600;color:var(--text-3);margin-top:2px;white-space:nowrap}
+.attendance-cell{text-align:center}
+.attendance-scheme-item .percent-input input{background:var(--surface-2);color:var(--text-2);cursor:default}
+.consult-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;background:var(--primary-soft);color:var(--accent-text)}
+.consult-chip.warn{background:var(--warning-soft);color:var(--warning-text)}
+.consult-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 12px;padding:12px 16px;border-radius:var(--r-card);border:1px solid rgba(79,124,172,.28);background:var(--primary-soft)}
+.consult-banner.unlocked{border-color:rgba(214,168,75,.45);background:var(--warning-soft)}
+.consult-copy{display:grid;gap:3px;min-width:240px;flex:1}
+.consult-copy strong{font-size:15px;color:var(--text-strong)}
+.consult-copy small{color:var(--text-2);line-height:1.4}
+.consult-copy .consult-chip{justify-self:start}
+.consult-actions{display:flex;gap:8px;flex-wrap:wrap}
+.period-badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.period-badge.consult-badge{background:var(--primary-soft);color:var(--accent-text);font-weight:700}
+.period-badge.consult-badge.unlocked{background:var(--warning-soft);color:var(--warning-text)}
+.notebook-period-block.is-readonly .notebook-score-input,.notebook-period-block.is-readonly .rubric-cell-btn,.notebook-period-block.is-readonly .extra-cell-button,.notebook-period-block.is-readonly .col-team-btn{cursor:not-allowed}
+.notebook-period-block.is-readonly .notebook-score-input{background:transparent!important;box-shadow:none!important}
+.notebook-period-block.is-readonly .col-team-btn{opacity:.45}
+.drawer-consult-note{display:grid;gap:2px;margin-bottom:12px;padding:10px 12px;border-radius:12px;background:var(--primary-soft);color:var(--text-2);font-size:13px}
+.drawer-consult-note strong{color:var(--text-strong)}
+#studentDrawerBody input:disabled,#studentDrawerBody button:disabled{opacity:.6;cursor:not-allowed}
+.attendance-period-note{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:0 0 10px;padding:9px 14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);font-size:13px;color:var(--text-2)}
+.attendance-period-note strong{color:var(--text-strong)}
+.attendance-period-note.closed{background:var(--warning-soft);border-color:rgba(214,168,75,.45)}
+.attendance-consult-note{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-radius:12px;background:var(--primary-soft);font-size:13px;color:var(--text-2)}
+.past-period-list{display:grid;gap:12px}
+.past-period-card{display:grid;gap:12px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface-2)}
+.past-period-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.past-period-head h3{margin:6px 0 2px}
+.past-period-head small{color:var(--text-3)}
+.past-period-avg{text-align:right;display:grid}
+.past-period-avg span{font-size:12px;color:var(--text-3)}
+.past-period-avg strong{font-size:26px;color:var(--text-strong)}
+.past-period-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.past-period-stats div{display:grid;gap:2px;padding:8px 10px;border-radius:10px;background:transparent;border:1px solid var(--border)}
+.past-period-stats span{font-size:11.5px;color:var(--text-3)}
+.past-period-stats strong{font-size:16px;color:var(--text-strong)}
+.past-period-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:699px){.past-period-stats{grid-template-columns:1fr 1fr}.consult-actions .btn{flex:1}}
