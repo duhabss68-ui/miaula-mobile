@@ -230,7 +230,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.9.2',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.10.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -2386,7 +2386,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.9.2_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.10.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -3764,3 +3764,110 @@ function askExportMode(title){
     obs.observe($('#modal'),{attributes:true,attributeFilter:['class']});
   });
 }
+
+// ==========================================================================
+// 2.10.0 · Lista de asistencia tradicional en Excel (+ calificación al final)
+// Marcas: «.» asistencia · «/» falta · «J» justificada · «R» retardo · «S» Pendiente Secretaría
+// ==========================================================================
+const MONTHS_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const WEEKDAY_LETTER=['D','L','M','M','J','V','S'];
+function xlsCol(n){let s='';n++;while(n){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26);}return s;}
+function longDateEs(iso){const d=parseISODateLocal(iso);return `${d.getDate()} de ${MONTHS_ES[d.getMonth()]} de ${d.getFullYear()}`;}
+const ATT_MARK={P:'.',F:'/',J:'J',R:'R',S:'S'};
+async function buildAttendanceListWorkbook(gid,opts={}){
+  const g=await getGroupState(gid);if(!g)throw new Error('Grupo no encontrado');
+  const unit=opts.unit==='sessions'?'sessions':'hours',closing=!!opts.closing;
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999));
+  const records=(await MiAulaDB.byIndex('attendance','group_id',gid)).filter(r=>(!opts.from||r.attendance_date>=opts.from)&&(!opts.to||r.attendance_date<=opts.to));
+  const dates=[...new Set(records.map(r=>r.attendance_date))].sort();
+  const recMap=new Map(records.map(r=>[`${r.student_id}|${r.attendance_date}`,r]));
+  const periods=periodNumbers(g),finals={};
+  for(const p of periods){const res=await computeGroupGrading(gid,p,closing?{emptyAsZero:true}:{});finals[p]=new Map(res.students.map(r=>[r.id,r.final_grade]));}
+  const D=dates.length,c0=2,cT=c0+D;
+  const totalsHead=['ASISTENCIAS','RETARDOS','FALTAS JUSTIFICADAS','FALTAS INJUSTIFICADAS','% ASISTENCIA','% FALTAS'];
+  const gradeHead=[...periods.map(p=>`CALIFICACIÓN PARCIAL ${p}`),'PROMEDIO'];
+  const lastCol=cT+totalsHead.length+gradeHead.length-1;
+  const cell=(v,s)=>({v,s}),blankRow=()=>Array.from({length:lastCol+1},()=>'');
+  const rows=[];
+  const r0=blankRow();r0[0]=cell('LISTA DE ASISTENCIA','title');rows.push(r0);
+  const range=D?`del ${longDateEs(dates[0])} al ${longDateEs(dates[D-1])}`:'sin registros';
+  const r1=blankRow();r1[0]=cell(`Grupo: ${g.name}${g.discipline?` · Asignatura: ${g.discipline}`:''}${g.school_year?` · Ciclo ${g.school_year}`:''} · Docente: Ing. Niccolás C.M. · Periodo ${range}`,'sub');rows.push(r1);
+  const h1=blankRow(),h2=blankRow(),h3=blankRow();
+  h1[0]=cell('No.','h');h1[1]=cell('NOMBRE DEL ALUMNO','h');
+  [h2,h3].forEach(r=>{r[0]=cell('','h');r[1]=cell('','h');});
+  if(D){h1[c0]=cell('A  S  I  S  T  E  N  C  I  A  S','h');for(let i=1;i<D;i++)h1[c0+i]=cell('','h');}
+  dates.forEach((d,i)=>{h2[c0+i]=cell(WEEKDAY_LETTER[parseISODateLocal(d).getDay()],'h');h3[c0+i]=cell(longDateEs(d),'v');});
+  [...totalsHead,...gradeHead].forEach((t,i)=>{h1[cT+i]=cell(t,'v');h2[cT+i]=cell('','v');h3[cT+i]=cell('','v');});
+  rows.push(h1,h2,h3);
+  const stats={students:students.length,dates:D};
+  for(const s of students){
+    const r=blankRow();let asis=0,ret=0,just=0,inj=0;
+    r[0]=cell(s.list_number??'','c');r[1]=cell(studentLabel(s).toUpperCase(),'l');
+    dates.forEach((d,i)=>{
+      const a=recMap.get(`${s.id}|${d}`),st=String(a?.status||'').toUpperCase(),u=unit==='hours'?Math.max(1,+a?.class_hours||1):1;
+      r[c0+i]=cell(ATT_MARK[st]||'',st==='F'?'f':st==='J'?'j':'c');
+      if(st==='P')asis+=u;else if(st==='R'){asis+=u;ret+=u;}else if(st==='J')just+=u;else if(st==='F')inj+=u;
+    });
+    const total=asis+just+inj;
+    const pctAs=total?Math.round((total-inj)*1000/total)/10:'';
+    const pctF=total?Math.round(inj*1000/total)/10:'';
+    [asis,ret,just,inj].forEach((v,i)=>r[cT+i]=cell(v,'c'));
+    r[cT+4]=cell(pctAs,'p');r[cT+5]=cell(pctF,pctF!==''&&pctF>=20?'pf':'p');
+    const fs=periods.map(p=>finals[p].get(s.id)??null);
+    fs.forEach((v,i)=>r[cT+6+i]=cell(v==null?'Pend.':v,v==null?'c':'cb'));
+    const all=fs.every(v=>v!=null);
+    r[cT+6+periods.length]=cell(all?Math.round(fs.reduce((a,b)=>a+b,0)*100/fs.length)/100:'Pend.',all?'cb':'c');
+    rows.push(r);
+  }
+  rows.push(blankRow());
+  const legend=blankRow();legend[1]=cell('Marcas:  .  asistencia    /  falta    J  justificada    R  retardo    S  pendiente con Secretaría (no cuenta)','sub');rows.push(legend);
+  const note=blankRow();note[1]=cell(`Totales en ${unit==='hours'?'horas de clase (igual que MiAula y la regla del 20%)':'sesiones (una marca por día)'}. % asistencia = (computables − faltas injustificadas) ÷ computables. % faltas en rojo cuando llega al 20%.`,'sub');rows.push(note);
+  const note2=blankRow();note2[1]=cell(closing?'Calificación para cierre de evaluación: las actividades sin calificación cuentan como 0 (NP y rúbricas a medias sin cambio). «Pend.» = falta proyecto/examen, valores o actitudes. En MiAula no se modificó ninguna calificación.':'Calificación como está en MiAula. «Pend.» = al alumno le falta algún componente (trabajos, proyecto/examen, valores o actitudes) en ese parcial. El promedio aparece cuando todos los parciales tienen calificación.','sub');rows.push(note2);
+  const sign=blankRow();sign[1]=cell('Firma del docente: ____________________________','sub');rows.push(blankRow(),sign);
+  const merges=[`A1:${xlsCol(lastCol)}1`,`A2:${xlsCol(lastCol)}2`,'A3:A5','B3:B5'];
+  if(D>1)merges.push(`${xlsCol(c0)}3:${xlsCol(cT-1)}3`);
+  for(let i=0;i<totalsHead.length+gradeHead.length;i++)merges.push(`${xlsCol(cT+i)}3:${xlsCol(cT+i)}5`);
+  const legendRow=rows.length-5;[legendRow,legendRow+1,legendRow+2,rows.length-1].forEach(r=>merges.push(`B${r+1}:${xlsCol(lastCol)}${r+1}`));
+  const cols=[5,40,...dates.map(()=>3.6),...totalsHead.map(()=>6.5),...gradeHead.map(()=>9.5)];
+  const sheet={name:'Lista de asistencia',rows,format:{cols,merges,heights:{0:26,1:30,4:128},freeze:{row:5,col:2},landscape:true}};
+  return {workbook:{sheets:[sheet]},stats};
+}
+function openAttendanceListExport(gid){
+  gid=+gid||attendanceHistoryGroupId()||+$('#contextGroup')?.value||0;
+  if(!gid){toast('Selecciona un grupo.',true);return;}
+  MiAulaDB.byIndex('attendance','group_id',gid).then(recs=>{
+    const dates=[...new Set(recs.map(r=>r.attendance_date))].sort(),first=dates[0]||today,last=dates[dates.length-1]||today;
+    openModal('Lista de asistencia (Excel)',`<p class="modal-help">Se genera como lista tradicional: una columna por fecha con <b>.</b> asistencia, <b>/</b> falta y <b>J</b> justificada; al final los totales, el % y la calificación de cada parcial.</p>
+      <div class="al-form">
+        <fieldset><legend>Fechas</legend>
+          <label class="al-opt"><input type="radio" name="alRange" value="all" checked> Todas las fechas registradas (${dates.length})</label>
+          <label class="al-opt"><input type="radio" name="alRange" value="range"> Solo un periodo</label>
+          <div class="al-dates"><label>Desde<input type="date" id="alFrom" value="${first}"></label><label>Hasta<input type="date" id="alTo" value="${last}"></label></div>
+        </fieldset>
+        <fieldset><legend>Contar las asistencias por</legend>
+          <label class="al-opt"><input type="radio" name="alUnit" value="hours" checked> Horas de clase <small>(igual que MiAula y la regla del 20%)</small></label>
+          <label class="al-opt"><input type="radio" name="alUnit" value="sessions"> Sesiones <small>(una marca por día, como lista de papel)</small></label>
+        </fieldset>
+        <fieldset><legend>Calificación al final</legend>
+          <label class="al-opt"><input type="radio" name="alGrade" value="asis" checked> Como está en MiAula</label>
+          <label class="al-opt"><input type="radio" name="alGrade" value="closing"> Para cierre de evaluación <small>(actividades sin calificación = 0; NP y rúbricas a medias igual)</small></label>
+        </fieldset>
+      </div>
+      <div class="modal-actions"><button class="btn subtle" onclick="closeModal()">Cancelar</button><button class="btn primary" id="alGenerate">Generar lista</button></div>`);
+    $('#modal .modal-card')?.classList.add('wide');
+    $('#alGenerate').onclick=async()=>{
+      const range=document.querySelector('input[name="alRange"]:checked').value,unit=document.querySelector('input[name="alUnit"]:checked').value,closing=document.querySelector('input[name="alGrade"]:checked').value==='closing';
+      const from=range==='range'?$('#alFrom').value:'',to=range==='range'?$('#alTo').value:'';
+      if(from&&to&&from>to){toast('La fecha «Desde» debe ser antes de «Hasta».',true);return;}
+      try{
+        const {workbook,stats}=await buildAttendanceListWorkbook(gid,{from,to,unit,closing});
+        if(!stats.dates){toast('No hay asistencias registradas en esas fechas.',true);return;}
+        const g=await MiAulaDB.get('groups',gid),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');
+        downloadBlob(XLSXLite.write(workbook),`MiAula_ListaAsistencia_${safe}${closing?'_CIERRE':''}_${today}.xlsx`);
+        closeModal();toast(`Lista generada · ${stats.students} alumnos · ${stats.dates} fechas`);
+      }catch(e){console.error(e);toast(e.message,true);}
+    };
+  });
+}
+$('#exportAttendanceList')?.addEventListener('click',()=>openAttendanceListExport(attendanceHistoryGroupId()));
+$('#exportAttendanceListAdmin')?.addEventListener('click',()=>openAttendanceListExport(+$('#exportGroup')?.value||0));

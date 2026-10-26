@@ -1,4 +1,4 @@
-@import url("./styles-legacy.css?v=2.9.2");
+@import url("./styles-legacy.css?v=2.10.0");
 
 /* ==========================================================================\n   MiAula Slate 2.4.6 · Slate / steel-blue visual system\n   Layout + behavior remain in styles-legacy.css. This layer owns presentation only.\n   ========================================================================== */
 :root{
@@ -1428,3 +1428,16 @@ body.class-mode .bottom-app-nav{grid-template-columns:repeat(7,minmax(0,1fr))!im
 .export-choice .bank-action small b{color:var(--text-strong)}
 .export-choice-note{margin:12px 0 0}
 .export-choice .bank-action small b{display:inline;font-size:inherit}
+
+/* 2.10.0 · Lista de asistencia */
+.al-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.al-form fieldset{margin:0;padding:12px;border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface-2);display:grid;gap:6px;align-content:start}
+.al-form legend{padding:0 6px;font-size:12.5px;font-weight:700;color:var(--text-2)}
+.al-opt{display:flex!important;align-items:flex-start;gap:8px;font-size:13.5px!important;color:var(--text)!important;line-height:1.35}
+.al-opt input{min-height:0!important;width:18px;height:18px;margin-top:1px;accent-color:var(--primary)}
+.al-opt small{display:block;color:var(--text-3);font-weight:500}
+.al-dates{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.al-dates input{min-height:40px!important}
+#exportAttendanceList{display:inline-flex!important;align-items:center;gap:7px}#exportAttendanceList .ui-icon{width:17px;height:17px}
+#exportAttendanceListAdmin{margin-top:8px;width:100%}
+@media(max-width:1000px){.al-form{grid-template-columns:1fr}}
