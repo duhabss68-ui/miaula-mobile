@@ -9,11 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MiAula">
-  <title>MiAula Slate 2.13.0 · CETIS</title>
-  <link rel="manifest" href="manifest.webmanifest?v=2.13.0">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.13.0">
-  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.13.0">
-  <link rel="stylesheet" href="styles.css?v=2.13.0">
+  <title>MiAula Slate 2.14.0 · CETIS</title>
+  <link rel="manifest" href="manifest.webmanifest?v=2.14.0">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-books-192.png?v=2.14.0">
+  <link rel="apple-touch-icon" href="assets/icon-books-192.png?v=2.14.0">
+  <link rel="stylesheet" href="styles.css?v=2.14.0">
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -45,8 +45,8 @@
 <div id="splash" class="splash" aria-hidden="true"><div class="splash-inner"><svg viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#3F6E9E"/><path d="M14 20.5c6-2.6 12-2.2 18 1.6v24c-6-3.8-12-4.2-18-1.6z" fill="#fff" opacity=".96"/><path d="M50 20.5c-6-2.6-12-2.2-18 1.6v24c6-3.8 12-4.2 18-1.6z" fill="#fff" opacity=".72"/><path d="m36.5 33.2 3.6 3.6 6.4-7" fill="none" stroke="#2F5B88" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Mi<strong>Aula</strong></b></div></div>
 <div id="tabletOnly" class="tablet-only hidden">
   <div class="tablet-only-card">
-    <img src="assets/icon-books-192.png?v=2.13.0" alt="MiAula">
-    <h1>MiAula Slate 2.13.0</h1>
+    <img src="assets/icon-books-192.png?v=2.14.0" alt="MiAula">
+    <h1>MiAula Slate 2.14.0</h1>
     <p>Esta versión está diseñada para trabajar en tu tablet. Abre MiAula desde la Huawei MatePad 12X.</p>
   </div>
 </div>
@@ -55,8 +55,8 @@
 <div class="app-shell" id="appShell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="assets/icon-books-192.png?v=2.13.0" alt="MiAula" class="brand-icon">
-      <div><strong>MiAula Slate</strong><span>2.13.0 · CETIS</span></div>
+      <img src="assets/icon-books-192.png?v=2.14.0" alt="MiAula" class="brand-icon">
+      <div><strong>MiAula Slate</strong><span>2.14.0 · CETIS</span></div>
     </div>
     <nav>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-home"></use></svg></span><span>Inicio</span></button>
@@ -87,7 +87,7 @@
       </div>
       <div class="top-actions">
         <div class="save-state saved" id="saveStateWrap"><span class="save-state-dot"></span><span id="saveState">Todo guardado</span></div>
-        <span class="version-badge">MiAula Slate · 2.13.0</span>
+        <span class="version-badge">MiAula Slate · 2.14.0</span>
         <button class="btn icon-btn theme-toggle" id="themeToggle" type="button" aria-label="Cambiar a modo claro" title="Cambiar a modo claro"><svg class="ui-icon" aria-hidden="true"><use href="#i-sun"></use></svg></button>
         <button class="btn class-mode-btn" id="classModeTop">Modo clase</button>
         <button class="btn primary" id="quickAttendance">+ Asistencia</button>
@@ -261,6 +261,15 @@
             <label class="span-2">Grupo<select name="group_id" id="activityGroup"></select></label>
             <label class="span-2">Nombre<input name="title" placeholder="Ej. Actividad de funciones" required></label>
             <label class="span-2">Rubro<select name="rubro_id" id="activityRubro"><option value="">Elige un grupo</option></select><small class="field-help" id="activityRubroHelp">Solo aparecen los rubros del parcial marcados «En la lista».</small></label>
+            <fieldset class="span-2 multi-group-field">
+              <legend>También crear en</legend>
+              <div class="multi-group-chips" id="activityMultiGroups"></div>
+              <div class="multi-date-mode hidden" id="activityMultiDate">
+                <label class="al-opt"><input type="radio" name="multi_date" value="next" checked> La próxima clase de cada grupo <small>(desde la fecha elegida, según tu horario; sin horario usa la misma fecha)</small></label>
+                <label class="al-opt"><input type="radio" name="multi_date" value="same"> La misma fecha en todos</label>
+              </div>
+              <div id="activityMultiPreview" class="multi-preview hidden"></div>
+            </fieldset>
             <fieldset class="span-2 grading-mode-field">
               <legend>Cómo se califica</legend>
               <div class="grading-mode-options">
@@ -500,7 +509,7 @@
           <div class="danger-zone"><strong>Importante</strong><p>Restaurar reemplaza los datos actuales de la tablet.</p></div>
         </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.13.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
+      <div class="panel"><div class="panel-head"><div><h3>MiAula Slate 2.14.0 · CETIS</h3><p>Edición Slate con equipos persistentes, borrador automático y libreta por equipos.</p></div></div><div class="about-grid"><div><strong>Dispositivo</strong><span>Huawei MatePad 12X</span></div><div><strong>Datos</strong><span>IndexedDB local</span></div><div><strong>Internet</strong><span>No requerido después de instalar</span></div><div><strong>Sincronización</strong><span>No incluida en esta versión</span></div></div></div>
     </section>
   </main>
 </div>
@@ -554,7 +563,7 @@
 <div id="studentDrawer" class="student-drawer hidden" aria-hidden="true">
   <div class="student-drawer-backdrop" id="studentDrawerBackdrop"></div>
   <aside class="student-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="studentDrawerTitle">
-    <div class="student-drawer-head"><div><span class="eyebrow">Vista alumno</span><h2 id="studentDrawerTitle">Alumno</h2><p id="studentDrawerMeta"></p></div><div class="drawer-head-actions"><button class="btn subtle" id="printStudentReport" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#i-print"></use></svg><span>Boleta PDF</span></button><button class="icon-btn large-close" id="studentDrawerClose" aria-label="Cerrar">×</button></div></div>
+    <div class="student-drawer-head"><div><span class="eyebrow">Vista alumno</span><h2 id="studentDrawerTitle">Alumno</h2><p id="studentDrawerMeta"></p></div><div class="drawer-head-actions"><button class="btn subtle" id="studentLogBtn" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#i-notebook"></use></svg><span>Bitácora</span></button><button class="btn subtle" id="printStudentReport" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#i-print"></use></svg><span>Boleta PDF</span></button><button class="icon-btn large-close" id="studentDrawerClose" aria-label="Cerrar">×</button></div></div>
     <div class="student-drawer-searchbox"><label for="studentDrawerSearch"><svg class="ui-icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="studentDrawerSearch" type="search" autocomplete="off" placeholder="Buscar por nombre, apellido o No. de lista" aria-label="Buscar alumno"></label><div id="studentDrawerSearchResults" class="student-search-results hidden"></div></div>
     <div id="studentDrawerBody"></div>
     <div class="student-drawer-foot"><button class="btn subtle" id="studentPrev">← Anterior</button><button class="btn primary" id="studentSaveNext">Guardar y siguiente →</button><button class="btn subtle" id="studentNext">Siguiente →</button></div>
@@ -563,9 +572,9 @@
 
 <div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle">Editar</h3><button class="icon-btn" id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="db.js?v=2.13.0"></script>
-<script src="xlsx-lite.js?v=2.13.0"></script>
-<script src="rubricas.js?v=2.13.0"></script>
-<script src="app.js?v=2.13.0"></script>
+<script src="db.js?v=2.14.0"></script>
+<script src="xlsx-lite.js?v=2.14.0"></script>
+<script src="rubricas.js?v=2.14.0"></script>
+<script src="app.js?v=2.14.0"></script>
 </body>
 </html>

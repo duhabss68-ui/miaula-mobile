@@ -260,7 +260,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.13.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.14.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -769,7 +769,7 @@ async function renderAttendanceMonitor(){
     <div class="attendance-monitor-kpi"><span>Pend. Secretaría</span><strong>${pending}</strong><small>fuera del cálculo</small></div>
     <div class="attendance-monitor-kpi"><span>Promedio faltas</span><strong>${pctRows.length?groupAbsence.toFixed(1)+'%':'—'}</strong><small>grupo activo</small></div>`;
   if(!rows.length){table.innerHTML='<div class="empty-state">Este grupo no tiene alumnos activos.</div>';return;}
-  table.innerHTML=`<div class="table-wrap"><table class="attendance-monitor-grid"><thead><tr><th>No.</th><th>Alumno</th><th>Hrs</th><th>P</th><th>F</th><th>R</th><th>J</th><th>Sec.</th><th>Faltas</th>${period!=='all'?'<th>Asist. 10%</th>':''}<th>Estado</th><th></th></tr></thead><tbody>${rows.map(({student,totals,risk,grade})=>`<tr class="attendance-risk-row ${risk.key} ${isSecretaryPendingStudent(student)?'secretary-pending-monitor':''}"><td>${student.list_number??'—'}</td><td><strong>${escapeHtml(studentLabel(student))}</strong>${isSecretaryPendingStudent(student)?'<span class="secretary-inline-badge">Pendiente</span>':''}</td><td>${totals.total}</td><td>${totals.P}</td><td class="absence-hours">${totals.F}</td><td>${totals.R}</td><td>${totals.J}</td><td>${totals.S}</td><td><strong class="absence-pct ${risk.key}">${fmtPct(totals.absencePct)}</strong></td>${period!=='all'?`<td>${grade.score==null?'—':`<strong>${fmtNum(grade.score)}</strong><small class="att-classes">${grade.attended}/${grade.classes}</small>`}</td>`:''}<td>${isSecretaryPendingStudent(student)?'<span class="secretary-state">Pendiente Secretaría</span>':`<span class="attendance-risk-badge ${risk.key}">${risk.label}</span>`}</td><td><div class="action-row"><button class="btn small subtle" type="button" onclick="openAttendanceHistory(${student.id})">Historial / corregir</button>${isSecretaryPendingStudent(student)?`<button class="btn small" type="button" onclick="resolveSecretaryPending(${student.id})">Resolver</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
+  table.innerHTML=`<div class="table-wrap"><table class="attendance-monitor-grid"><thead><tr><th>No.</th><th>Alumno</th><th>Hrs</th><th>P</th><th>F</th><th>R</th><th>J</th><th>Sec.</th><th>Faltas</th>${period!=='all'?'<th>Asist. 10%</th>':''}<th>Estado</th><th></th></tr></thead><tbody>${rows.map(({student,totals,risk,grade})=>`<tr class="attendance-risk-row ${risk.key} ${isSecretaryPendingStudent(student)?'secretary-pending-monitor':''}"><td>${student.list_number??'—'}</td><td><strong>${escapeHtml(studentLabel(student))}</strong>${isSecretaryPendingStudent(student)?'<span class="secretary-inline-badge">Pendiente</span>':''}</td><td>${totals.total}</td><td>${totals.P}</td><td class="absence-hours">${totals.F}</td><td>${totals.R}</td><td>${totals.J}</td><td>${totals.S}</td><td><strong class="absence-pct ${risk.key}">${fmtPct(totals.absencePct)}</strong></td>${period!=='all'?`<td>${grade.score==null?'—':`<strong>${fmtNum(grade.score)}</strong><small class="att-classes">${grade.attended}/${grade.classes}</small>`}</td>`:''}<td>${isSecretaryPendingStudent(student)?'<span class="secretary-state">Pendiente Secretaría</span>':`<span class="attendance-risk-badge ${risk.key}">${risk.label}</span>`}</td><td><div class="action-row"><button class="btn small subtle" type="button" onclick="openAttendanceHistory(${student.id})">Historial / corregir</button><button class="btn small subtle" type="button" onclick="openStudentLog(${gid},${student.id})">Bitácora</button>${isSecretaryPendingStudent(student)?`<button class="btn small" type="button" onclick="resolveSecretaryPending(${student.id})">Resolver</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 window.renderAttendanceMonitor=renderAttendanceMonitor;
 
@@ -1390,6 +1390,7 @@ async function populateActivityRubros(){
   sel.innerHTML=list.length?list.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${+r.pct?` · ${+r.pct}%`:''}</option>`).join(''):'<option value="">Sin rubros en la lista · configúralos en Parcial</option>';
   if(list.some(r=>r.id===keep))sel.value=keep;
   if($('#activityRubroHelp'))$('#activityRubroHelp').textContent=`Rubros del Parcial ${g.current_period||1}. Para agregar o mostrar otros, ve a Parcial → Rubros.`;
+  await renderMultiGroups();
 }
 window.populateActivityRubros=populateActivityRubros;
 $('#activityForm').onsubmit=async e=>{
@@ -1403,6 +1404,8 @@ $('#activityForm').onsubmit=async e=>{
   const rs=schemeRubros(await getScheme(d.group_id,d.period)),rubro=rs.find(r=>r.id===d.rubro_id);
   if(!rubro){toast('Elige el rubro en el que cuenta la actividad.',true);return;}
   d.rubro_id=rubro.id;d.activity_type=rubro.id==='trabajos'?'Trabajo':rubro.name;
+  const alsoIds=$$('#activityMultiGroups input[name="also_group"]:checked').map(x=>+x.value),multiDate=document.querySelector('#activityForm input[name="multi_date"]:checked')?.value||'next';
+  delete d.also_group;delete d.multi_date;
   d.max_score=+d.max_score;d.weight=+d.weight;d.created_at=new Date().toISOString();
   const gradingMode=d.grading_mode,rubricRef=d.rubric_ref;delete d.grading_mode;delete d.rubric_ref;
   if(gradingMode==='rubric'){
@@ -1411,9 +1414,20 @@ $('#activityForm').onsubmit=async e=>{
     d.grading_mode='rubric';d.rubric=snap;d.max_score=10;
   }
   await MiAulaDB.add('activities',d);
+  // 2.14.0: la misma actividad en otros grupos (copia independiente en cada uno)
+  let copies=0;const skipped=[];
+  for(const og of alsoIds){
+    const plan=await multiGroupPlan(og,rubro,d.activity_date,multiDate);
+    if(!plan){skipped.push(groups.find(x=>+x.id===og)?.name||og);continue;}
+    const copy={...d,group_id:og,period:plan.period,rubro_id:plan.rubro.id,activity_type:plan.rubro.id==='trabajos'?'Trabajo':plan.rubro.name,activity_date:plan.date,created_at:new Date().toISOString()};
+    if(d.rubric)copy.rubric=JSON.parse(JSON.stringify(d.rubric));
+    await MiAulaDB.add('activities',copy);copies++;
+  }
   e.target.title.value='';
+  $$('#activityMultiGroups input[name="also_group"]').forEach(x=>x.checked=false);
+  await renderMultiGroups();
   await loadActivities();
-  toast(`Actividad creada en Parcial ${d.period}`);
+  toast(copies?`Actividad creada en ${copies+1} grupos${skipped.length?` · no se creó en ${skipped.join(', ')}`:''}`:`Actividad creada en Parcial ${d.period}`);
 };
 $('#activityFilter').onchange=loadActivities;
 $('#activityGroup').onchange=async()=>{const gid=+$('#activityGroup').value;await populateActivityRubros();if(gid){$('#activityFilter').value=String(gid);await loadActivities();}};
@@ -1939,13 +1953,18 @@ $('#consultPastPeriodsBtn')?.addEventListener('click',()=>openPastPeriodsConsult
 $('#closePeriodBtn').onclick=async()=>{
   const gid=+$('#gradingGroup').value;
   if(!gid){toast('Selecciona un grupo',true);return;}
+  const g=await getGroupState(gid);
+  if(g.course_closed){toast(`Los ${totalPeriods(g)} parciales ya están cerrados.`,true);return;}
+  await openClosingAssistant(gid);
+};
+async function doClosePeriod(gid){
   const g=await getGroupState(gid),p=+g.current_period||1,total=totalPeriods(g);
   if(g.course_closed){toast(`Los ${total} parciales ya están cerrados.`,true);return;}
   const next=p<total?p+1:null;
   const msg=next
     ?`¿Cerrar el Parcial ${p} e iniciar el Parcial ${next}?\n\nLas actividades, el Proyecto/Examen y la ASISTENCIA del Parcial ${p} quedan guardados (se pueden consultar en «Consultar parciales pasados»), pero NO se borran. El Parcial ${next} empieza con asistencia en 0. Las rúbricas y listas de cotejo permanecerán disponibles.`
     :`¿Cerrar el Parcial ${p}?\n\nSe conservará todo el historial y el banco de rúbricas/listas de cotejo. El grupo quedará marcado como ciclo concluido.`;
-  if(!confirm(msg))return;
+  if(!confirm(msg))return false;
   await stampAttendancePeriods(gid);
   const closedAt=new Date().toISOString();
   g.period_closures={...periodClosures(g),[p]:closedAt};
@@ -1964,7 +1983,8 @@ $('#closePeriodBtn').onclick=async()=>{
   await loadActivities();
   await loadPrincipalWorkspace();
   await loadSummary();
-};
+  return true;
+}
 
 
 // -------------------- RÚBRICAS / EVALUACIONES --------------------
@@ -2220,10 +2240,11 @@ async function buildNotebookPeriodData(gid,period){
   }
   const grading=await computeGroupGrading(gid,String(period));
   const gradingMap=new Map(grading.students.map(r=>[r.id,r]));
+  const gState=await getGroupState(gid),riskMap=!isPeriodClosed(gState,period)&&String(gState.current_period||1)===String(period)?await groupRiskMap(gid,{grading}):new Map();
   // 2.13.0: columnas agrupadas por rubro (en el orden del esquema) y, dentro de cada rubro, por fecha.
   const known=new Set(schemeRubros(grading.scheme).map(r=>r.id)),order=b=>b==='__project'?900:b==='__exam'?901:rubroIndex(grading.scheme,b);
   activities.sort((a,b)=>order(activityBucket(a,known))-order(activityBucket(b,known))||String(a.activity_date||'').localeCompare(String(b.activity_date||''))||a.id-b.id);
-  return {period:String(period),students,activities,grades,components:compMap,extraRows,extrasByStudent,grading,gradingMap,scheme:grading.scheme};
+  return {period:String(period),students,activities,grades,components:compMap,extraRows,extrasByStudent,grading,gradingMap,scheme:grading.scheme,riskMap};
 }
 
 
@@ -2442,7 +2463,7 @@ function renderNotebookPeriod(pd){
       :`<span class="auto-score notebook-auto" title="Calculado desde rúbricas y listas de cotejo">${fmtNum(gr.principal_avg)}</span>`;
     let pb=null;
     const activityCells=pd.activities.length?pd.activities.map(a=>{const b=activityBucket(a,known),first=b!==pb;pb=b;const cell=notebookActivityCell(a,s,pd);return grouped&&first?cell.replace('<td class="','<td class="rubro-start '):cell;}).join(''):'<td class="summary-cell">—</td>';
-    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td>${extraR.map(r=>`<td class="summary-cell work-cell" data-rubro-cell="${pd.period}:${s.id}:${escapeHtml(r.id)}">${fmtNum(gr.rubro_avgs?.[r.id])}</td>`).join('')}<td class="summary-cell principal-cell">${principalCell}</td>${attMode?`<td class="summary-cell attendance-cell">${notebookAttendanceCell(gr)}</td>`:`<td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td>`}<td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
+    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${riskDotHTML(pd.riskMap?.get(s.id))}${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td>${extraR.map(r=>`<td class="summary-cell work-cell" data-rubro-cell="${pd.period}:${s.id}:${escapeHtml(r.id)}">${fmtNum(gr.rubro_avgs?.[r.id])}</td>`).join('')}<td class="summary-cell principal-cell">${principalCell}</td>${attMode?`<td class="summary-cell attendance-cell">${notebookAttendanceCell(gr)}</td>`:`<td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td>`}<td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
   }).join('');
   const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
   const colspan=Math.max(pd.activities.length,1)+(attMode?7:8)+extraR.length;
@@ -2788,11 +2809,14 @@ async function buildWorkbook(gid,opts={}){
   const horario=[['Día','Inicio','Termina','Horas']];for(const b of groupBlocks(gid))horario.push([DAY_LONG[b.day],b.start,blockEndLabel(b),+b.hours||1]);
   if(horario.length===1)horario.push(['Sin horario registrado','','','']);
   for(const x of [...scheduleCache.no_class_days].sort((a,b)=>a.date.localeCompare(b.date)))horario.push(['Día sin clase',x.date,x.reason||'','']);
+  const bit=await readBitacora(gid),bitSheet=[['Fecha','No.','Alumno','Tipo','Nota']];
+  for(const e of [...bit.entries].sort((a,b)=>String(a.date).localeCompare(String(b.date)))){const st=sm.get(+e.student_id);bitSheet.push([e.date,st?.list_number??'',studentLabel(st||{}),LOG_TYPES[e.type]?.label||e.type,e.text||'']);}
+  if(bitSheet.length===1)bitSheet.push(['Sin notas en la bitácora','','','','']);
   const {record:teamRecord,teams:savedTeams}=await readSavedTeams(gid);
   const teamSheet=[['Equipo','No.','Alumno','Estado','Guardado / actualizado']];
   for(const t of savedTeams)for(const st of t.members)teamSheet.push([t.name,st.list_number??'',studentLabel(st),st.active!==0?'Activo':'Baja',teamRecord?.updated_at?new Date(teamRecord.updated_at).toLocaleString('es-MX'):'']);
   if(!savedTeams.length)teamSheet.push(['Sin equipos guardados','','','','']);
-  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por parcial',rows:porParcial},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Horario',rows:horario},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
+  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por parcial',rows:porParcial},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Horario',rows:horario},{name:'Bitácora',rows:bitSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
 async function exportFullExcelForGroup(gid){
   gid=+gid||0;if(!gid){toast('Selecciona un grupo',true);return;}
@@ -2805,7 +2829,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.13.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.14.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -4335,3 +4359,273 @@ function openAttendanceListExport(gid){
 }
 $('#exportAttendanceList')?.addEventListener('click',()=>openAttendanceListExport(attendanceHistoryGroupId()));
 $('#exportAttendanceListAdmin')?.addEventListener('click',()=>openAttendanceListExport(+$('#exportGroup')?.value||0));
+
+
+// ==========================================================================
+// 2.14.0 · Bitácora y semáforo del alumno
+// Notas por grupo en `meta` (key `bitacora:<gid>`): {entries:[{id,student_id,date,type,text,created_at}]}.
+// ==========================================================================
+const LOG_TYPES={justificante:{label:'Justificante',c:'jus'},conducta:{label:'Conducta',c:'con'},tutoria:{label:'Tutoría',c:'tut'},logro:{label:'Logro',c:'log'},nota:{label:'Nota',c:'not'}};
+async function readBitacora(gid){
+  const r=await MiAulaDB.get('meta',`bitacora:${+gid}`);
+  return {...(r||{}),key:`bitacora:${+gid}`,group_id:+gid,entries:Array.isArray(r?.entries)?r.entries:[]};
+}
+async function saveBitacora(rec){rec.updated_at=new Date().toISOString();rec.created_at=rec.created_at||rec.updated_at;await MiAulaDB.put('meta',rec);}
+// Semáforo: rojo con 20% de faltas o final menor a 6; ámbar con 15% de faltas, final menor a 7 o 3+ pendientes.
+function riskLevel(absencePct,final,pending){
+  const reasons=[];let level='ok';
+  if(absencePct!=null&&absencePct>=20){level='crit';reasons.push(`${fmtPct(absencePct)} de faltas`);}
+  else if(absencePct!=null&&absencePct>=15){level='warn';reasons.push(`${fmtPct(absencePct)} de faltas (cerca del 20%)`);}
+  if(final!=null&&final<6){level='crit';reasons.push(`final ${fmtNum(final)}`);}
+  else if(final!=null&&final<7){if(level==='ok')level='warn';reasons.push(`final ${fmtNum(final)}`);}
+  if(pending>=3){if(level==='ok')level='warn';reasons.push(`${pending} actividades sin entregar`);}
+  return {level,reasons,label:level==='crit'?'Requiere atención':level==='warn'?'Atención':'En rango'};
+}
+async function groupRiskMap(gid,opts={}){
+  gid=+gid;const g=await getGroupState(gid),p=String(g.current_period||1);
+  const grading=opts.grading||await computeGroupGrading(gid,p),gm=new Map(grading.students.map(r=>[r.id,r]));
+  const att=attendanceForPeriod(await MiAulaDB.byIndex('attendance','group_id',gid),g,p),byS=new Map();
+  for(const r of att){if(!byS.has(r.student_id))byS.set(r.student_id,[]);byS.get(r.student_id).push(r);}
+  const acts=await MiAulaDB.byIndex('activities','group_period',[gid,p]),lists=await Promise.all(acts.map(a=>MiAulaDB.byIndex('grades','activity_id',a.id)));
+  const gk=new Map(lists.flat().map(x=>[`${x.activity_id}:${x.student_id}`,x]));
+  const out=new Map();
+  for(const s of await MiAulaDB.groupStudents(gid,{includeInactive:false})){
+    if(isSecretaryPendingStudent(s))continue;
+    const t=attendanceTotals(byS.get(s.id)||[]),pending=acts.filter(a=>isEmptyGrade(a,gk.get(`${a.id}:${s.id}`))).map(a=>a.title);
+    const fin=gm.get(s.id)?.final_grade??null;
+    out.set(s.id,{...riskLevel(t.absencePct,fin,pending.length),absencePct:t.absencePct,totals:t,final:fin,pending,row:gm.get(s.id)||null});
+  }
+  return out;
+}
+function riskDotHTML(r){
+  if(!r||r.level==='ok')return '';
+  return `<span class="risk-dot ${r.level}" role="img" aria-label="${escapeHtml(r.label)}: ${escapeHtml(r.reasons.join(', '))}" title="${escapeHtml(r.label)}: ${escapeHtml(r.reasons.join(', '))}"></span>`;
+}
+let studentLogState={gid:0,sid:0,type:'justificante'};
+window.openStudentLog=async function(gid,sid){
+  gid=+gid;sid=+sid;if(!gid||!sid)return;
+  if(!$('#studentDrawer')?.classList.contains('hidden'))closeStudentDrawer();
+  const g=await getGroupState(gid),st=await MiAulaDB.get('students',sid);if(!g||!st)return;
+  if(studentLogState.sid!==sid)studentLogState={gid,sid,type:'justificante'};
+  const p=String(g.current_period||1),risk=(await groupRiskMap(gid)).get(sid)||{level:'ok',label:'En rango',reasons:[],absencePct:null,final:null,pending:[],totals:{}};
+  const log=await readBitacora(gid),entries=log.entries.filter(e=>+e.student_id===sid).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.created_at).localeCompare(String(a.created_at)));
+  const tone=v=>v==='crit'?'crit':v==='warn'?'warn':'ok';
+  const absTone=risk.absencePct>=20?'crit':risk.absencePct>=15?'warn':'ok',finTone=risk.final==null?'ok':risk.final<6?'crit':risk.final<7?'warn':'ok',penTone=risk.pending.length>=3?'warn':'ok';
+  const typeChips=Object.entries(LOG_TYPES).map(([k,v])=>`<label class="log-type${studentLogState.type===k?' active':''}"><input type="radio" name="logType" value="${k}" ${studentLogState.type===k?'checked':''}>${v.label}</label>`).join('');
+  const list=entries.length?entries.map(e=>{const t=LOG_TYPES[e.type]||LOG_TYPES.nota,d=parseISODateLocal(e.date);return `<div class="log-entry"><span class="log-date">${d?`${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0,3)} ${d.getFullYear()}`:escapeHtml(e.date)}</span><div class="log-body"><span class="log-chip ${t.c}">${t.label}</span><span>${escapeHtml(e.text||'')}</span></div><button type="button" class="sched-del" aria-label="Borrar nota" onclick="deleteLogEntry('${escapeHtml(e.id)}')">×</button></div>`;}).join(''):'<div class="sched-free">Todavía no hay notas para este alumno.</div>';
+  openModal(`Bitácora · ${studentLabel(st)}`,`
+    <div class="log-head"><div><small>No. ${st.list_number??'—'} · ${escapeHtml(g.name)} · Parcial ${p}</small></div><span class="risk-chip ${tone(risk.level)}"><span class="risk-dot ${tone(risk.level)}" aria-hidden="true"></span>${escapeHtml(risk.label)}</span></div>
+    <div class="log-indicators">
+      <div class="log-ind ${absTone}"><span>Faltas del parcial</span><strong>${risk.absencePct==null?'—':fmtPct(risk.absencePct)}</strong><small>${risk.totals?.F||0} h de falta de ${risk.totals?.total||0} h</small></div>
+      <div class="log-ind ${finTone}"><span>Final actual</span><strong>${risk.final==null?'Pendiente':fmtNum(risk.final)}</strong><small>Parcial ${p}</small></div>
+      <div class="log-ind ${penTone}"><span>Sin entregar</span><strong>${risk.pending.length}</strong><small>${escapeHtml(risk.pending.slice(0,3).join(' · ')||'Al corriente')}</small></div>
+    </div>
+    <form id="logForm" class="log-form">
+      <fieldset class="log-types"><legend class="sr-only">Tipo de nota</legend>${typeChips}</fieldset>
+      <div class="log-row"><label>Fecha<input type="date" id="logDate" value="${today}" required></label><label class="log-text">Nota<input id="logText" maxlength="300" placeholder="Ej. Trajo justificante médico" autocomplete="off"></label><button class="btn primary" type="submit">Guardar</button></div>
+      <label class="al-opt log-fix${studentLogState.type==='justificante'?'':' hidden'}" id="logFixWrap"><input type="checkbox" id="logFixAttendance" checked> Cambiar a asistencia (P) la falta o el retardo de ese día</label>
+    </form>
+    <div class="log-list">${list}</div>
+    <div class="modal-actions"><button class="btn subtle" type="button" onclick="printTutorReport(${gid},${sid})"><svg class="ui-icon" aria-hidden="true"><use href="#i-print"></use></svg><span>Reporte para tutor (PDF)</span></button><button class="btn" type="button" onclick="closeModal()">Cerrar</button></div>`);
+  $('#modal .modal-card')?.classList.add('wide');
+  $$('#logForm input[name="logType"]').forEach(r=>r.onchange=()=>{studentLogState.type=r.value;$$('#logForm .log-type').forEach(l=>l.classList.toggle('active',l.querySelector('input').checked));$('#logFixWrap')?.classList.toggle('hidden',r.value!=='justificante');});
+  $('#logForm').onsubmit=async e=>{
+    e.preventDefault();
+    const date=$('#logDate').value,text=$('#logText').value.trim(),type=document.querySelector('#logForm input[name="logType"]:checked')?.value||'nota';
+    if(!date){toast('Elige la fecha.',true);return;}
+    if(!text&&type!=='justificante'){toast('Escribe la nota.',true);return;}
+    const rec=await readBitacora(gid);
+    rec.entries.push({id:`n${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`,student_id:sid,date,type,text:text||'Justificante entregado',created_at:new Date().toISOString()});
+    await saveBitacora(rec);
+    let fixed='';
+    if(type==='justificante'&&$('#logFixAttendance')?.checked){
+      const a=await MiAulaDB.firstByIndex('attendance','unique_key',[gid,sid,date]);
+      if(a&&['F','R'].includes(String(a.status).toUpperCase())){a.status='P';a.notes=a.notes||'Justificante';a.updated_at=new Date().toISOString();await MiAulaDB.put('attendance',a);fixed=' · asistencia de ese día cambiada a P';}
+      else if(!a)fixed=' · ese día no tiene pase de lista';
+    }
+    studentLogState.type=type;
+    toast(`Nota guardada${fixed}`);
+    await openStudentLog(gid,sid);
+    if(currentView==='attendanceHistory')renderAttendanceMonitor();
+  };
+};
+window.deleteLogEntry=async id=>{
+  const {gid,sid}=studentLogState;const rec=await readBitacora(gid),old=rec.entries.find(e=>e.id===id);if(!old)return;
+  rec.entries=rec.entries.filter(e=>e.id!==id);await saveBitacora(rec);await openStudentLog(gid,sid);
+  showActionUndo('Nota borrada de la bitácora',async()=>{const r=await readBitacora(gid);r.entries.push(old);await saveBitacora(r);if(!$('#modal').classList.contains('hidden'))await openStudentLog(gid,sid);});
+};
+$('#studentLogBtn')?.addEventListener('click',()=>{const gid=notebookData?.group?.id,sid=studentDrawerState?.studentId;if(gid&&sid)openStudentLog(gid,sid);});
+window.printTutorReport=async function(gid,sid){
+  gid=+gid;sid=+sid;
+  const g=await getGroupState(gid),st=await MiAulaDB.get('students',sid);if(!g||!st)return;
+  const p=String(g.current_period||1),risk=(await groupRiskMap(gid)).get(sid);
+  const row=risk?.row||{},sc=await getScheme(gid,p),t=risk?.totals||{};
+  const entries=(await readBitacora(gid)).entries.filter(e=>+e.student_id===sid).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const comps=[['Trabajos',sc.work_pct,row.work_avg],...customRubros(sc).map(r=>[r.name,r.pct,row.rubro_avgs?.[r.id]??null]),[principalLabel(sc.principal_type||'project'),sc.project_pct,row.principal_avg],...(isAttendanceScheme(sc)?[['Asistencia',sc.attendance_pct,row.attendance_score]]:[['Valores',sc.values_pct,row.values_score],['Actitudes',sc.attitudes_pct,row.attitudes_score]])].filter(c=>+c[1]>0);
+  const html=`${prHeader(`Reporte para tutor · Parcial ${p}`,g)}
+  <section class="pr-student"><div><small>Alumno</small><strong>${escapeHtml(studentLabel(st))}</strong></div><div><small>No. de lista</small><strong>${st.list_number??'—'}</strong></div><div class="pr-final"><small>Semáforo</small><strong>${escapeHtml(risk?.label||'En rango')}</strong></div></section>
+  ${risk?.reasons?.length?`<p class="pr-note"><b>Motivo:</b> ${escapeHtml(risk.reasons.join(' · '))}.</p>`:''}
+  <h3>Calificación del parcial</h3>
+  <table class="pr-table"><thead><tr><th>Componente</th><th>Porcentaje</th><th class="pr-num">Calificación</th></tr></thead><tbody>${comps.map(([n,pct,v])=>`<tr><td>${escapeHtml(n)}</td><td>${+pct}%</td><td class="pr-num">${prScore(v)}</td></tr>`).join('')}<tr><td><b>Final</b></td><td></td><td class="pr-num"><b>${prScore(row.final_grade)}</b></td></tr></tbody></table>
+  <div class="pr-grid">
+    <section><h3>Asistencia (Parcial ${p})</h3><table class="pr-table compact"><tbody><tr><td>Horas computables</td><td class="pr-num">${t.total||0}</td></tr><tr><td>Faltas</td><td class="pr-num">${t.F||0} h</td></tr><tr><td>Retardos</td><td class="pr-num">${t.R||0} h</td></tr><tr><td><b>Porcentaje de faltas</b></td><td class="pr-num"><b>${fmtPct(t.absencePct)}</b></td></tr></tbody></table></section>
+    <section><h3>Actividades sin entregar</h3>${risk?.pending?.length?`<ul>${risk.pending.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:'<p class="pr-muted">Ninguna.</p>'}</section>
+  </div>
+  <h3>Bitácora</h3>
+  ${entries.length?`<table class="pr-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Nota</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${escapeHtml(e.date)}</td><td>${escapeHtml(LOG_TYPES[e.type]?.label||e.type)}</td><td>${escapeHtml(e.text||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="pr-muted">Sin notas registradas.</p>'}
+  <div class="pr-signs"><div><span></span><small>Ing. Niccolás C.M. · Docente</small></div><div><span></span><small>Nombre y firma del tutor</small></div></div>
+  ${prFoot()}`;
+  printHTML(`Reporte tutor ${studentLabel(st)}`,html);
+};
+
+// ==========================================================================
+// 2.14.0 · Una actividad en varios grupos
+// ==========================================================================
+function firstClassOnOrAfter(gid,iso){
+  const days=groupClassDays(gid),d=parseISODateLocal(iso);if(!days.size||!d)return iso;
+  for(let i=0;i<60;i++,d.setDate(d.getDate()+1)){const x=isoLocal(d);if(days.has(d.getDay())&&!isNoClassDay(x))return x;}
+  return iso;
+}
+async function multiGroupPlan(gid,rubro,dateIso,mode){
+  const g=await getGroupState(gid);if(!g||g.course_closed)return null;
+  const period=String(g.current_period||1),s=await getScheme(gid,period);
+  const match=rubro.id==='trabajos'?schemeRubros(s)[0]:schemeRubros(s).find(r=>normalizeText(r.name)===normalizeText(rubro.name));
+  if(!match)return null;
+  return {g,period,rubro:match,date:mode==='same'?dateIso:firstClassOnOrAfter(gid,dateIso)};
+}
+async function renderMultiGroups(){
+  const box=$('#activityMultiGroups');if(!box)return;
+  const gid=+$('#activityGroup')?.value||0,rid=$('#activityRubro')?.value||'';
+  if(!gid){box.innerHTML='<span class="field-help">Elige primero el grupo.</span>';updateMultiPreview();return;}
+  const main=groups.find(x=>+x.id===gid),g0=await getGroupState(gid),rubro=schemeRubros(await getScheme(gid,String(g0.current_period||1))).find(r=>r.id===rid);
+  const checked=new Set($$('#activityMultiGroups input[name="also_group"]:checked').map(x=>+x.value));
+  const others=groups.filter(x=>+x.id!==gid).sort((a,b)=>(normalizeText(b.discipline)===normalizeText(main?.discipline))-(normalizeText(a.discipline)===normalizeText(main?.discipline))||String(a.name).localeCompare(String(b.name),'es',{numeric:true}));
+  if(!others.length){box.innerHTML='<span class="field-help">No tienes otros grupos.</span>';updateMultiPreview();return;}
+  const chips=[];
+  for(const o of others){
+    const plan=rubro?await multiGroupPlan(o.id,rubro,$('#activityDate')?.value||today,'same'):null,ok=!!plan;
+    const why=!rubro?'':o.course_closed?'ciclo cerrado':!ok?`sin rubro «${rubro.name}»`:'';
+    chips.push(`<label class="mg-chip${ok?'':' disabled'}"><input type="checkbox" name="also_group" value="${o.id}" ${ok?'':'disabled'} ${ok&&checked.has(+o.id)?'checked':''}><span><b>${escapeHtml(o.name)}</b><small>${escapeHtml(o.discipline||'')}${why?` · ${escapeHtml(why)}`:''}</small></span></label>`);
+  }
+  box.innerHTML=chips.join('');
+  box.querySelectorAll('input').forEach(i=>i.onchange=()=>{i.closest('.mg-chip').classList.toggle('active',i.checked);updateMultiPreview();});
+  box.querySelectorAll('input:checked').forEach(i=>i.closest('.mg-chip').classList.add('active'));
+  updateMultiPreview();
+}
+let multiPreviewSeq=0;
+async function updateMultiPreview(){
+  const seq=++multiPreviewSeq;
+  const ids=$$('#activityMultiGroups input[name="also_group"]:checked').map(x=>+x.value),btn=$('#activityForm button[type="submit"]');
+  $('#activityMultiDate')?.classList.toggle('hidden',!ids.length);
+  const pv=$('#activityMultiPreview');
+  if(btn)btn.textContent=ids.length?`Crear en ${ids.length+1} grupos`:'Crear actividad';
+  if(!pv)return;
+  if(!ids.length){pv.classList.add('hidden');pv.innerHTML='';return;}
+  const gid=+$('#activityGroup').value,g0=await getGroupState(gid),rubro=schemeRubros(await getScheme(gid,String(g0.current_period||1))).find(r=>r.id===$('#activityRubro').value);
+  if(!rubro)return;
+  const date=$('#activityDate')?.value||today,mode=document.querySelector('#activityForm input[name="multi_date"]:checked')?.value||'next';
+  const fmt=iso=>{const d=parseISODateLocal(iso);return d?`${DAY_SHORT[d.getDay()].toLowerCase()} ${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0,3)}`:iso;};
+  const rows=[`<div class="mp-row main"><b>${escapeHtml(g0.name)}</b><span>${fmt(date)}</span><span>${escapeHtml(rubro.name)}</span><span>Parcial ${g0.current_period||1}</span></div>`];
+  for(const id of ids){const pl=await multiGroupPlan(id,rubro,date,mode);if(pl)rows.push(`<div class="mp-row"><b>${escapeHtml(pl.g.name)}</b><span>${fmt(pl.date)}</span><span>${escapeHtml(pl.rubro.name)}</span><span>Parcial ${pl.period}</span></div>`);}
+  if(seq!==multiPreviewSeq)return;
+  pv.classList.remove('hidden');
+  pv.innerHTML=`<div class="mp-row head"><span>Grupo</span><span>Fecha</span><span>Rubro</span><span>Parcial</span></div>${rows.join('')}`;
+}
+$('#activityRubro')?.addEventListener('change',()=>renderMultiGroups());
+$('#activityDate')?.addEventListener('change',()=>updateMultiPreview());
+$$('#activityForm input[name="multi_date"]').forEach(r=>r.addEventListener('change',()=>updateMultiPreview()));
+
+// ==========================================================================
+// 2.14.0 · Asistente de cierre de parcial
+// Marca de Excel/respaldo por parcial en `meta` (key `cierre:<gid>:<p>`).
+// ==========================================================================
+async function closingMeta(gid,p){return (await MiAulaDB.get('meta',`cierre:${+gid}:${p}`))||{key:`cierre:${+gid}:${p}`,group_id:+gid,period:String(p)};}
+async function markClosing(gid,p,field){const r=await closingMeta(gid,p);r[field]=new Date().toISOString();await MiAulaDB.put('meta',r);}
+async function closingReview(gid){
+  gid=+gid;const g=await getGroupState(gid),p=String(g.current_period||1);
+  const students=(await MiAulaDB.groupStudents(gid,{includeInactive:false})).sort((a,b)=>(a.list_number??9999)-(b.list_number??9999)),sm=new Map(students.map(s=>[s.id,s]));
+  const countable=students.filter(s=>!isSecretaryPendingStudent(s));
+  const activities=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>String(a.activity_date||'').localeCompare(String(b.activity_date||'')));
+  const lists=await Promise.all(activities.map(a=>MiAulaDB.byIndex('grades','activity_id',a.id))),gk=new Map(lists.flat().map(x=>[`${x.activity_id}:${x.student_id}`,x]));
+  const allAtt=await MiAulaDB.byIndex('attendance','group_id',gid),att=attendanceForPeriod(allAtt,g,p);
+  // 1. Días de clase sin pase de lista (según el horario)
+  const prevClose=periodClosures(g)[+p-1];
+  const startDay=prevClose?localDayOf(prevClose):[...att.map(r=>r.attendance_date),...activities.map(a=>a.activity_date).filter(Boolean)].sort()[0]||null;
+  const anyDate=new Set(allAtt.map(r=>r.attendance_date)),takenDays=new Set(att.filter(r=>String(r.status).toUpperCase()!=='S').map(r=>r.attendance_date));
+  let scheduled=null,missing=[];
+  if(groupClassDays(gid).size&&startDay){
+    scheduled=[];const d=parseISODateLocal(startDay),end=parseISODateLocal(today),days=groupClassDays(gid);
+    for(;d<=end;d.setDate(d.getDate()+1)){const x=isoLocal(d);if(days.has(d.getDay())&&!isNoClassDay(x))scheduled.push(x);}
+    missing=scheduled.filter(x=>!anyDate.has(x));
+  }
+  // 2. Calificaciones vacías
+  const empties=activities.map(a=>({a,n:countable.filter(s=>isEmptyGrade(a,gk.get(`${a.id}:${s.id}`))).length})).filter(x=>x.n);
+  // 3. Retardos por convertir
+  const log=await readBitacora(gid);
+  const retardos=att.filter(r=>String(r.status).toUpperCase()==='R'&&sm.has(r.student_id)).sort((a,b)=>String(a.attendance_date).localeCompare(String(b.attendance_date))).map(r=>({r,s:sm.get(r.student_id),just:log.entries.some(e=>+e.student_id===+r.student_id&&e.type==='justificante'&&e.date===r.attendance_date)}));
+  // 4. Proyecto / Examen
+  const grading=await computeGroupGrading(gid,p),sc=grading.scheme,principal=principalLabel(sc.principal_type||'project');
+  const noPrincipal=+sc.project_pct>0?grading.students.filter(s=>!isSecretaryPendingStudent(s)&&s.principal_avg==null):[];
+  // Resumen y riesgo
+  const risk=await groupRiskMap(gid,{grading}),finals=grading.students.filter(s=>s.final_grade!=null);
+  const meta=await closingMeta(gid,p);
+  return {g,p,students,countable,activities,att,scheduled,missing,takenDays,empties,retardos,grading,principal,noPrincipal,risk,finals,meta};
+}
+window.openClosingAssistant=async function(gid){
+  gid=+gid;const R=await closingReview(gid),{g,p}=R,next=+p<totalPeriods(g)?+p+1:null;
+  const item=(state,title,detail,actions='',extra='')=>`<div class="ca-item ${state}"><span class="ca-icon ${state}" aria-hidden="true">${state==='ok'?'<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>':state==='warn'?'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg>':'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>'}</span><div class="ca-copy"><strong>${title}</strong><small>${detail}</small>${extra}</div><div class="ca-actions">${actions}</div></div>`;
+  const fmt=iso=>{const d=parseISODateLocal(iso);return d?`${DAY_SHORT[d.getDay()].toLowerCase()} ${d.getDate()} ${MONTHS_ES[d.getMonth()].slice(0,3)}`:iso;};
+  const items=[];let ready=0;
+  // 1
+  if(R.scheduled){const ok=!R.missing.length;if(ok)ready++;
+    items.push(item(ok?'ok':'warn',ok?'Pase de lista completo':`${R.missing.length} día${R.missing.length===1?'':'s'} de clase sin pase de lista`,`${R.scheduled.length} clases según tu horario · ${R.takenDays.size} con lista`,'',ok?'':`<div class="ca-tags">${R.missing.slice(0,8).map(d=>`<button type="button" class="ca-tag" onclick="closingOpenDay(${gid},'${d}')">${fmt(d)}</button>`).join('')}${R.missing.length>8?`<span class="ca-more">+${R.missing.length-8}</span>`:''}</div>`));}
+  else{ready++;items.push(item('ok','Pase de lista',`${R.takenDays.size} clases con lista en este parcial. Agrega tu horario para que MiAula detecte los días sin lista.`));}
+  // 2
+  const emptyTotal=R.empties.reduce((n,x)=>n+x.n,0);if(!emptyTotal)ready++;
+  items.push(item(emptyTotal?'warn':'ok',emptyTotal?`${emptyTotal} calificaci${emptyTotal===1?'ón vacía':'ones vacías'} en ${R.empties.length} actividad${R.empties.length===1?'':'es'}`:'Sin calificaciones vacías',emptyTotal?escapeHtml(R.empties.slice(0,4).map(x=>`${x.a.title} (${x.n})`).join(' · ')+(R.empties.length>4?' …':'')):`${R.activities.length} actividades revisadas`,emptyTotal?`<button type="button" class="btn small subtle" onclick="closingOpenNotebook(${gid})">Revisar en cuaderno</button>`:''));
+  // 3
+  if(!R.retardos.length)ready++;
+  items.push(item(R.retardos.length?'warn':'ok',R.retardos.length?`${R.retardos.length} retardo${R.retardos.length===1?'':'s'} por convertir en asistencia`:'Sin retardos pendientes',R.retardos.length?'Retardo = falta en espera de justificante. Cámbialo a P cuando lo traiga.':'Todos los retardos ya se resolvieron','',R.retardos.length?`<div class="ca-sub">${R.retardos.slice(0,6).map(x=>`<div class="ca-sub-row"><span><b>${escapeHtml(studentLabel(x.s))}</b> · ${fmt(x.r.attendance_date)} · <em class="${x.just?'ok':'warn'}">${x.just?'con justificante':'sin justificante'}</em></span><button type="button" class="btn small subtle" onclick="closingFixRetardo(${gid},${x.r.id})">Cambiar a P</button></div>`).join('')}${R.retardos.length>6?`<small>+${R.retardos.length-6} más en el Historial</small>`:''}</div>`:''));
+  // 4
+  if(!R.noPrincipal.length)ready++;
+  items.push(item(R.noPrincipal.length?'warn':'ok',R.noPrincipal.length?`${R.noPrincipal.length} alumno${R.noPrincipal.length===1?'':'s'} sin ${R.principal}`:`${R.principal} completo`,R.noPrincipal.length?escapeHtml(R.noPrincipal.slice(0,4).map(s=>s.name).join(' · ')+(R.noPrincipal.length>4?' …':'')):`${R.grading.students.length} alumnos con calificación`,R.noPrincipal.length?`<button type="button" class="btn small subtle" onclick="closeModal();goView('evaluation')">Ir a ${R.principal}</button>`:''));
+  // 5
+  if(R.meta.excel_at)ready++;
+  items.push(item(R.meta.excel_at?'ok':'todo','Excel de cierre',R.meta.excel_at?`Generado ${new Date(R.meta.excel_at).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:'Las vacías salen como 0 solo en el archivo',`<button type="button" class="btn small ${R.meta.excel_at?'subtle':'primary'}" id="caExcel">${R.meta.excel_at?'Generar otra vez':'Generar Excel'}</button>`));
+  // 6
+  if(R.meta.backup_at)ready++;
+  items.push(item(R.meta.backup_at?'ok':'todo','Respaldo',R.meta.backup_at?`Descargado ${new Date(R.meta.backup_at).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:'Copia completa de los datos de esta tablet',`<button type="button" class="btn small ${R.meta.backup_at?'subtle':'primary'}" id="caBackup">${R.meta.backup_at?'Descargar otra vez':'Descargar respaldo'}</button>`));
+  const avg=R.finals.length?R.finals.reduce((n,s)=>n+s.final_grade,0)/R.finals.length:null;
+  const riskList=[...R.risk.entries()].filter(([,r])=>r.level!=='ok').sort((a,b)=>(b[1].level==='crit')-(a[1].level==='crit'));
+  const abs20=[...R.risk.values()].filter(r=>(r.absencePct||0)>=20).length,low6=R.finals.filter(s=>s.final_grade<6).length;
+  openModal(`Cerrar Parcial ${p} · ${g.name}`,`
+    <div class="ca-progress"><span>${ready} de 6 listos</span><div class="ca-bar"><div style="width:${Math.round(ready*100/6)}%"></div></div></div>
+    <div class="ca-grid">
+      <div class="ca-list">${items.join('')}</div>
+      <aside class="ca-side">
+        <div class="ca-summary"><span class="eyebrow">Así cierra el parcial</span>
+          <div class="ca-big"><span>Promedio del grupo</span><strong>${avg==null?'—':fmtNum(avg)}</strong></div>
+          <div class="ca-line"><span>Alumnos con final</span><b>${R.finals.length} de ${R.grading.students.length}</b></div>
+          <div class="ca-line"><span>Faltas 20% o más</span><b class="${abs20?'crit':''}">${abs20}</b></div>
+          <div class="ca-line"><span>Final menor a 6</span><b class="${low6?'warn':''}">${low6}</b></div>
+          ${riskList.length?`<details class="ca-risk"><summary>Alumnos en riesgo (${riskList.length})</summary>${riskList.map(([sid,r])=>`<button type="button" class="ca-risk-row" onclick="openStudentLog(${gid},${sid})"><span class="risk-dot ${r.level}" aria-hidden="true"></span><span><b>${escapeHtml(studentLabel(R.students.find(s=>s.id===sid)||{}))}</b><small>${escapeHtml(r.reasons.join(' · '))}</small></span></button>`).join('')}</details>`:''}
+        </div>
+        <p class="ca-note">Puedes cerrar aunque haya avisos. Nada se borra: el Parcial ${p} queda en «Consultar parciales pasados».</p>
+        <button type="button" class="btn danger-outline ca-close" id="cierreConfirm">${next?`Cerrar Parcial ${p} e iniciar Parcial ${next}`:`Cerrar Parcial ${p} · terminar ciclo`}</button>
+      </aside>
+    </div>`);
+  $('#modal .modal-card')?.classList.add('wide','closing-card');
+  $('#caExcel').onclick=async()=>{
+    try{const stats={zeros:0},book=await buildWorkbook(gid,{emptyAsZero:true,stats}),safe=String(g.name).replace(/[^A-Za-z0-9_-]+/g,'_');downloadBlob(XLSXLite.write(book),`MiAula_${safe}_P${p}_CIERRE_${today}.xlsx`);await markClosing(gid,p,'excel_at');toast(`Excel de cierre generado · ${stats.zeros} vacías como 0`);await openClosingAssistant(gid);}catch(e){console.error(e);toast(e.message,true);}
+  };
+  $('#caBackup').onclick=async()=>{await downloadMiAulaBackup();await markClosing(gid,p,'backup_at');await openClosingAssistant(gid);};
+  $('#cierreConfirm').onclick=async()=>{const ok=await doClosePeriod(gid);if(ok)closeModal();};
+};
+window.closingOpenDay=async(gid,date)=>{closeModal();await setContextGroup(+gid,{propagate:true,refresh:false});if($('#attendanceGroup'))$('#attendanceGroup').value=String(gid);goView('attendance');$('#attendanceDate').value=date;await loadAttendance();};
+window.closingOpenNotebook=async gid=>{closeModal();await openNotebook(+gid);if($('#notebookFilter')){$('#notebookFilter').value='pending';applyNotebookFilters();}};
+window.closingFixRetardo=async(gid,id)=>{
+  const a=await MiAulaDB.get('attendance',+id);if(!a)return;
+  const old=a.status;a.status='P';a.updated_at=new Date().toISOString();await MiAulaDB.put('attendance',a);
+  await openClosingAssistant(gid);
+  showActionUndo('Retardo cambiado a asistencia',async()=>{const b=await MiAulaDB.get('attendance',+id);if(b){b.status=old;b.updated_at=new Date().toISOString();await MiAulaDB.put('attendance',b);}if(!$('#modal').classList.contains('hidden'))await openClosingAssistant(gid);});
+};
