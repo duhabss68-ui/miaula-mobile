@@ -63,28 +63,57 @@ function parseISODateLocal(value){
   const d=new Date(+m[1],+m[2]-1,+m[3]);
   return Number.isNaN(d.getTime())?null:d;
 }
-function schoolDaysElapsed(activityDate,referenceDate=new Date()){
+// 2.12.0 · Horario de clases. Un solo registro en `meta` (key 'schedule'); se respalda con todo lo demás.
+let scheduleCache={blocks:[],no_class_days:[]};
+const DAY_SHORT=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],DAY_LONG=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+async function loadScheduleCache(){
+  try{const r=await MiAulaDB.get('meta','schedule');scheduleCache={blocks:Array.isArray(r?.blocks)?r.blocks:[],no_class_days:Array.isArray(r?.no_class_days)?r.no_class_days:[]};}
+  catch(e){console.warn('Horario',e);scheduleCache={blocks:[],no_class_days:[]};}
+  return scheduleCache;
+}
+async function saveScheduleCache(){
+  const prior=await MiAulaDB.get('meta','schedule');
+  await MiAulaDB.put('meta',{...(prior||{}),key:'schedule',blocks:scheduleCache.blocks,no_class_days:scheduleCache.no_class_days,created_at:prior?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()});
+}
+function isoLocal(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function groupBlocks(gid){return scheduleCache.blocks.filter(b=>+b.group_id===+gid).sort((a,b)=>a.day-b.day||String(a.start).localeCompare(String(b.start)));}
+function groupClassDays(gid){return new Set(groupBlocks(gid).map(b=>+b.day));}
+function isNoClassDay(iso){return scheduleCache.no_class_days.some(x=>x.date===iso);}
+function scheduledHours(gid,iso){const d=parseISODateLocal(iso);if(!d||isNoClassDay(iso))return 0;return groupBlocks(gid).filter(b=>+b.day===d.getDay()).reduce((n,b)=>n+(+b.hours||1),0);}
+// Con horario: el «Máx.» baja 1 por cada día que el grupo tiene clase. Sin horario: por día hábil (L–V).
+// Los «días sin clase» (festivos, suspensiones) nunca cuentan.
+function schoolDaysElapsed(activityDate,referenceDate=new Date(),gid=null){
   const start=parseISODateLocal(activityDate);if(!start)return 0;
   const end=new Date(referenceDate.getFullYear(),referenceDate.getMonth(),referenceDate.getDate());
   if(end<=start)return 0;
+  const days=gid?groupClassDays(gid):new Set();
   let count=0;
   const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+1);
   while(d<=end){
-    const day=d.getDay();
-    if(day!==0&&day!==6)count++;
+    const day=d.getDay(),counts=days.size?days.has(day):(day!==0&&day!==6);
+    if(counts&&!isNoClassDay(isoLocal(d)))count++;
     d.setDate(d.getDate()+1);
   }
   return count;
 }
+function nextClassDate(gid,fromDate=new Date()){
+  const days=groupClassDays(gid);if(!days.size)return null;
+  const d=new Date(fromDate.getFullYear(),fromDate.getMonth(),fromDate.getDate()+1);
+  for(let i=0;i<60;i++,d.setDate(d.getDate()+1))if(days.has(d.getDay())&&!isNoClassDay(isoLocal(d)))return new Date(d);
+  return null;
+}
 function activityAvailableMax(activity,referenceDate=new Date()){
   const original=Number.isFinite(+activity?.max_score)?Math.max(0,+activity.max_score):10;
-  const elapsed=schoolDaysElapsed(activity?.activity_date,referenceDate);
+  const elapsed=schoolDaysElapsed(activity?.activity_date,referenceDate,activity?.group_id);
   return Math.max(0,+(original-elapsed).toFixed(2));
 }
 function activityMaxIndicator(activity){
   const available=activityAvailableMax(activity);
   const level=available<=0?' zero':available<=3?' low':available<=6?' mid':' ok';
-  return `<small class="activity-daily-max${level}" title="Indicador según días hábiles transcurridos; no limita la calificación que captures.">Máx. ${fmtShort(available,1)}</small>`;
+  const withSchedule=groupClassDays(activity?.group_id).size>0;
+  let title=withSchedule?'Baja 1 punto por cada clase de este grupo según tu horario (los días sin clase no cuentan). No limita la calificación que captures.':'Baja 1 punto por cada día hábil (agrega tu horario para que baje solo en días de clase). No limita la calificación que captures.';
+  if(withSchedule&&available>0){const n=nextClassDate(activity.group_id);if(n)title+=` Próxima clase: ${DAY_LONG[n.getDay()]} ${n.getDate()} → Máx. ${fmtShort(Math.max(0,available-1),1)}.`;}
+  return `<small class="activity-daily-max${level}" title="${escapeHtml(title)}">Máx. ${fmtShort(available,1)}</small>`;
 }
 function toast(msg,error=false){
   const t=$('#toast');
@@ -196,7 +225,7 @@ function goView(name){
   $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   $('#viewTitle').textContent={
     dashboard:'Inicio',groups:'Mis grupos',attendance:'Asistencia',attendanceHistory:'Historial de asistencia',dynamics:'Ruleta y equipos',
-    activities:'Calificaciones',notebook:'Cuaderno digital',grading:'Parcial',evaluation:'Proyecto',more:'Administración'
+    activities:'Calificaciones',notebook:'Cuaderno digital',grading:'Parcial',evaluation:'Proyecto',more:'Administración',schedule:'Mi horario'
   }[name]||name;
   updateAppNav();
   if(name==='dashboard') loadSummary();
@@ -207,6 +236,7 @@ function goView(name){
   if(name==='evaluation'){loadInstruments().then(()=>loadPrincipalWorkspace());}
   if(name==='dynamics') loadDynamicsStudents(true);
   if(name==='more') loadAdminOverview();
+  if(name==='schedule') renderSchedule();
   try{localStorage.setItem('miaula:lastView',name);}catch{}
 }
 window.goView=goView;
@@ -230,7 +260,7 @@ $('#evalDate').value=today;
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   let swControllerChanged=false;
-  navigator.serviceWorker.register('sw.js?v=2.11.0',{updateViaCache:'none'}).then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=2.13.0',{updateViaCache:'none'}).then(reg=>{
     reg.update().catch(()=>{});
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible')reg.update().catch(()=>{});
@@ -248,6 +278,7 @@ async function init(){
     await MiAulaDB.open();
     await MiAulaDB.normalizeRecords();
     try{await stampAllAttendancePeriods();}catch(e){console.warn('Asistencia por parcial',e);}
+    await loadScheduleCache();
     $('#systemStatus').textContent='Datos locales listos';
     await refreshGroups();
     await loadInstruments();
@@ -520,6 +551,7 @@ async function loadAttendance(){
   const existing=await MiAulaDB.byIndex('attendance','group_date',[gid,dt]);
   const em=new Map(existing.map(a=>[a.student_id,a]));
   if(existing.length) $('#attendanceHours').value=String(existing[0].class_hours||1);
+  else{const sh=scheduledHours(gid,dt);if(sh>0)$('#attendanceHours').value=String(Math.min(8,sh));}
   await renderAttendancePeriodNote(gid,dt,existing);
   attendanceData=students.map(student=>{
     const old=em.get(student.id);
@@ -545,8 +577,10 @@ async function renderAttendancePeriodNote(gid,dt,existing){
     box.className='attendance-period-note closed';
     box.innerHTML=`<strong>Parcial ${p} · cerrado</strong><span>Esta fecha pertenece a un parcial ya cerrado. Puedes corregirla (por ejemplo, cambiar R por P al recibir el justificante); el cambio se guarda en el Parcial ${p} y no afecta al parcial actual.</span>`;
   }else{
+    const sh=scheduledHours(gid,dt),d=parseISODateLocal(dt),hasSchedule=groupClassDays(gid).size>0;
+    const extra=!hasSchedule?'':isNoClassDay(dt)?' · Marcado como día sin clase en tu horario.':sh?` · Horario: ${sh} h este ${DAY_LONG[d.getDay()]}.`:` · Según tu horario, este grupo no tiene clase los ${DAY_LONG[d?.getDay()??1]}.`;
     box.className='attendance-period-note';
-    box.innerHTML=`<strong>Parcial ${p}</strong><span>El pase de lista cuenta para la Asistencia (10%) de este parcial.</span>`;
+    box.innerHTML=`<strong>Parcial ${p}</strong><span>El pase de lista cuenta para la Asistencia (10%) de este parcial.${extra}</span>`;
   }
 }
 
@@ -1346,6 +1380,18 @@ window.openTeamProject=async function(gid,index=0){
 };
 
 // -------------------- ACTIVIDADES Y CALIFICACIONES --------------------
+// 2.13.0: el formulario solo ofrece los rubros del parcial marcados «En la lista».
+async function populateActivityRubros(){
+  const sel=$('#activityRubro');if(!sel)return;
+  const gid=+$('#activityGroup')?.value||0,keep=sel.value;
+  if(!gid){sel.innerHTML='<option value="">Elige un grupo</option>';return;}
+  const g=await getGroupState(gid);if(!g)return;
+  const s=await getScheme(gid,String(g.current_period||1)),list=schemeRubros(s).filter(r=>r.show);
+  sel.innerHTML=list.length?list.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${+r.pct?` · ${+r.pct}%`:''}</option>`).join(''):'<option value="">Sin rubros en la lista · configúralos en Parcial</option>';
+  if(list.some(r=>r.id===keep))sel.value=keep;
+  if($('#activityRubroHelp'))$('#activityRubroHelp').textContent=`Rubros del Parcial ${g.current_period||1}. Para agregar o mostrar otros, ve a Parcial → Rubros.`;
+}
+window.populateActivityRubros=populateActivityRubros;
 $('#activityForm').onsubmit=async e=>{
   e.preventDefault();
   const d=Object.fromEntries(new FormData(e.target));
@@ -1354,6 +1400,9 @@ $('#activityForm').onsubmit=async e=>{
   const g=await getGroupState(d.group_id);
   if(g.course_closed){toast(`Este grupo ya cerró sus ${totalPeriods(g)} parciales.`,true);return;}
   d.period=String(g.current_period||1);
+  const rs=schemeRubros(await getScheme(d.group_id,d.period)),rubro=rs.find(r=>r.id===d.rubro_id);
+  if(!rubro){toast('Elige el rubro en el que cuenta la actividad.',true);return;}
+  d.rubro_id=rubro.id;d.activity_type=rubro.id==='trabajos'?'Trabajo':rubro.name;
   d.max_score=+d.max_score;d.weight=+d.weight;d.created_at=new Date().toISOString();
   const gradingMode=d.grading_mode,rubricRef=d.rubric_ref;delete d.grading_mode;delete d.rubric_ref;
   if(gradingMode==='rubric'){
@@ -1367,21 +1416,33 @@ $('#activityForm').onsubmit=async e=>{
   toast(`Actividad creada en Parcial ${d.period}`);
 };
 $('#activityFilter').onchange=loadActivities;
-$('#activityGroup').onchange=async()=>{const gid=+$('#activityGroup').value;if(gid){$('#activityFilter').value=String(gid);await loadActivities();}};
+$('#activityGroup').onchange=async()=>{const gid=+$('#activityGroup').value;await populateActivityRubros();if(gid){$('#activityFilter').value=String(gid);await loadActivities();}};
 async function loadActivities(){
   const gid=+$('#activityFilter').value||+$('#activityGroup').value||groups[0]?.id;
   if(!gid){$('#activityCards').innerHTML='<div class="empty-state">Crea un grupo primero.</div>';return;}
   $('#activityFilter').value=String(gid);
   if(!$('#activityGroup').value)$('#activityGroup').value=String(gid);
+  await populateActivityRubros();
   const g=await getGroupState(gid),p=String(g.current_period||1);
   if($('#activityPeriodBadge'))$('#activityPeriodBadge').textContent=g.course_closed?`Parcial ${p} de ${totalPeriods(g)} cerrado · ciclo concluido`:`Parcial ${p} de ${totalPeriods(g)} · en curso`;
   if(g.course_closed){$('#activityCards').innerHTML=`<div class="empty-state">Los ${totalPeriods(g)} parciales están cerrados. El historial permanece en la exportación de Excel.</div>`;return;}
   const arr=(await MiAulaDB.byIndex('activities','group_period',[gid,p])).sort((a,b)=>b.id-a.id);
   $('#activityCards').innerHTML=arr.length
-    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.activity_type)} · Parcial ${a.period} · Fecha ${escapeHtml(a.activity_date||'Sin fecha')} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row">${activityCardButtons(a)}<button class="btn small subtle" onclick="editActivityDate(${a.id})">Editar fecha</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
+    ?arr.map(a=>`<div class="activity-card"><div><strong>${escapeHtml(a.title)}</strong>${activityMaxIndicator(a)}<small>${escapeHtml(a.rubro_id?a.rubro_id==='trabajos'?'Trabajos':a.activity_type:a.activity_type)} · Parcial ${a.period} · Fecha ${escapeHtml(a.activity_date||'Sin fecha')} · Puntaje original ${a.max_score} · Peso ${a.weight}</small></div><div class="action-row">${activityCardButtons(a)}<button class="btn small subtle" onclick="editActivityDate(${a.id})">Editar fecha</button><button class="btn small subtle" onclick="changeActivityRubro(${a.id})">Cambiar rubro</button><button class="btn small danger" onclick="deleteActivity(${a.id})">Eliminar</button></div></div>`).join('')
     :`<div class="empty-state">Parcial ${p} limpio. Crea la primera actividad.</div>`;
   await syncGroupPeriodIndicators(gid);
 }
+window.changeActivityRubro=async aid=>{
+  const a=await MiAulaDB.get('activities',+aid);if(!a)return;
+  const s=await getScheme(a.group_id,a.period),rs=schemeRubros(s),known=new Set(rs.map(r=>r.id)),cur=activityBucket(a,known);
+  if(cur==='__project'||cur==='__exam'){toast('Esta actividad cuenta como Proyecto/Examen y no se mueve de rubro.',true);return;}
+  openModal(`Rubro · ${a.title}`,`<p class="modal-help">Las calificaciones no cambian; solo cambia el rubro en el que cuenta la actividad.</p><div class="rubro-pick">${rs.map(r=>`<label class="al-opt"><input type="radio" name="pickRubro" value="${escapeHtml(r.id)}" ${r.id===cur?'checked':''}> ${escapeHtml(r.name)} <small>${+r.pct||0}%${r.show?'':' · oculto en la lista'}</small></label>`).join('')}</div><div class="modal-actions"><button class="btn subtle" onclick="closeModal()">Cancelar</button><button class="btn primary" id="pickRubroSave">Guardar</button></div>`);
+  $('#pickRubroSave').onclick=async()=>{
+    const id=document.querySelector('input[name="pickRubro"]:checked')?.value,r=rs.find(x=>x.id===id);if(!r)return;
+    a.rubro_id=r.id;a.activity_type=r.id==='trabajos'?'Trabajo':r.name;await MiAulaDB.put('activities',a);
+    closeModal();await loadActivities();if(currentView==='notebook')await loadNotebook();toast(`«${a.title}» ahora cuenta en ${r.name}`);
+  };
+};
 window.openGrades=async aid=>{
   const activity=await MiAulaDB.get('activities',aid);if(!activity)return;
   if(isRubricActivity(activity)){await openRubricEvaluator(aid);return;}
@@ -1429,8 +1490,93 @@ window.editActivityDate=async id=>{
 
 window.deleteActivity=async id=>{const delA=await MiAulaDB.get('activities',id),delG=(await MiAulaDB.byIndex('grades','activity_id',id)).filter(g=>g.score!=null||g.status||(g.rubric_levels&&Object.keys(g.rubric_levels).length)).length;if(!confirm(`¿Eliminar definitivamente la actividad «${delA?.title||''}» y sus ${delG} calificaciones${isRubricActivity(delA)?' (incluida su rúbrica)':''}?\n\nEsto no se puede deshacer.`))return;await MiAulaDB.deleteActivity(id);$('#gradePanel').classList.add('hidden');await loadActivities();await loadSummary();toast('Actividad eliminada');};
 
+// -------------------- MI HORARIO (2.12.0) --------------------
+function groupColorIndex(gid){const ids=[...groups].map(g=>+g.id).sort((a,b)=>a-b);const i=ids.indexOf(+gid);return (i<0?+gid:i)%8;}
+let scheduleSelectedDays=new Set([1]);
+function renderScheduleDayChips(){
+  const box=$('#scheduleDays');if(!box)return;
+  box.innerHTML=[1,2,3,4,5,6].map(d=>`<button type="button" class="day-chip${scheduleSelectedDays.has(d)?' active':''}" data-day="${d}" aria-pressed="${scheduleSelectedDays.has(d)}">${DAY_SHORT[d]}</button>`).join('');
+  box.querySelectorAll('.day-chip').forEach(b=>b.onclick=()=>{const d=+b.dataset.day;scheduleSelectedDays.has(d)?scheduleSelectedDays.delete(d):scheduleSelectedDays.add(d);renderScheduleDayChips();});
+}
+async function renderSchedule(){
+  await loadScheduleCache();
+  const sel=$('#scheduleGroup');
+  if(sel){const keep=sel.value||$('#contextGroup')?.value||'';sel.innerHTML='<option value="">Seleccionar…</option>'+groups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)} — ${escapeHtml(g.discipline||'')}</option>`).join('');if(groups.some(g=>String(g.id)===String(keep)))sel.value=String(keep);}
+  renderScheduleDayChips();
+  const gm=new Map(groups.map(g=>[+g.id,g]));
+  const blocks=scheduleCache.blocks.filter(b=>gm.has(+b.group_id));
+  const days=[1,2,3,4,5,...(blocks.some(b=>+b.day===6)?[6]:[])];
+  const week=$('#scheduleWeek');
+  if(week){
+    week.style.setProperty('--sched-cols',days.length);
+    week.innerHTML=days.map(d=>{
+      const list=blocks.filter(b=>+b.day===d).sort((a,b)=>blockMinutes(a)-blockMinutes(b));
+      const hrs=list.reduce((n,b)=>n+(+b.hours||1),0);
+      return `<div class="sched-day${d===new Date().getDay()?' today':''}"><div class="sched-day-head"><strong>${DAY_LONG[d][0].toUpperCase()+DAY_LONG[d].slice(1)}</strong><small>${hrs?hrs+' h':'Libre'}</small></div>${list.map(b=>{const g=gm.get(+b.group_id);return `<div class="sched-block sg-c${groupColorIndex(b.group_id)}"><div><b>${escapeHtml(b.start)}–${blockEndLabel(b)}</b><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.discipline||'')} · ${+b.hours||1} h</small></div><button type="button" class="sched-del" aria-label="Quitar ${escapeHtml(g.name)} del ${DAY_LONG[d]}" onclick="removeScheduleBlock('${escapeHtml(b.id)}')">×</button></div>`;}).join('')||'<div class="sched-free">Sin clases</div>'}</div>`;
+    }).join('');
+  }
+  const total=blocks.reduce((n,b)=>n+(+b.hours||1),0),withSched=new Set(blocks.map(b=>+b.group_id)).size;
+  if($('#scheduleSummary'))$('#scheduleSummary').textContent=blocks.length?`${total} horas por semana · ${withSched} de ${groups.length} grupos con horario`:'Todavía no hay clases. Agrega la primera con el formulario.';
+  const nc=$('#noClassList');
+  if(nc){const list=[...scheduleCache.no_class_days].sort((a,b)=>a.date.localeCompare(b.date));nc.innerHTML=list.length?list.map(x=>{const d=parseISODateLocal(x.date);return `<div class="noclass-item${x.date<today?' past':''}"><div><strong>${d?`${DAY_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`:escapeHtml(x.date)}</strong><small>${escapeHtml(x.reason||'Sin clase')}</small></div><button type="button" class="sched-del" aria-label="Quitar día sin clase" onclick="removeNoClassDay('${escapeHtml(x.date)}')">×</button></div>`;}).join(''):'<div class="sched-free">Ningún día marcado.</div>';}
+}
+window.renderSchedule=renderSchedule;
+$('#scheduleForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const gid=+$('#scheduleGroup').value,start=$('#scheduleStart').value,hours=Math.max(1,Math.min(8,+$('#scheduleHours').value||1));
+  if(!gid){toast('Elige un grupo.',true);return;}
+  if(!scheduleSelectedDays.size){toast('Elige al menos un día.',true);return;}
+  if(!/^\d{2}:\d{2}$/.test(start)){toast('Escribe la hora de inicio.',true);return;}
+  await loadScheduleCache();
+  const s=+start.slice(0,2)*60+ +start.slice(3),e2=s+hours*60,clashes=[];let added=0;
+  for(const d of [...scheduleSelectedDays].sort()){
+    const clash=scheduleCache.blocks.find(b=>+b.day===d&&blockMinutes(b)<e2&&s<blockMinutes(b)+(+b.hours||1)*60);
+    if(clash){const g=groups.find(x=>+x.id===+clash.group_id);clashes.push(`${DAY_LONG[d]} ${clash.start} (${g?.name||'grupo'})`);continue;}
+    scheduleCache.blocks.push({id:`b${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`,group_id:gid,day:d,start,hours,created_at:new Date().toISOString()});added++;
+  }
+  if(added){await saveScheduleCache();}
+  await renderSchedule();
+  if(clashes.length)toast(`${added?`Se agregaron ${added}. `:''}No se agregó porque se empalma con: ${clashes.join(', ')}.`,true);
+  else toast(`Horario guardado · ${added} clase${added===1?'':'s'}`);
+});
+window.removeScheduleBlock=async id=>{
+  await loadScheduleCache();
+  const b=scheduleCache.blocks.find(x=>x.id===id);if(!b)return;
+  const g=groups.find(x=>+x.id===+b.group_id);
+  scheduleCache.blocks=scheduleCache.blocks.filter(x=>x.id!==id);await saveScheduleCache();await renderSchedule();
+  showActionUndo(`${g?.name||'Clase'} · ${DAY_LONG[b.day]} ${b.start} quitada del horario`,async()=>{await loadScheduleCache();scheduleCache.blocks.push(b);await saveScheduleCache();await renderSchedule();});
+};
+$('#noClassForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const date=$('#noClassDate').value,reason=$('#noClassReason').value.trim();
+  if(!date){toast('Elige la fecha.',true);return;}
+  await loadScheduleCache();
+  if(scheduleCache.no_class_days.some(x=>x.date===date)){toast('Ese día ya está marcado.',true);return;}
+  scheduleCache.no_class_days.push({date,reason,created_at:new Date().toISOString()});await saveScheduleCache();
+  $('#noClassReason').value='';await renderSchedule();toast('Día sin clase agregado · el «Máx.» no baja ese día');
+});
+window.removeNoClassDay=async date=>{
+  await loadScheduleCache();
+  const old=scheduleCache.no_class_days.find(x=>x.date===date);
+  scheduleCache.no_class_days=scheduleCache.no_class_days.filter(x=>x.date!==date);await saveScheduleCache();await renderSchedule();
+  if(old)showActionUndo('Día sin clase quitado',async()=>{await loadScheduleCache();scheduleCache.no_class_days.push(old);await saveScheduleCache();await renderSchedule();});
+};
+
 // -------------------- PARCIAL / ESQUEMA DE EVALUACIÓN --------------------
-function schemeTotalPct(s){return (+s?.work_pct||0)+(+s?.project_pct||0)+(+s?.values_pct||0)+(+s?.attitudes_pct||0)+(+s?.attendance_pct||0);}
+// 2.13.0 · Rubros del parcial. «Trabajos» es el rubro base (work_pct); los demás viven en scheme.rubros
+// [{id,name,pct,show}]. `show` = aparece en la lista al crear actividades. Cada actividad guarda rubro_id.
+function customRubros(s){return Array.isArray(s?.rubros)?s.rubros.filter(r=>r&&r.id&&r.id!=='trabajos'):[];}
+function schemeRubros(s){return [{id:'trabajos',name:'Trabajos',pct:+s?.work_pct||0,show:s?.work_show!==false,builtin:true},...customRubros(s).map(r=>({...r,pct:+r.pct||0,show:r.show!==false}))];}
+function activityBucket(a,known){
+  if(a?.rubro_id)return known?.has(String(a.rubro_id))?String(a.rubro_id):'trabajos';
+  const t=String(a?.activity_type||'').trim().toLowerCase();
+  if(t==='proyecto')return '__project';if(t==='examen')return '__exam';
+  return 'trabajos';
+}
+// Columnas de promedio: rubros con porcentaje o con actividades en el parcial.
+function rubrosWithColumn(s,activities){return customRubros(s).filter(r=>+r.pct>0||(activities||[]).some(a=>String(a.rubro_id)===String(r.id)));}
+function rubroIndex(s,id){const i=schemeRubros(s).findIndex(r=>r.id===id);return i<0?0:i;}
+function schemeTotalPct(s){return (+s?.work_pct||0)+customRubros(s).reduce((n,r)=>n+(+r.pct||0),0)+(+s?.project_pct||0)+(+s?.values_pct||0)+(+s?.attitudes_pct||0)+(+s?.attendance_pct||0);}
 function isAttendanceScheme(s){return +s?.attendance_pct>0;}
 // 2.11.0: Valores y Actitudes se reemplazan por Asistencia (10% fijo, automática). Lo que sobra pasa a Trabajos.
 function toAttendanceScheme(s){
@@ -1443,7 +1589,8 @@ function toAttendanceScheme(s){
 }
 function schemeBadgeText(s){
   const principal=principalLabel(s?.principal_type||'project');
-  return isAttendanceScheme(s)?`Trabajos ${s.work_pct}% · ${principal} ${s.project_pct}% · Asistencia ${s.attendance_pct}%`:`Trabajos ${s.work_pct}% · ${principal} ${s.project_pct}% · Valores ${s.values_pct}% · Actitudes ${s.attitudes_pct}%`;
+  const extra=customRubros(s).map(r=>` · ${r.name} ${+r.pct||0}%`).join('');
+  return isAttendanceScheme(s)?`Trabajos ${s.work_pct}%${extra} · ${principal} ${s.project_pct}% · Asistencia ${s.attendance_pct}%`:`Trabajos ${s.work_pct}%${extra} · ${principal} ${s.project_pct}% · Valores ${s.values_pct}% · Actitudes ${s.attitudes_pct}%`;
 }
 async function getScheme(gid,period){
   const key=`${gid}:${period}`;
@@ -1457,6 +1604,7 @@ async function getScheme(gid,period){
       key,group_id:+gid,period:String(period),
       work_pct:okPrev?+prev.work_pct:40,project_pct:okPrev?+prev.project_pct:40,values_pct:okPrev?+(prev.values_pct||0):10,attitudes_pct:okPrev?+(prev.attitudes_pct||0):10,attendance_pct:okPrev?+(prev.attendance_pct||0):0,
       principal_type:'project',mode_locked:false,
+      ...(okPrev&&customRubros(prev).length?{rubros:customRubros(prev).map(r=>({id:r.id,name:r.name,pct:+r.pct||0,show:r.show!==false})),work_show:prev.work_show!==false}:{}),
       updated_at:new Date().toISOString()
     };
     // Los parciales cerrados se quedan como se calificaron; los abiertos usan Asistencia automática.
@@ -1510,17 +1658,17 @@ async function computeGroupGrading(gid,period,opts={}){
   }
 
   const actMap=new Map(activities.map(a=>[a.id,a])),rows=[];
+  const extraRubros=customRubros(scheme),known=new Set(['trabajos',...extraRubros.map(r=>String(r.id))]);
   for(const s of students){
-    let workTotal=0,workW=0,projectTotal=0,projectW=0,examTotal=0,examW=0;
+    let workTotal=0,workW=0,projectTotal=0,projectW=0,examTotal=0,examW=0;const rt={};
+    const addTo=(b,v,w)=>{if(b==='__project'){projectTotal+=v;projectW+=w;}else if(b==='__exam'){examTotal+=v;examW+=w;}else if(b==='trabajos'){workTotal+=v;workW+=w;}else{const o=rt[b]||(rt[b]=[0,0]);o[0]+=v;o[1]+=w;}};
     for(const g of gByStudent.get(s.id)||[]){
       const a=actMap.get(g.activity_id);
       const gScore=a&&isRubricActivity(a)?rubricGradeScore(a,g):g.score;
       if(gScore==null)continue;
       if(!a||+a.max_score<=0||+a.weight<=0)continue;
-      const normalized=+gScore*10/+a.max_score,w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
-      if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}
-      else if(type==='examen'){examTotal+=normalized*w;examW+=w;}
-      else{workTotal+=normalized*w;workW+=w;}
+      const normalized=+gScore*10/+a.max_score,w=+a.weight||1;
+      addTo(activityBucket(a,known),normalized*w,w);
     }
     // Solo en la exportación «cierre de evaluación»: actividad sin calificación cuenta como 0.
     // NP y rúbricas a medias NO se tocan (siguen sin contar, como en la app).
@@ -1528,8 +1676,7 @@ async function computeGroupGrading(gid,period,opts={}){
       const withContent=new Set((gByStudent.get(s.id)||[]).filter(g=>!isEmptyGrade(actMap.get(g.activity_id),g)).map(g=>+g.activity_id));
       for(const a of activities){
         if(withContent.has(+a.id)||+a.max_score<=0||+a.weight<=0)continue;
-        const w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
-        if(type==='proyecto')projectW+=w;else if(type==='examen')examW+=w;else workW+=w;
+        addTo(activityBucket(a,known),0,+a.weight||1);
       }
     }
 
@@ -1551,7 +1698,8 @@ async function computeGroupGrading(gid,period,opts={}){
     const att=attMode?attendanceGrade(attByStudent.get(s.id)||[]):null;
 
     let complete=true,final=0;
-    for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[values,+scheme.values_pct],[attitudes,+scheme.attitudes_pct],[att?.score??null,+scheme.attendance_pct||0]]){
+    const rubroAvgs={};for(const r of extraRubros){const o=rt[r.id];rubroAvgs[r.id]=o&&o[1]?o[0]/o[1]:null;}
+    for(const [score,pct] of [[work,+scheme.work_pct],...extraRubros.map(r=>[rubroAvgs[r.id],+r.pct||0]),[principal,+scheme.project_pct],[values,+scheme.values_pct],[attitudes,+scheme.attitudes_pct],[att?.score??null,+scheme.attendance_pct||0]]){
       if(pct>0){
         if(score==null)complete=false;
         else final+=+score*pct/100;
@@ -1560,6 +1708,7 @@ async function computeGroupGrading(gid,period,opts={}){
     rows.push({
       ...s,name:studentLabel(s),
       work_avg:work==null?null:+work.toFixed(2),
+      rubro_avgs:Object.fromEntries(Object.entries(rubroAvgs).map(([k,v])=>[k,v==null?null:+v.toFixed(2)])),
       principal_avg:principal==null?null:+principal.toFixed(2),
       project_avg:principalType==='project'&&principal!=null?+principal.toFixed(2):null,
       exam_score:principalType==='exam'&&principal!=null?+principal.toFixed(2):(comp?.exam_score??null),
@@ -1584,9 +1733,28 @@ function applySchemeMode(on){
   if($('#componentsPanelTitle'))$('#componentsPanelTitle').textContent=schemeAttendanceMode?'Asistencia y calificación final':'Valores, actitudes y final';
   if($('#componentsPanelNote'))$('#componentsPanelNote').textContent=schemeAttendanceMode?'Trabajos, el componente principal y la Asistencia se calculan solos. Asistencia = clases asistidas ÷ clases del parcial × 10 (R y J cuentan como asistencia).':'Trabajos y el componente principal se calculan automáticamente.';
 }
+function readRubroRows(){
+  return $$('#customRubros .rubro-row').map(row=>({id:row.dataset.rubroId,name:row.querySelector('.rubro-name').value.trim(),pct:+row.querySelector('.rubro-pct').value||0,show:row.querySelector('.rubro-show-cb').checked}));
+}
+function rubroRowHTML(r){
+  return `<div class="rubro-row" data-rubro-id="${escapeHtml(r.id)}"><input class="rubro-name" maxlength="30" placeholder="Ej. Prácticas" value="${escapeHtml(r.name||'')}" aria-label="Nombre del rubro"><div class="percent-input"><input class="rubro-pct" type="number" min="0" max="100" step="1" value="${+r.pct||0}" aria-label="Porcentaje"><b>%</b></div><label class="rubro-show"><input type="checkbox" class="rubro-show-cb" ${r.show!==false?'checked':''}><span>En la lista</span></label><button type="button" class="rubro-del" aria-label="Quitar rubro" title="Quitar rubro">×</button></div>`;
+}
+function renderRubrosEditor(s){
+  const box=$('#customRubros');if(!box)return;
+  box.innerHTML=customRubros(s).map(rubroRowHTML).join('');
+  if($('#workShow'))$('#workShow').checked=s?.work_show!==false;
+}
+$('#addRubroBtn')?.addEventListener('click',()=>{
+  const box=$('#customRubros');if(!box)return;
+  box.insertAdjacentHTML('beforeend',rubroRowHTML({id:`r${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`,name:'',pct:0,show:true}));
+  box.lastElementChild.querySelector('.rubro-name').focus();updateSchemeUI();
+});
+$('#customRubros')?.addEventListener('click',e=>{const b=e.target.closest('.rubro-del');if(!b)return;b.closest('.rubro-row').remove();updateSchemeUI();});
+$('#customRubros')?.addEventListener('input',()=>updateSchemeUI());
 function schemeNumbers(){
   const att=schemeAttendanceMode;
   return {
+    rubros:readRubroRows().reduce((n,r)=>n+r.pct,0),
     work:+$('#workPct').value||0,
     project:+$('#projectPct').value||0,
     values:att?0:+$('#valuesPct').value||0,
@@ -1608,7 +1776,7 @@ function setPrincipalSelector(type,locked=false){
   setEvaluationNavLabel(type);
 }
 function updateSchemeUI(){
-  const s=schemeNumbers(),total=s.work+s.project+s.values+s.attitudes+s.attendance;
+  const s=schemeNumbers(),total=s.work+s.rubros+s.project+s.values+s.attitudes+s.attendance;
   $('#schemeTotal').textContent=total+'%';
   $('#schemeTotal').parentElement.classList.toggle('bad',total!==100);
 }
@@ -1631,6 +1799,7 @@ async function loadGrading(){
   const s=gradingData.scheme;
   applySchemeMode(isAttendanceScheme(s));
   if($('#attendancePct'))$('#attendancePct').value=+s.attendance_pct||10;
+  renderRubrosEditor(s);
   $('#workPct').value=s.work_pct;
   $('#projectPct').value=s.project_pct;
   $('#valuesPct').value=s.values_pct;
@@ -1646,8 +1815,8 @@ async function loadGrading(){
 
 function localFinal(row){
   const s=schemeNumbers();
-  const pairs=[[row.work_avg,s.work],[row.principal_avg,s.project],[row.values_score,s.values],[row.attitudes_score,s.attitudes],[row.attendance_score,s.attendance]];
-  const total=s.work+s.project+s.values+s.attitudes+s.attendance;
+  const pairs=[[row.work_avg,s.work],...readRubroRows().map(r=>[row.rubro_avgs?.[r.id]??null,r.pct]),[row.principal_avg,s.project],[row.values_score,s.values],[row.attitudes_score,s.attitudes],[row.attendance_score,s.attendance]];
+  const total=s.work+s.rubros+s.project+s.values+s.attitudes+s.attendance;
   if(total!==100)return null;
   let out=0;
   for(const [v,p] of pairs){
@@ -1662,7 +1831,8 @@ function renderGradingTable(){
   const principal=principalLabel(gradingData.scheme.principal_type||'project');
   $('#gradingTable').className='';
   if(isAttendanceScheme(gradingData.scheme)){
-    $('#gradingTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Alumno</th><th>Trabajos</th><th>${principal}</th><th>Asistencia <small>10% · automática</small></th><th>Final</th></tr></thead><tbody>${gradingData.students.map((s,i)=>`<tr><td>${s.list_number??''}</td><td><strong>${escapeHtml(s.name)}</strong></td><td><span class="auto-score">${fmtNum(s.work_avg)}</span></td><td><span class="auto-score">${fmtNum(s.principal_avg)}</span></td><td>${attendanceScoreHTML(s)}</td><td id="final-${i}">${localFinal(s)==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${localFinal(s).toFixed(2)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+    const extra=customRubros(gradingData.scheme).filter(r=>+r.pct>0||gradingData.students.some(st=>st.rubro_avgs?.[r.id]!=null));
+    $('#gradingTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Alumno</th><th>Trabajos</th>${extra.map(r=>`<th>${escapeHtml(r.name)}</th>`).join('')}<th>${principal}</th><th>Asistencia <small>10% · automática</small></th><th>Final</th></tr></thead><tbody>${gradingData.students.map((s,i)=>`<tr><td>${s.list_number??''}</td><td><strong>${escapeHtml(s.name)}</strong></td><td><span class="auto-score">${fmtNum(s.work_avg)}</span></td>${extra.map(r=>`<td><span class="auto-score">${fmtNum(s.rubro_avgs?.[r.id])}</span></td>`).join('')}<td><span class="auto-score">${fmtNum(s.principal_avg)}</span></td><td>${attendanceScoreHTML(s)}</td><td id="final-${i}">${localFinal(s)==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${localFinal(s).toFixed(2)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
     $('#saveComponents').classList.add('hidden');
     return;
   }
@@ -1690,8 +1860,24 @@ $('#schemeForm').onsubmit=async e=>{
   if(!gid){toast('Selecciona un grupo',true);return;}
   const g=await getGroupState(gid);
   if(g.course_closed){toast(`Este grupo ya tiene sus ${totalPeriods(g)} parciales cerrados.`,true);return;}
-  const p=String(g.current_period||1),nums=schemeNumbers(),total=nums.work+nums.project+nums.values+nums.attitudes+nums.attendance;
+  const p=String(g.current_period||1),nums=schemeNumbers(),total=nums.work+nums.rubros+nums.project+nums.values+nums.attitudes+nums.attendance;
+  const rubros=readRubroRows(),reserved=['trabajos','proyecto','examen','asistencia','valores','actitudes'],seen=new Set();
+  for(const r of rubros){
+    const k=normalizeText(r.name);
+    if(!r.name){toast('Escribe el nombre de cada rubro (o quítalo con ×).',true);return;}
+    if(reserved.includes(k)){toast(`«${r.name}» ya es un componente del parcial. Usa otro nombre para el rubro.`,true);return;}
+    if(seen.has(k)){toast(`El rubro «${r.name}» está repetido.`,true);return;}
+    if(!Number.isInteger(r.pct)||r.pct<0||r.pct>100){toast(`El porcentaje de «${r.name}» debe ser un número entero de 0 a 100.`,true);return;}
+    seen.add(k);
+  }
   if(total!==100){toast('Los porcentajes deben sumar exactamente 100%.',true);return;}
+  const workShow=$('#workShow')?$('#workShow').checked:true;
+  if(!workShow&&!rubros.some(r=>r.show)){toast('Deja al menos un rubro «En la lista» para poder crear actividades.',true);return;}
+  // Rubros quitados que ya tienen actividades: sus actividades pasan a Trabajos (no se pierde ninguna calificación).
+  const prevScheme=await getScheme(gid,p),removed=customRubros(prevScheme).filter(r=>!rubros.some(x=>x.id===r.id));
+  const acts=await MiAulaDB.byIndex('activities','group_period',[gid,p]),orphan=acts.filter(a=>removed.some(r=>String(r.id)===String(a.rubro_id)));
+  if(orphan.length&&!confirm(`Quitaste ${removed.map(r=>`«${r.name}»`).join(', ')}, que tiene ${orphan.length} actividad${orphan.length===1?'':'es'}.\n\nEsas actividades y sus calificaciones NO se borran: pasarán al rubro Trabajos. ¿Continuar?`))return;
+  for(const a of orphan){a.rubro_id='trabajos';a.activity_type='Trabajo';await MiAulaDB.put('activities',a);}
   const old=await getScheme(gid,p),type=selectedPrincipalType();
   if(old.mode_locked && old.principal_type!==type){
     toast(`Este parcial ya fue definido como ${principalLabel(old.principal_type)}.`,true);return;
@@ -1699,10 +1885,12 @@ $('#schemeForm').onsubmit=async e=>{
   await MiAulaDB.put('gradingSchemes',{
     ...old,key:`${gid}:${p}`,group_id:gid,period:p,
     work_pct:nums.work,project_pct:nums.project,values_pct:nums.values,attitudes_pct:nums.attitudes,attendance_pct:nums.attendance,
+    rubros:rubros,work_show:workShow,
     principal_type:type,mode_locked:true,updated_at:new Date().toISOString()
   });
-  toast(`${principalLabel(type)} definido para el Parcial ${p}`);
+  toast(`Esquema guardado para el Parcial ${p}${rubros.length?` · ${rubros.length+1} rubros`:''}`);
   await loadGrading();
+  await populateActivityRubros();
   if($('#evalGroup'))$('#evalGroup').value=String(gid);
   await loadPrincipalWorkspace();
 };
@@ -2032,6 +2220,9 @@ async function buildNotebookPeriodData(gid,period){
   }
   const grading=await computeGroupGrading(gid,String(period));
   const gradingMap=new Map(grading.students.map(r=>[r.id,r]));
+  // 2.13.0: columnas agrupadas por rubro (en el orden del esquema) y, dentro de cada rubro, por fecha.
+  const known=new Set(schemeRubros(grading.scheme).map(r=>r.id)),order=b=>b==='__project'?900:b==='__exam'?901:rubroIndex(grading.scheme,b);
+  activities.sort((a,b)=>order(activityBucket(a,known))-order(activityBucket(b,known))||String(a.activity_date||'').localeCompare(String(b.activity_date||''))||a.id-b.id);
   return {period:String(period),students,activities,grades,components:compMap,extraRows,extrasByStudent,grading,gradingMap,scheme:grading.scheme};
 }
 
@@ -2239,19 +2430,24 @@ window.openAttendancePeriod=async(gid,p)=>{
 function renderNotebookPeriod(pd){
   const principalType=pd.scheme.principal_type||'project',principal=principalLabel(principalType);
   const attMode=isAttendanceScheme(pd.scheme),g=notebookData?.group,readOnly=isPeriodReadOnly(g,pd.period),closedP=isPeriodClosed(g,pd.period);
-  const activityHeads=pd.activities.map(a=>`<th class="activity-head"><span>${escapeHtml(a.title)}</span>${activityMaxIndicator(a)}<small>${isRubricActivity(a)?(activityRubric(a)?.kind==='cotejo'?'Lista de cotejo':'Rúbrica'):escapeHtml(a.activity_type)} · /${fmtShort(a.max_score,1)}</small>${teamColumnButton(a)}</th>`).join('');
+  const rubros=schemeRubros(pd.scheme),known=new Set(rubros.map(r=>r.id)),grouped=rubros.length>1;
+  const extraR=rubrosWithColumn(pd.scheme,pd.activities),rubroName=b=>b==='__project'?'Proyecto':b==='__exam'?'Examen':(rubros.find(r=>r.id===b)?.name||'Trabajos');
+  let prevB=null;
+  const activityHeads=pd.activities.map(a=>{const b=activityBucket(a,known),first=b!==prevB;prevB=b;const ci=b.startsWith('__')?7:rubroIndex(pd.scheme,b)%8;
+    return `<th class="activity-head${grouped?` rubro-col rc-${ci}`:''}${grouped&&first?' rubro-start':''}" data-rubro="${escapeHtml(b)}">${grouped?`<em class="rubro-chip rc-${ci}">${escapeHtml(rubroName(b))}</em>`:''}<span>${escapeHtml(a.title)}</span>`;}).map((head,i)=>{const a=pd.activities[i];return `${head}${activityMaxIndicator(a)}<small>${isRubricActivity(a)?(activityRubric(a)?.kind==='cotejo'?'Lista de cotejo':'Rúbrica'):escapeHtml(a.activity_type)} · /${fmtShort(a.max_score,1)}</small>${teamColumnButton(a)}</th>`;}).join('');
   const body=pd.students.map(s=>{
     const gr=pd.gradingMap.get(s.id)||{},comp=pd.components.get(s.id)||{};
     const principalCell=principalType==='exam'
       ?notebookComponentInput('exam_score',s,pd,gr.exam_score??comp.exam_score??null)
       :`<span class="auto-score notebook-auto" title="Calculado desde rúbricas y listas de cotejo">${fmtNum(gr.principal_avg)}</span>`;
-    const activityCells=pd.activities.length?pd.activities.map(a=>notebookActivityCell(a,s,pd)).join(''):'<td class="summary-cell">—</td>';
-    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td><td class="summary-cell principal-cell">${principalCell}</td>${attMode?`<td class="summary-cell attendance-cell">${notebookAttendanceCell(gr)}</td>`:`<td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td>`}<td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
+    let pb=null;
+    const activityCells=pd.activities.length?pd.activities.map(a=>{const b=activityBucket(a,known),first=b!==pb;pb=b;const cell=notebookActivityCell(a,s,pd);return grouped&&first?cell.replace('<td class="','<td class="rubro-start '):cell;}).join(''):'<td class="summary-cell">—</td>';
+    return `<tr data-notebook-row="${pd.period}:${s.id}"><td class="sticky-col notebook-num">${s.list_number??''}</td><td class="sticky-col-2 notebook-student"><button type="button" class="student-name-button" onclick="openStudentView('${pd.period}',${s.id})"><strong>${escapeHtml(studentLabel(s))}</strong><small>Ver alumno</small></button></td>${notebookExtraCell(s,pd)}${activityCells}<td class="summary-cell work-cell" data-work-cell="${pd.period}:${s.id}">${fmtNum(gr.work_avg)}</td>${extraR.map(r=>`<td class="summary-cell work-cell" data-rubro-cell="${pd.period}:${s.id}:${escapeHtml(r.id)}">${fmtNum(gr.rubro_avgs?.[r.id])}</td>`).join('')}<td class="summary-cell principal-cell">${principalCell}</td>${attMode?`<td class="summary-cell attendance-cell">${notebookAttendanceCell(gr)}</td>`:`<td class="summary-cell">${notebookComponentInput('values_score',s,pd,gr.values_score)}</td><td class="summary-cell">${notebookComponentInput('attitudes_score',s,pd,gr.attitudes_score)}</td>`}<td class="summary-cell final-cell" data-final-cell="${pd.period}:${s.id}">${gr.final_grade==null?'<span class="pending-score">Pendiente</span>':`<span class="final-score">${fmtNum(gr.final_grade)}</span>`}</td></tr>`;
   }).join('');
   const emptyActivities=pd.activities.length?activityHeads:'<th class="activity-head no-activities">Sin actividades</th>';
-  const colspan=Math.max(pd.activities.length,1)+(attMode?7:8);
+  const colspan=Math.max(pd.activities.length,1)+(attMode?7:8)+extraR.length;
   const lockBadge=closedP?`<span class="period-badge ${readOnly?'consult-badge':'consult-badge unlocked'}">${readOnly?'Cerrado · solo lectura':'Cerrado · corrección activa'}</span>`:'';
-  return `<div class="notebook-period-block${readOnly?' is-readonly':''}" data-period-block="${pd.period}"${readOnly?' data-readonly="1"':''}><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><div class="period-badges">${lockBadge}<span class="period-badge">${schemeBadgeText(pd.scheme)}</span></div></div><div class="notebook-top-scroll" aria-label="Desplazamiento horizontal del cuaderno"><div></div></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th><th>${principal}</th>${attMode?'<th>Asistencia<br><small>10% auto</small></th>':'<th>Valores</th><th>Actitudes</th>'}<th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
+  return `<div class="notebook-period-block${readOnly?' is-readonly':''}" data-period-block="${pd.period}"${readOnly?' data-readonly="1"':''}><div class="notebook-period-title"><div><h3>Parcial ${pd.period}</h3><p>${pd.activities.length} actividades · Componente principal: <strong>${principal}</strong></p></div><div class="period-badges">${lockBadge}<span class="period-badge">${schemeBadgeText(pd.scheme)}</span></div></div><div class="notebook-top-scroll" aria-label="Desplazamiento horizontal del cuaderno"><div></div></div><div class="notebook-table-wrap"><table class="notebook-table"><thead><tr><th class="sticky-col notebook-num">No.</th><th class="sticky-col-2 notebook-student">Alumno</th><th class="sticky-col-3 notebook-extra-head">Puntos extra</th>${emptyActivities}<th>Prom.<br>trabajos</th>${extraR.map(r=>`<th>Prom.<br>${escapeHtml(r.name)}</th>`).join('')}<th>${principal}</th>${attMode?'<th>Asistencia<br><small>10% auto</small></th>':'<th>Valores</th><th>Actitudes</th>'}<th>Final</th></tr></thead><tbody>${body||`<tr><td colspan="${colspan}" class="empty-state">No hay alumnos activos.</td></tr>`}</tbody></table></div></div>`;
 }
 function renderNotebook(){
   if(!notebookData)return;
@@ -2367,13 +2563,14 @@ function notebookCurrentValue(selector,max=10){
 function recalcNotebookRow(period,studentId){
   if(!notebookData?.periods?.[period])return;
   const pd=notebookData.periods[period],scheme=pd.scheme,principalType=scheme.principal_type||'project';
-  let workTotal=0,workW=0,projectTotal=0,projectW=0;
+  let workTotal=0,workW=0,projectTotal=0,projectW=0;const rt={},known=new Set(schemeRubros(scheme).map(r=>r.id));
   for(const a of pd.activities){
     const el=document.querySelector(`.notebook-score-input[data-kind="grade"][data-period="${period}"][data-student="${studentId}"][data-activity="${a.id}"]`);
     const parsed=isRubricActivity(a)?{score:rubricGradeScore(a,pd.grades.get(`${a.id}:${studentId}`))}:notebookParseScore(el?.value,+a.max_score||10);if(parsed.invalid||parsed.score==null)continue;
-    const normalized=parsed.score*10/(+a.max_score||10),w=+a.weight||1,type=String(a.activity_type||'').trim().toLowerCase();
-    if(type==='proyecto'){projectTotal+=normalized*w;projectW+=w;}else if(type!=='examen'){workTotal+=normalized*w;workW+=w;}
+    const normalized=parsed.score*10/(+a.max_score||10),w=+a.weight||1,b=activityBucket(a,known);
+    if(b==='__project'){projectTotal+=normalized*w;projectW+=w;}else if(b==='trabajos'){workTotal+=normalized*w;workW+=w;}else if(b!=='__exam'){const o=rt[b]||(rt[b]=[0,0]);o[0]+=normalized*w;o[1]+=w;}
   }
+  const rAvg={};for(const r of customRubros(scheme)){const o=rt[r.id];rAvg[r.id]=o&&o[1]?o[0]/o[1]:null;const c=document.querySelector(`[data-rubro-cell="${period}:${studentId}:${r.id}"]`);if(c)c.textContent=fmtNum(rAvg[r.id]);}
   const work=workW?workTotal/workW:null;
   const old=pd.gradingMap.get(studentId)||{};
   let principal=principalType==='project'?old.principal_avg:null;
@@ -2384,7 +2581,7 @@ function recalcNotebookRow(period,studentId){
   const a=notebookCurrentValue(`.notebook-score-input[data-kind="component"][data-field="attitudes_score"][data-period="${period}"][data-student="${studentId}"]`,10);
   const workCell=document.querySelector(`[data-work-cell="${period}:${studentId}"]`);if(workCell)workCell.textContent=fmtNum(work);
   let complete=true,final=0;
-  for(const [score,pct] of [[work,+scheme.work_pct],[principal,+scheme.project_pct],[v.invalid?null:v.score,+scheme.values_pct],[a.invalid?null:a.score,+scheme.attitudes_pct],[old.attendance_score??null,+scheme.attendance_pct||0]]){if(pct>0){if(score==null)complete=false;else final+=score*pct/100;}}
+  for(const [score,pct] of [[work,+scheme.work_pct],...customRubros(scheme).map(r=>[rAvg[r.id],+r.pct||0]),[principal,+scheme.project_pct],[v.invalid?null:v.score,+scheme.values_pct],[a.invalid?null:a.score,+scheme.attitudes_pct],[old.attendance_score??null,+scheme.attendance_pct||0]]){if(pct>0){if(score==null)complete=false;else final+=score*pct/100;}}
   const finalCell=document.querySelector(`[data-final-cell="${period}:${studentId}"]`);
   if(finalCell)finalCell.innerHTML=complete?`<span class="final-score">${fmtNum(+final.toFixed(2))}</span>`:'<span class="pending-score">Pendiente</span>';
 }
@@ -2438,12 +2635,12 @@ async function buildNotebookWorkbook(gid,selection,opts={}){
     const pd=await buildNotebookPeriodData(gid,p),principal=principalLabel(pd.scheme.principal_type||'project');
     const closing=!!opts.emptyAsZero,closeMap=closing?new Map((await computeGroupGrading(gid,p,{emptyAsZero:true})).students.map(r=>[r.id,r])):null;
     const attMode=isAttendanceScheme(pd.scheme);
-    const headers=['No.','Alumno','Extra + disponibles','Extra -','Extra + ganados','Extra + aplicados',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',principal,...(attMode?['Asistencia (0-10)','Clases asistidas']:['Valores','Actitudes']),'Final','Estado'];
+    const headers=['No.','Alumno','Extra + disponibles','Extra -','Extra + ganados','Extra + aplicados',...pd.activities.map(a=>`${a.title} [${a.activity_type} /${fmtNum(a.max_score,1)}]`),'Prom. trabajos',...rubrosWithColumn(pd.scheme,pd.activities).map(r=>`Prom. ${r.name}`),principal,...(attMode?['Asistencia (0-10)','Clases asistidas']:['Valores','Actitudes']),'Final','Estado'];
     const rows=[headers];
     for(const s of pd.students){
       const gr=(closing?closeMap.get(s.id):pd.gradingMap.get(s.id))||{},comp=pd.components.get(s.id)||{},ex=pd.extrasByStudent?.get(s.id)||{goodAvailable:0,bad:0,goodEarned:0,goodUsed:0};
       const scores=pd.activities.map(a=>{const rec=pd.grades.get(`${a.id}:${s.id}`);if(closing&&!isSecretaryPendingStudent(s)&&isEmptyGrade(a,rec)){if(opts.stats)opts.stats.zeros++;return 0;}return exportGradeValue(a,rec);});
-      rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,gr.principal_avg,...(attMode?[gr.attendance_score??null,gr.attendance_classes?`${gr.attendance_attended}/${gr.attendance_classes}`:'']:[gr.values_score,gr.attitudes_score]),gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
+      rows.push([s.list_number,studentLabel(s),ex.goodAvailable,-ex.bad,ex.goodEarned,ex.goodUsed,...scores,gr.work_avg,...rubrosWithColumn(pd.scheme,pd.activities).map(r=>gr.rubro_avgs?.[r.id]??null),gr.principal_avg,...(attMode?[gr.attendance_score??null,gr.attendance_classes?`${gr.attendance_attended}/${gr.attendance_classes}`:'']:[gr.values_score,gr.attitudes_score]),gr.final_grade,gr.final_grade==null?'Pendiente':'Completo']);
     }
     sheets.push({name:`Libreta P${p}`,rows});
   }
@@ -2564,8 +2761,8 @@ async function buildWorkbook(gid,opts={}){
   const classBlocks=new Map();for(const a of attendance){const k=a.attendance_date;classBlocks.set(k,Math.max(classBlocks.get(k)||0,+a.class_hours||1));}
   const classHours=[...classBlocks.values()].reduce((a,b)=>a+b,0);
   const resumen=[['Indicador','Valor'],['Grupo',g.name],['Grado / semestre',g.grade||''],['Disciplina',g.discipline||''],['Ciclo escolar',g.school_year||''],['Parciales configurados',totalPeriods(g)],['Alumnos activos',students.length],['Alumnos dados de baja',inactive.length],['Horas de clase registradas',classHours],['Horas-presente',groupAttendance.P],['Horas-falta',groupAttendance.F],['Horas-retardo',groupAttendance.R],['Horas-justificadas',groupAttendance.J],['Horas-pendiente Secretaría',groupAttendance.S],['Asistencia ponderada por hora %',groupAttendance.pct],['Faltas ponderadas por hora %',groupAttendance.absencePct],['Alumnos con faltas >=20%',attendanceCriticalCount],['Alumnos entre 15% y 19.9%',attendanceWarningCount],['Parcial activo',g.current_period||1],['Parciales cerrados',(g.closed_periods||[]).join(', ')||'Ninguno'],...periods.map(p=>[`Promedio final Parcial ${p}`,avgFinal(p)]),['Generado',new Date().toLocaleString('es-MX')]];
-  const esquema=[['Parcial','Componente principal','Trabajos %','Principal %','Valores %','Actitudes %','Asistencia %','Total %','Estado']];for(const p of periods){const s=grading[p].scheme;esquema.push([p,principalLabel(s.principal_type||'project'),s.work_pct,s.project_pct,s.values_pct,s.attitudes_pct,+s.attendance_pct||0,schemeTotalPct(s),(g.closed_periods||[]).includes(+p)?'Cerrado':(+g.current_period===+p&&!g.course_closed?'En curso':'Pendiente')]);}
-  const trim=[['No.','Código','Alumno','Parcial','Trabajos','Trabajos %','Componente principal','Tipo principal','Principal %','Valores','Valores %','Actitudes','Actitudes %','Asistencia (0-10)','Clases asistidas','Asistencia %','Final','Estado','Observación']];for(const p of periods){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.principal_avg,principalLabel(sc.principal_type||'project'),sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.attendance_score??null,s.attendance_classes?`${s.attendance_attended}/${s.attendance_classes}`:'',+sc.attendance_pct||0,s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
+  const esquema=[['Parcial','Componente principal','Trabajos %','Otros rubros','Principal %','Valores %','Actitudes %','Asistencia %','Total %','Estado']];for(const p of periods){const s=grading[p].scheme;esquema.push([p,principalLabel(s.principal_type||'project'),s.work_pct,customRubros(s).map(r=>`${r.name} ${+r.pct||0}%`).join(' · '),s.project_pct,s.values_pct,s.attitudes_pct,+s.attendance_pct||0,schemeTotalPct(s),(g.closed_periods||[]).includes(+p)?'Cerrado':(+g.current_period===+p&&!g.course_closed?'En curso':'Pendiente')]);}
+  const trim=[['No.','Código','Alumno','Parcial','Trabajos','Trabajos %','Componente principal','Tipo principal','Principal %','Valores','Valores %','Actitudes','Actitudes %','Asistencia (0-10)','Clases asistidas','Asistencia %','Otros rubros','Final','Estado','Observación']];for(const p of periods){const sc=grading[p].scheme;for(const s of grading[p].students)trim.push([s.list_number,s.student_code,s.name,p,s.work_avg,sc.work_pct,s.principal_avg,principalLabel(sc.principal_type||'project'),sc.project_pct,s.values_score,sc.values_pct,s.attitudes_score,sc.attitudes_pct,s.attendance_score??null,s.attendance_classes?`${s.attendance_attended}/${s.attendance_classes}`:'',+sc.attendance_pct||0,customRubros(sc).map(r=>`${r.name}: ${s.rubro_avgs?.[r.id]==null?'Pend.':fmtNum(s.rubro_avgs[r.id])} (${+r.pct||0}%)`).join(' · '),s.final_grade,s.complete?'Completo':'Pendiente',s.notes||'']);}
   const conc=[['No.','Código','Alumno','Grado','Asistencia %','Faltas %','Alerta asistencia','Hrs P','Hrs F','Hrs R','Hrs J','Hrs Sec.',...activities.map(a=>`${a.title} [P${a.period}]`),'Prom. actividades',...periods.map(p=>`P${p}`)]];
   for(const s of students){
     const sa=attendance.filter(a=>a.student_id===s.id),at=attendanceTotals(sa),normalized=[],risk=absenceRiskMeta(at.absencePct),row=[s.list_number,s.student_code,studentLabel(s),s.grade||'',at.pct,at.absencePct,risk.label,at.P,at.F,at.R,at.J,at.S];
@@ -2579,7 +2776,7 @@ async function buildWorkbook(gid,opts={}){
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const d of dates){const hrs=classBlocks.get(d)||1,a=attKey.get(`${s.id}:${d}`);for(let h=1;h<=hrs;h++)row.push(a?.status||'');}asistHoras.push(row);}
   const porParcial=[['No.','Alumno',...periods.flatMap(p=>[`P${p} clases`,`P${p} asistencias`,`P${p} faltas`,`P${p} calif. asistencia (0-10)`])]];
   for(const s of students){const row=[s.list_number,studentLabel(s)];for(const p of periods){const ag=attendanceGrade(attendanceForPeriod(attendance.filter(a=>a.student_id===s.id),g,p));row.push(ag.classes,ag.attended,ag.absences,ag.score);}porParcial.push(row);}
-  const acts=[['Actividad','Tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
+  const acts=[['Actividad','Rubro / tipo','Parcial','Fecha','Puntaje máximo','Peso','Capturadas','Pendientes']];for(const a of activities){const count=grades.filter(gr=>gr.activity_id===a.id&&gr.score!=null&&sm.get(gr.student_id)?.active!==0).length;acts.push([a.title,a.activity_type,a.period,a.activity_date,a.max_score,a.weight,count,Math.max(students.length-count,0)]);}
   const detail=[['No.','Alumno','Estatus','Actividad','Tipo','Parcial','Fecha','Calificación','Máximo','Equivalente 0-10','Observación']];for(const gr of grades){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);if(!a||!s)continue;const dv=isRubricActivity(a)?rubricGradeScore(a,gr):gr.score;detail.push([s.list_number,studentLabel(s),s.active!==0?'Activo':'Baja',a.title,a.activity_type,a.period,a.activity_date,exportGradeValue(a,gr),a.max_score,dv==null?null:Math.round(+dv*1000/+a.max_score)/100,gr.notes||'']);}
   const evalSheet=[['Fecha','Parcial','Alumno','Estatus','Proyecto','Instrumento','Tipo','Equipo','Puntaje','Calificación','Observación']];for(const e of evals){const i=im.get(e.instrument_id),s=sm.get(e.student_id);evalSheet.push([e.evaluation_date,e.period,studentLabel(s||{}),s?.active!==0?'Activo':'Baja',e.title,i?.name||e.rubric?.name||'',(e.rubric?e.rubric.kind==='rubrica':i?.instrument_type==='rubric')?'Rúbrica':'Lista de cotejo',e.team_name||'',e.raw_score,e.grade,e.notes||'']);}
   const obs=[['Alumno','Origen','Actividad/Evaluación','Observación']];for(const gr of grades){if(String(gr.notes||'').trim()){const a=am.get(gr.activity_id),s=sm.get(gr.student_id);obs.push([studentLabel(s||{}),'Actividad',a?.title||'',gr.notes]);}}for(const e of evals){if(String(e.notes||'').trim())obs.push([studentLabel(sm.get(e.student_id)||{}),'Evaluación',e.title,e.notes]);}for(const p of periods)for(const s of grading[p].students)if(String(s.notes||'').trim())obs.push([s.name,`Parcial ${p}`,'Valores y Actitudes',s.notes]);
@@ -2587,11 +2784,15 @@ async function buildWorkbook(gid,opts={}){
   const instrumentBank=[['Instrumento','Tipo','Convierte a 0-10','Criterios']];for(const i of insts){instrumentBank.push([i.name,i.instrument_type==='rubric'?'Rúbrica':'Lista de cotejo',i.convert_to_grade?'Sí':'No',(i.criteria||[]).map(c=>c.name).join(' · ')]);}
   const extraRows=(await MiAulaDB.all('extraPoints')).filter(r=>+r.group_id===+gid).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
   const extraSheet=[['Parcial','No.','Alumno','Movimiento','Puntos','Origen','Actividad','Fecha','Nota']];for(const r of extraRows){const st=sm.get(r.student_id),ac=am.get(r.activity_id);extraSheet.push([r.period,st?.list_number??'',studentLabel(st||{}),r.kind==='good'?'Bueno':r.kind==='bad'?'Malo':'Aplicado',r.kind==='bad'?-r.points:r.points,r.source||'',ac?.title||'',r.created_at?new Date(r.created_at).toLocaleString('es-MX'):'',r.note||'']);}
+  await loadScheduleCache();
+  const horario=[['Día','Inicio','Termina','Horas']];for(const b of groupBlocks(gid))horario.push([DAY_LONG[b.day],b.start,blockEndLabel(b),+b.hours||1]);
+  if(horario.length===1)horario.push(['Sin horario registrado','','','']);
+  for(const x of [...scheduleCache.no_class_days].sort((a,b)=>a.date.localeCompare(b.date)))horario.push(['Día sin clase',x.date,x.reason||'','']);
   const {record:teamRecord,teams:savedTeams}=await readSavedTeams(gid);
   const teamSheet=[['Equipo','No.','Alumno','Estado','Guardado / actualizado']];
   for(const t of savedTeams)for(const st of t.members)teamSheet.push([t.name,st.list_number??'',studentLabel(st),st.active!==0?'Activo':'Baja',teamRecord?.updated_at?new Date(teamRecord.updated_at).toLocaleString('es-MX'):'']);
   if(!savedTeams.length)teamSheet.push(['Sin equipos guardados','','','','']);
-  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por parcial',rows:porParcial},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
+  return {sheets:[...(opts.emptyAsZero?[closingNotesSheet(g,opts.stats)]:[]),{name:'Resumen',rows:resumen},{name:'Esquemas',rows:esquema},{name:'Calificación parcial',rows:trim},{name:'Concentrado',rows:conc},{name:'Asistencia',rows:asist},{name:'Asistencia por parcial',rows:porParcial},{name:'Asistencia por horas',rows:asistHoras},{name:'Actividades',rows:acts},{name:'Detalle calificaciones',rows:detail},{name:'Proyectos',rows:evalSheet},{name:'Equipos',rows:teamSheet},{name:'Horario',rows:horario},{name:'Puntos extra',rows:extraSheet},{name:'Banco instrumentos',rows:instrumentBank},{name:'Observaciones',rows:obs},{name:'Bajas',rows:bajas}]};
 }
 async function exportFullExcelForGroup(gid){
   gid=+gid||0;if(!gid){toast('Selecciona un grupo',true);return;}
@@ -2604,7 +2805,7 @@ async function downloadMiAulaBackup(){
   try{
     const data=await MiAulaDB.exportBackup();
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    downloadBlob(blob,`MiAula_2.11.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+    downloadBlob(blob,`MiAula_2.13.0_Respaldo_${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
     toast('Respaldo generado');
     try{localStorage.setItem('miaula:lastBackupAt',new Date().toISOString());}catch{}
     if(typeof renderBackupReminder==='function')renderBackupReminder();
@@ -2659,7 +2860,7 @@ function updateAppNav(){
     if(v==='dynamics')active=currentView==='dynamics'&&(!mode||mode===dynamics.mode);
     else if(currentView==='attendanceHistory')active=v==='attendance';
     else if(currentView==='activities')active=v==='activities';
-    else if(['groups','grading','evaluation'].includes(currentView))active=v==='more';
+    else if(['groups','grading','evaluation','schedule'].includes(currentView))active=v==='more';
     else active=v===currentView;
     btn.classList.toggle('active',active);
   });
@@ -2718,7 +2919,40 @@ $('#contextNotebook').onclick=()=>{const gid=+$('#contextGroup').value||null;ope
 $('#contextAttendance').onclick=()=>{const gid=+$('#contextGroup').value||0;if(gid)$('#attendanceGroup').value=String(gid);goView('attendance');};
 ['#attendanceGroup','#attendanceHistoryGroup','#dynamicsGroup','#activityGroup','#activityFilter','#gradingGroup','#evalGroup','#exportGroup'].forEach(id=>$(id)?.addEventListener('change',()=>syncContextFromControl(id)));
 
+function blockMinutes(b){const [h,m]=String(b.start||'00:00').split(':').map(Number);return (h||0)*60+(m||0);}
+function blockEndLabel(b){const t=blockMinutes(b)+(+b.hours||1)*60;return `${String(Math.floor(t/60)%24).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;}
+async function renderTodaySchedule(){
+  const box=$('#todaySchedule');if(!box)return;
+  if(!scheduleCache.blocks.length){box.className='panel today-schedule empty';box.innerHTML=`<div class="today-empty"><div><strong>Agrega tu horario</strong><small>MiAula te mostrará aquí la clase de ahora y el «Máx.» bajará solo en los días que ves a cada grupo.</small></div><button class="btn small primary" type="button" onclick="goView('schedule')">Configurar horario</button></div>`;return;}
+  const now=new Date(),iso=isoLocal(now),dow=now.getDay(),mins=now.getHours()*60+now.getMinutes();
+  const gm=new Map(groups.map(g=>[+g.id,g]));
+  const blocks=scheduleCache.blocks.filter(b=>+b.day===dow&&gm.has(+b.group_id)).sort((a,b)=>blockMinutes(a)-blockMinutes(b));
+  if(isNoClassDay(iso)){const r=scheduleCache.no_class_days.find(x=>x.date===iso);box.className='panel today-schedule';box.innerHTML=`<div class="today-head"><div><span class="eyebrow">Hoy</span><h3>Día sin clase${r?.reason?` · ${escapeHtml(r.reason)}`:''}</h3></div><button class="btn small subtle" type="button" onclick="goView('schedule')">Mi horario</button></div>`;return;}
+  if(!blocks.length){box.className='panel today-schedule';box.innerHTML=`<div class="today-head"><div><span class="eyebrow">Hoy · ${DAY_LONG[dow]}</span><h3>Sin clases en tu horario</h3></div><button class="btn small subtle" type="button" onclick="goView('schedule')">Mi horario</button></div>`;return;}
+  const taken=new Set();for(const b of blocks){if((await MiAulaDB.byIndex('attendance','group_date',[+b.group_id,iso])).length)taken.add(+b.group_id);}
+  let nextMarked=false;
+  const items=blocks.map(b=>{
+    const g=gm.get(+b.group_id),start=blockMinutes(b),end=start+(+b.hours||1)*60;
+    let st='later',label='';
+    if(mins>=start&&mins<end){st='now';label='Ahora';}
+    else if(mins>=end){st='done';label='Terminó';}
+    else if(!nextMarked){st='next';label='Siguiente';nextMarked=true;}
+    const att=taken.has(+b.group_id);
+    return `<div class="today-class ${st}"><div class="today-time"><strong>${escapeHtml(b.start)}</strong><small>${blockEndLabel(b)} · ${+b.hours||1} h</small></div><div class="today-group"><span class="sg-dot sg-c${groupColorIndex(b.group_id)}"></span><div><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.discipline||'')}</small></div>${label?`<em class="today-badge ${st}">${label}</em>`:''}</div><div class="today-actions"><span class="today-att ${att?'ok':'warn'}">${att?'✓ Lista tomada':'Lista pendiente'}</span><button class="btn small ${st==='now'?'primary':'subtle'}" type="button" onclick="startScheduledClass(${+b.group_id})">${att?'Ver lista':'Pasar lista'}</button><button class="btn small subtle" type="button" onclick="openNotebook(${+b.group_id})">Cuaderno</button></div></div>`;
+  }).join('');
+  box.className='panel today-schedule';
+  box.innerHTML=`<div class="today-head"><div><span class="eyebrow">Hoy · ${DAY_LONG[dow]}</span><h3>${blocks.length} clase${blocks.length===1?'':'s'} en tu horario</h3></div><button class="btn small subtle" type="button" onclick="goView('schedule')">Mi horario</button></div><div class="today-list">${items}</div>`;
+}
+window.startScheduledClass=async gid=>{
+  await setContextGroup(+gid,{propagate:true,refresh:false});
+  if($('#attendanceGroup'))$('#attendanceGroup').value=String(gid);
+  goView('attendance');
+  if($('#attendanceDate'))$('#attendanceDate').value=today;
+  await loadAttendance();
+};
+
 async function renderClassSnapshot(forcedGid=null){
+  renderTodaySchedule().catch(e=>console.error(e));
   const box=$('#classSnapshot');if(!box)return;
   let gid=+forcedGid||+$('#contextGroup')?.value||0;
   if(!gid&&groups.length){gid=groups[0].id;await setContextGroup(gid,{propagate:false,refresh:false});}
@@ -2854,7 +3088,7 @@ window.openStudentView=async function(period,studentId){
   const valuesVal=drawerInputValue('component',period,studentId,'','values_score'),attVal=drawerInputValue('component',period,studentId,'','attitudes_score');
   const attMode=isAttendanceScheme(pd.scheme),drawerRO=isPeriodReadOnly(notebookData.group,period);
   const compCards=attMode?`<div class="student-component-card readonly"><div><strong>Asistencia</strong><small>Automática · ${gr.attendance_classes?`${gr.attendance_attended} de ${gr.attendance_classes} clases del parcial`:'sin pase de lista en este parcial'} · ${+pd.scheme.attendance_pct||10}%</small></div><b>${fmtNum(gr.attendance_score)}</b></div>`:null;
-  $('#studentDrawerBody').innerHTML=`${drawerRO?`<div class="drawer-consult-note"><strong>Modo consulta · Parcial ${period} cerrado</strong><span>Solo lectura. Desbloquéalo desde el cuaderno si necesitas corregir.</span></div>`:''}<div class="student-summary-strip"><button type="button" class="extra-summary-button" onclick="openExtraModal('${period}',${studentId})"><span>Puntos extra</span><b class="extra-good">+${ex.goodAvailable}</b><b class="extra-bad">${formatBadExtras(ex.bad)}</b><small>Editar</small></button><div><span>Prom. trabajos</span><strong>${fmtNum(gr.work_avg)}</strong></div><div><span>Final actual</span><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></div><div class="student-section-title"><h3>Actividades</h3><span>Califica alumno por alumno</span></div><div class="student-activities-list">${activities}</div><div class="student-section-title"><h3>Componentes</h3></div>${principal}${compCards??`<div class="student-component-card"><div><strong>Valores</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${valueId}" class="drawer-score-input" data-kind="component" data-field="values_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(valuesVal)}" placeholder="—">${quickButtonsHTML(valueId,10)}</div></div><div class="student-component-card"><div><strong>Actitudes</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${attId}" class="drawer-score-input" data-kind="component" data-field="attitudes_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(attVal)}" placeholder="—">${quickButtonsHTML(attId,10)}</div></div>`}`;
+  $('#studentDrawerBody').innerHTML=`${drawerRO?`<div class="drawer-consult-note"><strong>Modo consulta · Parcial ${period} cerrado</strong><span>Solo lectura. Desbloquéalo desde el cuaderno si necesitas corregir.</span></div>`:''}<div class="student-summary-strip"><button type="button" class="extra-summary-button" onclick="openExtraModal('${period}',${studentId})"><span>Puntos extra</span><b class="extra-good">+${ex.goodAvailable}</b><b class="extra-bad">${formatBadExtras(ex.bad)}</b><small>Editar</small></button><div><span>Prom. trabajos</span><strong>${fmtNum(gr.work_avg)}</strong></div>${rubrosWithColumn(pd.scheme,pd.activities).map(r=>`<div><span>Prom. ${escapeHtml(r.name)}</span><strong>${fmtNum(gr.rubro_avgs?.[r.id])}</strong></div>`).join('')}<div><span>Final actual</span><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></div><div class="student-section-title"><h3>Actividades</h3><span>Califica alumno por alumno</span></div><div class="student-activities-list">${activities}</div><div class="student-section-title"><h3>Componentes</h3></div>${principal}${compCards??`<div class="student-component-card"><div><strong>Valores</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${valueId}" class="drawer-score-input" data-kind="component" data-field="values_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(valuesVal)}" placeholder="—">${quickButtonsHTML(valueId,10)}</div></div><div class="student-component-card"><div><strong>Actitudes</strong><small>0 a 10</small></div><div class="student-score-box"><input id="${attId}" class="drawer-score-input" data-kind="component" data-field="attitudes_score" data-period="${period}" data-student="${studentId}" data-max="10" value="${escapeHtml(attVal)}" placeholder="—">${quickButtonsHTML(attId,10)}</div></div>`}`;
   if(drawerRO)$$('#studentDrawerBody input,#studentDrawerBody .student-score-box button,#studentDrawerBody .extra-summary-button').forEach(el=>el.disabled=true);
   $$('#studentDrawer .drawer-score-input').forEach(inp=>inp.addEventListener('input',()=>{inp.classList.add('changed');setSaveState('changed','Cambios sin guardar');}));
   $('#studentDrawer').classList.remove('hidden');$('#studentDrawer').setAttribute('aria-hidden','false');document.body.classList.add('drawer-open');
@@ -3198,7 +3432,8 @@ async function printStudentReport(){
   const att=attendanceTotals(attendanceForPeriod((await MiAulaDB.byIndex('attendance','student_id',sid)).filter(r=>+r.group_id===gid),g,period));
   const risk=absenceRiskMeta(att.absencePct),ex=pd.extrasByStudent.get(sid)||{goodAvailable:0,goodUsed:0,bad:0};
   const rows=pd.activities.map(a=>{const r=pd.grades.get(`${a.id}:${sid}`),v=String(exportGradeValue(a,r));return `<tr><td>${a.activity_date?parseISODateLocal(a.activity_date).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}):'—'}</td><td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.activity_type||'')}</td><td class="pr-num">${v===''?'<span class="pr-muted">—</span>':v==='NP'?'<b class="pr-np">NP</b>':escapeHtml(v)} <small>/ ${fmtShort(a.max_score)}</small></td></tr>`;}).join('')||'<tr><td colspan="4" class="pr-muted">Sin actividades registradas en este parcial.</td></tr>';
-  const comps=isAttendanceScheme(sc)?[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],[`Asistencia (${gr.attendance_classes?`${gr.attendance_attended} de ${gr.attendance_classes} clases`:'sin clases'})`,sc.attendance_pct,gr.attendance_score]]:[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],['Valores',sc.values_pct,gr.values_score],['Actitudes',sc.attitudes_pct,gr.attitudes_score]];
+  const rubroComps=customRubros(sc).map(r=>[r.name,+r.pct||0,gr.rubro_avgs?.[r.id]??null]);
+  const comps=isAttendanceScheme(sc)?[['Trabajos',sc.work_pct,gr.work_avg],...rubroComps,[principal,sc.project_pct,gr.principal_avg??gr.exam_score],[`Asistencia (${gr.attendance_classes?`${gr.attendance_attended} de ${gr.attendance_classes} clases`:'sin clases'})`,sc.attendance_pct,gr.attendance_score]]:[['Trabajos',sc.work_pct,gr.work_avg],[principal,sc.project_pct,gr.principal_avg??gr.exam_score],['Valores',sc.values_pct,gr.values_score],['Actitudes',sc.attitudes_pct,gr.attitudes_score]];
   const html=`${prHeader(`Boleta de calificaciones · Parcial ${period}`,g)}
   <section class="pr-student"><div><small>Alumno</small><strong>${escapeHtml(studentLabel(s))}</strong></div><div><small>No. de lista</small><strong>${s.list_number??'—'}</strong></div><div class="pr-final"><small>Calificación del parcial</small><strong>${gr.final_grade==null?'Pendiente':fmtNum(gr.final_grade)}</strong></div></section>
   <h3>Componentes de evaluación</h3>
